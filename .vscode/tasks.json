@@ -18,6 +18,9 @@
                 "panel": "shared",
                 "showReuseMessage": false,
                 "clear": false
+            },
+            "options": {
+                "cwd": "./src"
             }
         }
     ]
