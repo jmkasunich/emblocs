@@ -7,8 +7,37 @@
 # 		of this file or passed in via the command line. Evaluation happens at the end of the file, with defaults defined just before.
 #########################################################################################################################################
 
-# Use Bash sdf
-#SHELL = /bin/sh
+# local.mk contains host specific paths, etc
+# it should set the following variables:
+# BINUTILS_ROOT - path to toolchain
+# SHELL - path to a UNIX style shell
+#
+# it might also need to set (and export) PATH so the shell can find utilities like 'rm', etc
+
+include local.mk
+
+# build mode
+BUILD_TYPE ?= debug
+
+ALL_SRCS := 
+ALL_TARGETS :=
+
+# target definitions
+FOO_TARGET := main.hex
+FOO_SRCS := G431/main.c
+FOO_LIBS :=
+
+ALL_SRCS += $(FOO_SRCS)
+ALL_TARGETS += $(FOO_TARGET)
+
+#BAR_TARGET := bar.hex
+#BAR_SRCS := G431/bar.c G431/baz.c G431/main.c
+
+#ALL_SRCS += $(BAR_SRCS)
+#ALL_TARGETS += $(BAR_TARGET)
+
+# end of target definitions
+
 
 # Functions
 #find_includes_in_dir = $(shell find $(1) -name "*.h" | sed 's|/[^/]*$$||' | sort -u)
@@ -16,18 +45,12 @@
 # ---------------------------------------------------------------------
 # Toolchain Configuration
 # ---------------------------------------------------------------------
-BINUTILS_ROOT           ?= C:/ArmGCC/13.3_rel1
-BINUTILS_SUFFIX			?= .exe
 TOOLCHAIN               := arm-none-eabi
-CC                      := $(BINUTILS_ROOT)/bin/$(TOOLCHAIN)-gcc$(BINUTILS_SUFFIX)
-#CXX                     := $(BINUTILS_ROOT)/bin/$(TOOLCHAIN)-g++$(BINUTILS_SUFFIX)
-AS                      := $(BINUTILS_ROOT)/bin/$(TOOLCHAIN)-as$(BINUTILS_SUFFIX)
-OBJCOPY					:= $(BINUTILS_ROOT)/bin/$(TOOLCHAIN)-objcopy$(BINUTILS_SUFFIX)
-SIZE 					:= $(BINUTILS_ROOT)/bin/$(TOOLCHAIN)-size$(BINUTILS_SUFFIX)
+CC                      := $(BINUTILS_ROOT)/bin/$(TOOLCHAIN)-gcc
+AS                      := $(BINUTILS_ROOT)/bin/$(TOOLCHAIN)-as
+OBJCOPY					:= $(BINUTILS_ROOT)/bin/$(TOOLCHAIN)-objcopy
+SIZE 					:= $(BINUTILS_ROOT)/bin/$(TOOLCHAIN)-size
 C_STANDARD				:= -std=gnu11
-#CXX_STANDARD 			:= -std=gnu++11
-
-INC_DIRS += $(BINUTILS_ROOT)/lib/gcc/arm-none-eabi/13.3.1/include
 
 
 # -----------------------------------------------------------------------------------------------------------------
@@ -36,6 +59,7 @@ INC_DIRS += $(BINUTILS_ROOT)/lib/gcc/arm-none-eabi/13.3.1/include
 #DEFS 					:= -DSTM32F43xx -DUSE_HAL_DRIVER -DARM_MATH_CM4 -D__FPU_PRESENT=1U -DHSE_VALUE=25000000
 DEFS 					:= -DSTM32F43xx -DARM_MATH_CM4 -D__FPU_PRESENT=1U -DHSE_VALUE=8000000
 
+
 # ---------------------------------------------------------------------------------------------------------------------------------------
 # Compiler & Linker Flags
 # ---------------------------------------------------------------------------------------------------------------------------------------
@@ -43,8 +67,19 @@ DEFS 					:= -DSTM32F43xx -DARM_MATH_CM4 -D__FPU_PRESENT=1U -DHSE_VALUE=8000000
 TOOLCHAIN_SETTINGS 		:= -mcpu=cortex-m4 -march=armv7e-m -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16 
 TOOLCHAIN_SETTINGS 		+= -fmessage-length=0 -ffunction-sections -fdata-sections
 
-# C Compiler -- Warnings 
-CFLAGS 					+= $(TOOLCHAIN_SETTINGS) $(DEFS) $(addprefix -I, $(INC_DIRS))
+# C Compiler -- main args 
+CFLAGS 					+= $(TOOLCHAIN_SETTINGS) $(DEFS)
+
+# C Compiler -- include paths
+
+CFLAGS	+= $(addprefix -I, $(INC_DIRS))
+
+# C compiler -- other options
+
+#CFLAGS += -pipe
+CFLAGS += -save-temps -dumpdir $(TEMP_DIR)/
+
+# C Compiler -- warnings
 CFLAGS                  += -Wall
 CFLAGS 					+= -Wextra
 CFLAGS 					+= -Wfatal-errors
@@ -56,36 +91,12 @@ CFLAGS 					+= -Wlogical-op
 CFLAGS 					+= -Wpointer-arith
 CFLAGS 					+= -Wdisabled-optimization
 CFLAGS                	+= -Wno-unused-parameter
+CFLAGS					+= -Wno-sign-conversion
+# Assembler settings
 CFLAGS                  += -Wa,-alh=$(@:.o=.lst)
 
-# C++ Compiler -- Required & Optimization Flags
-#CXXFLAGS                += $(CFLAGS)
-#CXXFLAGS 				+= -fabi-version=0
-#CXXFLAGS                += -fno-rtti
-#CXXFLAGS                += -fno-exceptions
-#CXXFLAGS				+= -fno-use-cxa-atexit
-#CXXFLAGS 				+= -fno-threadsafe-statics
 
-# C++ -- Warnings
-#CXXFLAGS 				+= -Weffc++
-#CXXFLAGS 				+= -Wfloat-equal
-#CXXFLAGS 				+= -Wsign-promo
-#CXXFLAGS 				+= -Wzero-as-null-pointer-constant
-#CXXFLAGS 				+= -Wmissing-declarations 
-#CXXFLAGS 				+= -Woverloaded-virtual
-#CXXFLAGS 				+= -Wsuggest-final-types
-#CXXFLAGS 				+= -Wsuggest-final-methods
-#CXXFLAGS 				+= -Wsuggest-override
-#CXXFLAGS 				+= -Wsuggest-attribute=pure
-#CXXFLAGS 				+= -Wsuggest-attribute=const
-#CXXFLAGS 				+= -Wsuggest-attribute=noreturn
-#CXXFLAGS 				+= -Wsuggest-attribute=format
-#CXXFLAGS 				+= -Wmissing-format-attribute
-#CXXFLAGS 				+= -Wold-style-cast
-#CXXFLAGS 				+= -Wshadow
-#CXXFLAGS 				+= -Wuseless-cast
-#CXXFLAGS 				+= -Wctor-dtor-privacy
-#CXXFLAGS 				+= -Wstrict-null-sentinel
+FOO = start$(@)end
 
 # Linker
 LDFLAGS 				+= $(TOOLCHAIN_SETTINGS) $(DEFS) -Xlinker --gc-sections --specs=nano.specs
@@ -95,51 +106,130 @@ LDFLAGS 				+= $(TOOLCHAIN_SETTINGS) $(DEFS) -Xlinker --gc-sections --specs=nano
 # -------------------------------------------------------------
 # Debug
 DEFS_DEBUG 				+= -DDEBUG
-CFLAGS_DEBUG            += -ggdb -g3 -Og
+CFLAGS_DEBUG            += -ggdb -g0 -Og
 LDFLAGS_DEBUG			+= --specs=rdimon.specs -Og 
 
 # Release
 CFLAGS_RELEASE			+= -Os
 LDFLAGS_RELEASE 		+= --specs=nosys.specs
 
-#########################################################################################################################################
-# RULE DEFINITIONS -- This section is generic
-#########################################################################################################################################
 
-# =======================================================================================================================================
-# Build Configuration Rule 
-# - Generate build config using Product Root Directory ($1), Build Type ("Debug" or "Release") ($2)
-# =======================================================================================================================================
-define CONFIG_RULE
-#BUILD_DIR 				:= $1/Build/$2
-BUILD_DIR 				:= ./Build
-OBJ_DIR 				:= $$(BUILD_DIR)/obj
-#INC_DIRS 				:= $$(call find_includes_in_dir, $$(SRC_DIRS))
-INC_DIRS 				:= $$(SRC_DIRS)
-HEADERS 				:= $$(foreach dir, $$(SRC_DIRS), $$(shell find $$(dir) -name "*.h"))
-ASM_SRC 				:= $$(foreach dir, $$(SRC_DIRS), $$(shell find $$(dir) -name "*.s"))
-C_SRC					:= $$(foreach dir, $$(SRC_DIRS), $$(shell find $$(dir) -name "*.c" -not -name "*main.c"))
-#CXX_SRC					:= $$(foreach dir, $$(SRC_DIRS), $$(shell find $$(dir) -name "*.cpp"))
-OBJECTS                 := $$(addprefix $$(OBJ_DIR)/, $$(C_SRC:.c=.o) $$(CXX_SRC:.cpp=.o) $$(ASM_SRC:.s=.o))
-LDSCRIPTS				:= $$(addprefix -T, $$(foreach dir, $$(SRC_DIRS), $$(shell find $$(dir) -name "*.ld")))
-DIRS 					:= $$(BUILD_DIR) $$(sort $$(dir $$(OBJECTS)))
-AUTODEPS 				:= $$(OBJECTS:.o=.d)
-
-
-ifeq ($2, Release)
-	DEFS 	+= $$(DEFS_RELEASE)
-	CFLAGS 	+= $$(CFLAGS_RELEASE)
-	LDFLAGS += $$(LDFLAGS_RELEASE)
+ifeq (BUILD_TYPE, release)
+	DEFS 	+= $(DEFS_RELEASE)
+	CFLAGS 	+= $(CFLAGS_RELEASE)
+	LDFLAGS += $(LDFLAGS_RELEASE)
 else 
-	DEFS 	+= $$(DEFS_DEBUG)
-	CFLAGS 	+= $$(CFLAGS_DEBUG)
-	LDFLAGS += $$(LDFLAGS_DEBUG)
+	DEFS 	+= $(DEFS_DEBUG)
+	CFLAGS 	+= $(CFLAGS_DEBUG)
+	LDFLAGS += $(LDFLAGS_DEBUG)
 endif
 
-endef 
-# =======================================================================================================================================
-# End CONFIG_RULE
-# =======================================================================================================================================
+
+#SRC_DIRS 				:= G431
+#HEADERS 				:= $(foreach dir, $(SRC_DIRS), $(shell find $(dir) -name "*.h"))
+#ASM_SRC 				:= $(foreach dir, $(SRC_DIRS), $(shell find $(dir) -name "*.s"))
+#C_SRC					:= $(foreach dir, $(SRC_DIRS), $(shell find $(dir) -name "*.c"))
+
+C_SRC					:= $(filter %.c, $(ALL_SRCS))
+ASM_SRC					:= $(filter %.s, $(ALL_SRCS))
+
+BUILD_DIR 				:= ../build
+OBJ_DIR 				:= $(BUILD_DIR)/obj
+DEPS_DIR 				:= $(BUILD_DIR)/deps
+TEMP_DIR 				:= $(BUILD_DIR)/temp
+#INC_DIRS 				:= $(call find_includes_in_dir, $(SRC_DIRS))
+INC_DIRS 				:= $(SRC_DIRS)
+
+OBJECTS                 := $(addprefix $(OBJ_DIR)/, $(notdir $(C_SRC:.c=.o) $(ASM_SRC:.s=.o)))
+LDSCRIPTS				:= $(addprefix -T, $(foreach dir, $(SRC_DIRS), $(shell find $(dir) -name "*.ld")))
+DIRS 					:= $(BUILD_DIR) $(OBJ_DIR) $(DEPS_DIR) $(TEMP_DIR)
+AUTODEPS 				:= $(addprefix $(DEPS_DIR)/, $(notdir $(C_SRC:.c=.d)))
+
+ALL_SRCS := $(sort $(ALL_SRCS))
+ALL_TARGETS := $(addprefix $(BUILD_DIR)/, $(ALL_TARGETS))
+
+
+# RULES
+
+# master rule
+all : list $(ALL_TARGETS)
+
+# C compilation rule (with dependency tracking
+
+$(OBJ_DIR)/main.o : G431/main.c
+	@echo Compiling $(<F) \($(<)\)
+	@$(CC) $(C_STANDARD) $(CFLAGS) -c -MMD -MP -MT $(@) -MF $(DEPS_DIR)/$(*F).d $< -o $(@)
+
+# hex file generator rule
+
+%.hex : %.elf
+	@echo 'Invoking: Cross ARM GNU Create Flash Image'
+	$(OBJCOPY) -O ihex $< $(@) 
+	@echo 'Finished building: $@'
+	@echo ' '
+	@echo 'Invoking: Cross ARM GNU Print Size'
+	$(SIZE) --format=berkeley $<
+	@echo 'Finished building: $@'
+	@echo ' '
+
+# linker rule
+
+$(BUILD_DIR)/main.elf : $(OBJECTS) | $(DIRS)
+	@echo ' '
+	@echo 'Building $(@)'
+	@echo 'from $(OBJECTS)'
+	@echo 'Invoking: Cross ARM C Linker'
+	$(CC) \
+		-Xlinker -Map=$(patsubst %.elf,%.map,$(@)) \
+		$(LDFLAGS) \
+		$(LDSCRIPTS) \
+		-o $(@) $(OBJECTS)
+	@echo 'Finished building: $@'
+	@echo ' '
+
+# directory creation rule(s)
+
+$(OBJECTS) : | $(DIRS)
+
+$(DIRS) : 
+	@echo Creating $(@)
+	@mkdir -p $(@)
+
+# extra rules
+
+clean:
+	rm -rf *.o
+	rm -rf *.d
+	rm -rf *.i
+	rm -rf *.lst
+	rm -rf $(OBJ_DIR)/*.o
+	rm -rf $(OBJ_DIR)/*.lst
+	rm -rf $(DEPS_DIR)/*.d
+	rm -rf $(TEMP_DIR)/*.i
+	rm -rf $(TEMP_DIR)/*.s
+
+list :
+	@echo 'SRC_DIRS = $(SRC_DIRS)'
+	@echo 'BUILD_DIR = $(BUILD_DIR)'
+	@echo 'OBJ_DIR = $(OBJ_DIR)'
+	@echo 'DEPS_DIR = $(DEPS_DIR)'
+	@echo 'INC_DIRS = $(INC_DIRS)'
+	@echo 'ALL_SRCS = $(ALL_SRCS)'
+	@echo 'ALL_TARGETS = $(ALL_TARGETS)'
+	@echo 'ASM_SRC = $(ASM_SRC)'
+	@echo 'C_SRC = $(C_SRC)'
+	@echo 'OBJECTS = $(OBJECTS)'
+	@echo 'ABS_OBJECTS = $(abspath $(OBJECTS))'
+	@echo 'REAL_OBJECTS = $(realpath $(OBJECTS))'
+	@echo 'LDSCRIPTS = $(LDSCRIPTS)'
+	@echo 'DIRS = $(DIRS)'
+	@echo 'ABSDIRS = $(abspath $(DIRS))'
+	@echo 'AUTODEPS = $(AUTODEPS)'
+
+.PHONY : clean all list
+
+
+
 
 
 # =======================================================================================================================================
@@ -211,24 +301,8 @@ endef
 #########################################################################################################################################
 #########################################################################################################################################
 
-# Build Type
-ifeq ($(build), Debug)
-	BUILD_TYPE := Debug
-else
-	BUILD_TYPE := Release
-endif
+-include $(DEPS_DIR)/*.d
 
-main.o : main.c system_stm32g4xx.h core_cm4.h stm32g431xx.h
-	@echo Compiling $(<F)
-	@$(CC) $(C_STANDARD) $(CFLAGS) -c -MMD -MP $< -o $(@)
-
-
-# Defaults
-#PRODUCT ?= hello
-#PRODUCT_DIR ?= project
-#BUILD_TYPE ?= Debug
-#SRC_DIRS ?= $(PRODUCT_DIR)
-SRC_DIRS ?= .
 
 # Evaluate Rules Defined Above
 #$(eval $(call BUILD_TARGET_RULE,$(PRODUCT),$(PRODUCT_DIR),$(BUILD_TYPE)))

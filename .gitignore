@@ -50,3 +50,13 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# host specific makefile
+src/local.mk
+
+# build tree
+build/
+
+# editor settings
+.vscode
+
