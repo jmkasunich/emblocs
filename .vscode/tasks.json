@@ -8,7 +8,7 @@
             "type": "shell",
             "command": "make",
             "windows": {
-                "command": "& 'C:\\Program Files (x86)\\Gnuwin32\\bin\\make.exe'"
+                "command": "C:\\cygwin64\\bin\\make.exe"
             },
             "group": "build",
             "presentation": {
