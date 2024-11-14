@@ -24,8 +24,9 @@ ALL_TARGETS :=
 
 # target definitions
 FOO_TARGET := main.hex
-FOO_SRCS := G431/main.c
+FOO_SRCS := G431/main.c G431/startup_stm32g431kbtx.s G431/system_stm32g4xx.c
 FOO_LIBS :=
+SRC_DIRS := G431
 
 ALL_SRCS += $(FOO_SRCS)
 ALL_TARGETS += $(FOO_TARGET)
@@ -57,7 +58,7 @@ C_STANDARD				:= -std=gnu11
 # Defined Symbols
 # -----------------------------------------------------------------------------------------------------------------
 #DEFS 					:= -DSTM32F43xx -DUSE_HAL_DRIVER -DARM_MATH_CM4 -D__FPU_PRESENT=1U -DHSE_VALUE=25000000
-DEFS 					:= -DSTM32F43xx -DARM_MATH_CM4 -D__FPU_PRESENT=1U -DHSE_VALUE=8000000
+DEFS 					:= -DSTM32G431xx -DARM_MATH_CM4 -D__FPU_PRESENT=1U -DHSE_VALUE=8000000
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------------
@@ -106,7 +107,7 @@ LDFLAGS 				+= $(TOOLCHAIN_SETTINGS) $(DEFS) -Xlinker --gc-sections --specs=nano
 # -------------------------------------------------------------
 # Debug
 DEFS_DEBUG 				+= -DDEBUG
-CFLAGS_DEBUG            += -ggdb -g0 -Og
+CFLAGS_DEBUG            += -ggdb -g1 -Og
 LDFLAGS_DEBUG			+= --specs=rdimon.specs -Og 
 
 # Release
@@ -141,7 +142,8 @@ TEMP_DIR 				:= $(BUILD_DIR)/temp
 INC_DIRS 				:= $(SRC_DIRS)
 
 OBJECTS                 := $(addprefix $(OBJ_DIR)/, $(notdir $(C_SRC:.c=.o) $(ASM_SRC:.s=.o)))
-LDSCRIPTS				:= $(addprefix -T, $(foreach dir, $(SRC_DIRS), $(shell find $(dir) -name "*.ld")))
+#LDSCRIPTS				:= $(addprefix -T, $(foreach dir, $(SRC_DIRS), $(shell find $(dir) -name "*.ld")))
+LDSCRIPTS				:= -TG431/STM32G431KBTX_FLASH.ld
 DIRS 					:= $(BUILD_DIR) $(OBJ_DIR) $(DEPS_DIR) $(TEMP_DIR)
 AUTODEPS 				:= $(addprefix $(DEPS_DIR)/, $(notdir $(C_SRC:.c=.d)))
 
@@ -156,9 +158,17 @@ all : list $(ALL_TARGETS)
 
 # C compilation rule (with dependency tracking
 
-$(OBJ_DIR)/main.o : G431/main.c
-	@echo Compiling $(<F) \($(<)\)
+$(OBJ_DIR)/%.o : G431/%.c
+	@echo Compiling $(<)
 	@$(CC) $(C_STANDARD) $(CFLAGS) -c -MMD -MP -MT $(@) -MF $(DEPS_DIR)/$(*F).d $< -o $(@)
+
+
+# assembly rule
+
+$(OBJ_DIR)/%.o : G431/%.s
+	@echo Assembling $(<)
+	@$(AS) $(ASFLAGS) $< -o $(@)
+
 
 # hex file generator rule
 
@@ -219,11 +229,8 @@ list :
 	@echo 'ASM_SRC = $(ASM_SRC)'
 	@echo 'C_SRC = $(C_SRC)'
 	@echo 'OBJECTS = $(OBJECTS)'
-	@echo 'ABS_OBJECTS = $(abspath $(OBJECTS))'
-	@echo 'REAL_OBJECTS = $(realpath $(OBJECTS))'
 	@echo 'LDSCRIPTS = $(LDSCRIPTS)'
 	@echo 'DIRS = $(DIRS)'
-	@echo 'ABSDIRS = $(abspath $(DIRS))'
 	@echo 'AUTODEPS = $(AUTODEPS)'
 
 .PHONY : clean all list
