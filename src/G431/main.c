@@ -5,10 +5,16 @@
 #include "stm32g4xx_ll_system.h"
 
 #include <stdint.h>
+#include <stddef.h>
+#include <assert.h>
 
 #include "main.h"
 
 void SystemClock_Config(void);
+
+void uart_init(USART_TypeDef *uart);
+void uart_send_string(USART_TypeDef *uart, char *string);
+void uart_send_char(USART_TypeDef *uart, char c);
 
 
 // Quick and dirty delay
@@ -20,14 +26,14 @@ static void delay (unsigned int time) {
 int main (void) {
     uint32_t reg;
     SystemClock_Config();
-    // Turn on the GPIOC peripheral
-    RCC->AHB2ENR |= RCC_AHB2ENR_GPIOCEN;
-    // Put pin 6 in general purpose output mode
+    // Put pin PC6 in general purpose output mode
     reg = LED_PORT->MODER;
-    reg &= ~(0x03 << 12);
-    reg |= 0x01 << 12;
+    reg &= ~GPIO_MODER_MODE6_Msk;
+    reg |= 0x01 << GPIO_MODER_MODE6_Pos;
     LED_PORT->MODER = reg;
-    // LED_PORT->MODER |= GPIO_MODER_MODER6_0;
+    
+    uart_init(USART2);
+    uart_send_string(USART2,"Hello, world\n");
 
     while (1) {
         // Reset the state of pin 6 to output low
@@ -39,6 +45,7 @@ int main (void) {
         LED_PORT->BSRR = GPIO_BSRR_BS_6;
 
         delay(500);
+        uart_send_string(USART2, "hi again\n");
     }
 
     // Return 0 to satisfy compiler
@@ -118,4 +125,91 @@ void SystemClock_Config(void)
 
   /* Update CMSIS variable (which can be updated also through SystemCoreClockUpdate function) */
   //LL_SetSystemCoreClock(170000000);
+
+  // Turn on all GPIO modules
+  RCC->AHB2ENR |= RCC_AHB2ENR_GPIOAEN;
+  RCC->AHB2ENR |= RCC_AHB2ENR_GPIOBEN;
+  RCC->AHB2ENR |= RCC_AHB2ENR_GPIOCEN;
+  RCC->AHB2ENR |= RCC_AHB2ENR_GPIODEN;
+  RCC->AHB2ENR |= RCC_AHB2ENR_GPIOEEN;
+  RCC->AHB2ENR |= RCC_AHB2ENR_GPIOFEN;
+  RCC->AHB2ENR |= RCC_AHB2ENR_GPIOGEN;
+
 }
+
+
+
+void uart_init(USART_TypeDef *uart)
+{
+  volatile uint32_t reg;
+
+  // enable clock
+  switch ((uint32_t)uart) {
+  case USART1_BASE:
+    // enable UART clock
+    SET_BIT(RCC->APB2ENR, RCC_APB2ENR_USART1EN);
+    break;
+  case USART2_BASE:
+    // enable UART clock
+    SET_BIT(RCC->APB1ENR1, RCC_APB1ENR1_USART2EN);
+    // Put pins PB3 and PB4 in alternate function mode
+    reg = GPIOB->MODER;
+    reg &= ~GPIO_MODER_MODE3_Msk;
+    reg |= 0x2 << GPIO_MODER_MODE3_Pos;
+    reg &= ~GPIO_MODER_MODE4_Msk;
+    reg |= 0x2 << GPIO_MODER_MODE4_Pos;
+    GPIOB->MODER = reg;
+    // select alternate function 7
+    reg = GPIOB->AFR[0];
+    reg &= ~GPIO_AFRL_AFSEL3_Msk;
+    reg |= 7 << GPIO_AFRL_AFSEL3_Pos;
+    reg &= ~GPIO_AFRL_AFSEL4_Msk;
+    reg |= 7 << GPIO_AFRL_AFSEL4_Pos;
+    GPIOB->AFR[0] = reg;
+    break;
+  case USART3_BASE:
+    // enable UART clock
+    SET_BIT(RCC->APB1ENR1, RCC_APB1ENR1_USART3EN);
+    break;
+  case UART4_BASE:
+     // enable UART clock
+   SET_BIT(RCC->APB1ENR1, RCC_APB1ENR1_UART4EN);
+    break;
+  default:
+    assert("no such UART");
+  }
+  // delay for clock activation
+  reg = READ_REG(RCC->APB1ENR1);
+  (void)reg;
+  // configure the UART
+  uart->CR1 = 0; // all bits in default mode, UART still disabled
+  uart->CR2 = 0; // all bits in default mode
+  uart->CR3 = 0; // all bits in default mode
+  // set baud rate
+  // we have 170MHz clock and want 115200 baud
+  //   170,000,000 / 115,200 = 1475.69, so use 1476
+  uart->BRR = 1476;
+  // enable the UART
+  uart->CR1 |= USART_CR1_UE;
+  // enable reciever and transmitter
+  uart->CR1 |= USART_CR1_TE | USART_CR1_RE;
+}
+
+
+void uart_send_string(USART_TypeDef *uart, char *string)
+{
+  if ( string == NULL ) return;
+  while ( *string != '\0' ) {
+    uart_send_char(uart, *string);
+    string++;
+  }
+}
+
+void uart_send_char(USART_TypeDef *uart, char c)
+{
+  // loop till transmit buffer empty
+  while ( (uart->ISR & USART_ISR_TXE_Msk) == 0 ) {}
+  // send the character
+  uart->TDR = c;
+}
+
