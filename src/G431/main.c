@@ -6,7 +6,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include <assert.h>
+
 
 #include "main.h"
 
@@ -15,6 +15,33 @@ void SystemClock_Config(void);
 void uart_init(USART_TypeDef *uart);
 void uart_send_string(USART_TypeDef *uart, char *string);
 void uart_send_char(USART_TypeDef *uart, char c);
+void uart_send_dec_int(USART_TypeDef *uart, int32_t n);
+void uart_send_dec_uint(USART_TypeDef *uart, uint32_t n);
+
+#if 1
+# define assert(_p) (_assert(__FILE__, __LINE__, _p))
+#else
+# define assert(_p) do {} while(1)  // just loop forever
+#endif
+
+void _assert(char *file, int line, char *msg)
+{
+  // is the UART running?
+  if ( USART2->CR1 & USART_CR1_UE ) {
+    // yes, print something
+    uart_send_string(USART2, "assert(): ");
+    uart_send_string(USART2, file);
+    uart_send_string(USART2, ":");
+    uart_send_dec_int(USART2, line);
+  if ( msg != NULL ) {
+      uart_send_string(USART2, " : ");
+      uart_send_string(USART2, msg);
+    }
+    uart_send_string(USART2, "\n");
+  }
+  // loop forever
+  do {} while (1);
+}
 
 
 // Quick and dirty delay
@@ -211,5 +238,37 @@ void uart_send_char(USART_TypeDef *uart, char c)
   while ( (uart->ISR & USART_ISR_TXE_Msk) == 0 ) {}
   // send the character
   uart->TDR = c;
+}
+
+void uart_send_dec_int(USART_TypeDef *uart, int32_t n)
+{
+  if ( n < 0 ) {
+    uart_send_char(uart, '-');
+    uart_send_dec_uint(uart, -n);
+  } else {
+    uart_send_dec_uint(uart, n);
+  }
+}
+
+void uart_send_dec_uint(USART_TypeDef *uart, uint32_t n)
+{
+  char buffer[11], *cp;
+  int digit;
+
+  // point to end of buffer
+  cp = &buffer[10];
+  *(cp--) = '\0';
+  // first digit must always be printed
+  digit = n % 10;
+  n = n / 10;
+  *(cp--) = (char)('0' + digit);
+  // loop till no more digits
+  while ( n > 0 ) {
+    digit = n % 10;
+    n = n / 10;
+    *(cp--) = (char)('0' + digit);
+  }
+  cp++;
+  uart_send_string(uart, cp);
 }
 
