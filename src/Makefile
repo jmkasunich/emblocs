@@ -10,6 +10,7 @@
 # local.mk contains host specific paths, etc
 # it should set the following variables:
 # BINUTILS_ROOT - path to toolchain
+# PACKAGE_ROOT - path to chip-specific packages
 # SHELL - path to a UNIX style shell
 #
 # it might also need to set (and export) PATH so the shell can find utilities like 'rm', etc
@@ -26,6 +27,7 @@ ALL_TARGETS :=
 FOO_TARGET := main.hex
 FOO_SRCS := G431/main.c G431/startup_stm32g431kbtx.s G431/system_stm32g4xx.c
 FOO_LIBS :=
+FOO_PKG := $(PACKAGE_ROOT)/STM32Cube_FW_G4_V1.6.0
 SRC_DIRS := G431
 
 ALL_SRCS += $(FOO_SRCS)
@@ -140,6 +142,9 @@ DEPS_DIR 				:= $(BUILD_DIR)/deps
 TEMP_DIR 				:= $(BUILD_DIR)/temp
 #INC_DIRS 				:= $(call find_includes_in_dir, $(SRC_DIRS))
 INC_DIRS 				:= $(SRC_DIRS)
+INC_DIRS				+= $(FOO_PKG)/Drivers/CMSIS/Include
+INC_DIRS				+= $(FOO_PKG)/Drivers/CMSIS/Device/ST/STM32G4xx/Include
+INC_DIRS				+= $(FOO_PKG)/Drivers/STM32G4xx_HAL_Driver/Inc
 
 OBJECTS                 := $(addprefix $(OBJ_DIR)/, $(notdir $(C_SRC:.c=.o) $(ASM_SRC:.s=.o)))
 #LDSCRIPTS				:= $(addprefix -T, $(foreach dir, $(SRC_DIRS), $(shell find $(dir) -name "*.ld")))
