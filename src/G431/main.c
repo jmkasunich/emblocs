@@ -19,7 +19,10 @@ void uart_send_dec_int(USART_TypeDef *uart, int32_t n);
 void uart_send_dec_uint(USART_TypeDef *uart, uint32_t n);
 
 void tsc_init(void);
-uint32_t tsc_read(void);
+
+#define tsc_read() (TIM2->CNT)
+
+
 
 #if 1
 # define assert(_p) (_assert(__FILE__, __LINE__, _p))
@@ -55,6 +58,7 @@ static void delay (unsigned int time) {
 
 int main (void) {
     uint32_t reg;
+    uint32_t old_tsc = 0, tsc;
     SystemClock_Config();
     // Put pin PC6 in general purpose output mode
     reg = LED_PORT->MODER;
@@ -64,6 +68,7 @@ int main (void) {
     
     uart_init(USART2);
     uart_send_string(USART2,"Hello, world\n");
+    tsc_init();
 
     while (1) {
         // Reset the state of pin 6 to output low
@@ -75,7 +80,12 @@ int main (void) {
         LED_PORT->BSRR = GPIO_BSRR_BS_6;
 
         delay(500);
-        uart_send_string(USART2, "hi again\n");
+        old_tsc = tsc_read();
+        uart_send_string(USART2, "TSC: ");
+        tsc = tsc_read();
+        uart_send_dec_uint(USART2, tsc - old_tsc);
+        uart_send_string(USART2, "\n");
+        old_tsc = tsc;
     }
 
     // Return 0 to satisfy compiler
@@ -279,11 +289,7 @@ void uart_send_dec_uint(USART_TypeDef *uart, uint32_t n)
 
 void tsc_init(void)
 {
-
-}
-
-uint32_t tsc_read(void)
-{
-
+  // defaults are all good, just turn it on
+  TIM2->CR1 |= TIM_CR1_CEN;
 }
 
