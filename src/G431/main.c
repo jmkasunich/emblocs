@@ -18,6 +18,9 @@ void uart_send_char(USART_TypeDef *uart, char c);
 void uart_send_dec_int(USART_TypeDef *uart, int32_t n);
 void uart_send_dec_uint(USART_TypeDef *uart, uint32_t n);
 
+void tsc_init(void);
+uint32_t tsc_read(void);
+
 #if 1
 # define assert(_p) (_assert(__FILE__, __LINE__, _p))
 #else
@@ -153,7 +156,7 @@ void SystemClock_Config(void)
   /* Update CMSIS variable (which can be updated also through SystemCoreClockUpdate function) */
   //LL_SetSystemCoreClock(170000000);
 
-  // Turn on all GPIO modules
+  // Turn on clocks to all GPIO modules
   RCC->AHB2ENR |= RCC_AHB2ENR_GPIOAEN;
   RCC->AHB2ENR |= RCC_AHB2ENR_GPIOBEN;
   RCC->AHB2ENR |= RCC_AHB2ENR_GPIOCEN;
@@ -162,6 +165,8 @@ void SystemClock_Config(void)
   RCC->AHB2ENR |= RCC_AHB2ENR_GPIOFEN;
   RCC->AHB2ENR |= RCC_AHB2ENR_GPIOGEN;
 
+  // turn on clock to timestamp counter (TIM2)
+  RCC->APB1ENR1 |= RCC_APB1ENR1_TIM2EN;
 }
 
 
@@ -270,5 +275,15 @@ void uart_send_dec_uint(USART_TypeDef *uart, uint32_t n)
   }
   cp++;
   uart_send_string(uart, cp);
+}
+
+void tsc_init(void)
+{
+
+}
+
+uint32_t tsc_read(void)
+{
+
 }
 
