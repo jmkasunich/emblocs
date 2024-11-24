@@ -7,6 +7,8 @@ void uart_send_dec_int(int32_t n);
 void uart_send_dec_uint(uint32_t n);
 
 
+
+
 #if 1
 # define assert(_p) (_assert(__FILE__, __LINE__, _p))
 #else
@@ -15,21 +17,21 @@ void uart_send_dec_uint(uint32_t n);
 
 void _assert(char *file, int line, char *msg)
 {
-  // is the UART running?
-  if ( USART2->CR1 & USART_CR1_UE ) {
-    // yes, print something
-    uart_send_string("assert(): ");
-    uart_send_string(file);
-    uart_send_string(":");
-    uart_send_dec_int(line);
-  if ( msg != NULL ) {
-      uart_send_string(" : ");
-      uart_send_string(msg);
+    // is the UART running?
+    if ( USART2->CR1 & USART_CR1_UE ) {
+        // yes, print something
+        uart_send_string("assert(): ");
+        uart_send_string(file);
+        uart_send_string(":");
+        uart_send_dec_int(line);
+        if ( msg != NULL ) {
+            uart_send_string(" : ");
+            uart_send_string(msg);
+        }
+        uart_send_string("\n");
     }
-    uart_send_string("\n");
-  }
-  // loop forever
-  do {} while (1);
+    // loop forever
+    do {} while (1);
 }
 
 
@@ -89,43 +91,43 @@ int main (void) {
 
 void uart_send_string(char *string)
 {
-  if ( string == NULL ) return;
-  while ( *string != '\0' ) {
-    cons_tx_wait(*string);
-    string++;
-  }
+    if ( string == NULL ) return;
+    while ( *string != '\0' ) {
+        cons_tx_wait(*string);
+        string++;
+    }
 }
 
 void uart_send_dec_int(int32_t n)
 {
-  if ( n < 0 ) {
-    cons_tx_wait('-');
-    uart_send_dec_uint(-n);
-  } else {
-    uart_send_dec_uint(n);
-  }
+    if ( n < 0 ) {
+        cons_tx_wait('-');
+        uart_send_dec_uint(-n);
+    } else {
+        uart_send_dec_uint(n);
+    }
 }
 
 void uart_send_dec_uint(uint32_t n)
 {
-  char buffer[11], *cp;
-  int digit;
+    char buffer[11], *cp;
+    int digit;
 
-  // point to end of buffer
-  cp = &buffer[10];
-  *(cp--) = '\0';
-  // first digit must always be printed
-  digit = n % 10;
-  n = n / 10;
-  *(cp--) = (char)('0' + digit);
-  // loop till no more digits
-  while ( n > 0 ) {
+    // point to end of buffer
+    cp = &buffer[10];
+    *(cp--) = '\0';
+    // first digit must always be printed
     digit = n % 10;
     n = n / 10;
     *(cp--) = (char)('0' + digit);
-  }
-  cp++;
-  uart_send_string(cp);
+    // loop till no more digits
+    while ( n > 0 ) {
+        digit = n % 10;
+        n = n / 10;
+        *(cp--) = (char)('0' + digit);
+    }
+    cp++;
+    uart_send_string(cp);
 }
 
 
