@@ -28,7 +28,7 @@ FOO_TARGET := main.hex
 FOO_SRCS := G431/main.c G431/startup_stm32g431kbtx.s G431/system_stm32g4xx.c G431/platform_g431.c
 FOO_LIBS :=
 FOO_PKG := $(PACKAGE_ROOT)/STM32Cube_FW_G4_V1.6.0
-SRC_DIRS := G431
+SRC_DIRS := . G431
 
 ALL_SRCS += $(FOO_SRCS)
 ALL_TARGETS += $(FOO_TARGET)
