@@ -20,6 +20,9 @@
 
 #define cons_tx_ready()             ((USART2)->ISR & (USART_ISR_TXE_Msk))
 #define cons_tx(c)                  ((USART2)->TDR = (c))
+#define cons_tx_idle()              ((USART2)->ISR & (USART_ISR_TC_Msk))
+#define cons_rx_ready()             ((USART2)->ISR & (USART_ISR_RXNE_Msk))
+#define cons_rx()                   ((char)((USART2)->RDR))
 
 #define tsc_read()                  ((TIM2)->CNT)
 

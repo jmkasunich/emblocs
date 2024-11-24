@@ -42,6 +42,7 @@ static void delay (unsigned int time) {
 int main (void) {
     uint32_t reg;
     uint32_t old_tsc = 0, tsc;
+    uint32_t t_send, t_done;
     platform_init();
     // Put pin PC6 in general purpose output mode
     reg = LED_PORT->MODER;
@@ -56,15 +57,27 @@ int main (void) {
         LED_PORT->BSRR = GPIO_BSRR_BR_6;
 
         delay(500);
-
+        if ( cons_rx_ready() ) {
+          cons_tx_wait(cons_rx());
+        }
         // Set the state of pin 6 to output high
         LED_PORT->BSRR = GPIO_BSRR_BS_6;
 
         delay(500);
+        if ( cons_rx_ready() ) {
+          cons_tx_wait(cons_rx());
+        }
         old_tsc = tsc_read();
         uart_send_string("TSC: ");
         tsc = tsc_read();
-        uart_send_dec_uint(tsc - old_tsc);
+        t_send = tsc - old_tsc;
+        while ( ! cons_tx_idle() ) {};
+        tsc = tsc_read();
+        t_done = tsc - old_tsc;
+        uart_send_string("send: ");
+        uart_send_dec_uint(t_send);
+        uart_send_string("in usec: ");
+        uart_send_dec_uint(tsc_to_usec(t_send));
         uart_send_string("\n");
         old_tsc = tsc;
     }

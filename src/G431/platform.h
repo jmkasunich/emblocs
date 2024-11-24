@@ -55,10 +55,10 @@ int cons_tx_idle(void);
 int cons_rx_ready(void);
 
 /* gets a character without waiting, may return garbage if reciever is not ready */
-int cons_rx(void);
+char cons_rx(void);
 
 /* waits until receiver is ready, then gets character */
-int cons_rx_wait(void);
+char cons_rx_wait(void);
 
 /* time stamp counter
  *

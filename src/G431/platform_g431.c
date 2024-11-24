@@ -175,16 +175,39 @@ void cons_tx_wait(char c)
 }
 
 /* returns non-zero if transmitter is idle (all characters sent) */
-int cons_tx_idle(void);
+/*   note: defined as a macro in platform_g431.h, this is here
+ *         in case someone wants a pointer to the function
+ */
+int (cons_tx_idle)(void)
+{
+    return cons_tx_idle();
+}
+
 
 /* returns non-zero if reciever has a character available */
-int cons_rx_ready(void);
+/*   note: defined as a macro in platform_g431.h, this is here
+ *         in case someone wants a pointer to the function
+ */
+int (cons_rx_ready)(void)
+{
+    return cons_rx_ready();
+}
 
 /* gets a character without waiting, may return garbage if reciever is not ready */
-int cons_rx(void);
+/*   note: defined as a macro in platform_g431.h, this is here
+ *         in case someone wants a pointer to the function
+ */
+char (cons_rx)(void)
+{
+    return cons_rx();
+}
 
 /* waits until receiver is ready, then gets character */
-int cons_rx_wait(void);
+char cons_rx_wait(void)
+{
+    while ( ! cons_rx_ready() ) {};
+    return cons_rx();
+}
 
 /* time stamp counter
  *
