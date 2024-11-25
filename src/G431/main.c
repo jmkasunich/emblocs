@@ -12,17 +12,30 @@ void uart_send_dec_uint(uint32_t n);
 
 /******************************************/
 // generic stuff (will eventually be in emblocs.h)
-typedef struct {
+typedef struct inst_data_s {
+    char const *inst_name;
+    struct comp_def_s *definition;
+    struct inst_data_s *next;
+} inst_data_t;
+
+typedef struct pin_def_s {
     char const * const name;
     bl_pintype_t const type;
     bl_pindir_t const dir;
     int const offset;
 } pin_def_t;
 
-typedef struct {
+typedef struct funct_def_s {
     char const * const name;
-    int const pincount;
-    pin_def_t const *pindefs;
+    void (*fp) (inst_data_t *);
+} funct_def_t;
+
+typedef struct comp_def_s {
+    char const * const name;
+    int const pin_count;
+    pin_def_t const *pin_defs;
+    int const funct_count;
+    funct_def_t const *funct_defs;
 } comp_def_t;
 
 /******************************************/
@@ -30,9 +43,7 @@ typedef struct {
 
 // instance data structure - one copy per instance in RAM
 typedef struct {
-// probably want a generic sub-structure with the commented out items
-//    char const *inst_name;
-//    comp_def_t definition;
+    inst_data_t header;
     bl_float_t *in1;
 	bl_float_t *in2;
 	bl_float_t *out;
@@ -42,8 +53,9 @@ typedef struct {
 } mycomp_inst_t;
 
 // realtime code - one copy in FLASH
-void mycomp_funct(mycomp_inst_t *p)
+void mycomp_funct(inst_data_t *ptr)
 {
+    mycomp_inst_t *p = (mycomp_inst_t *)ptr;
     if ( *(p->enable) ) {
     *(p->out) = *(p->in1) + *(p->in2);
     } else {
@@ -58,15 +70,22 @@ void mycomp_funct(mycomp_inst_t *p)
 pin_def_t const mycomp_pins[] = {
     { "in1", BL_PINTYPE_FLOAT, BL_PINDIR_IN, offsetof(mycomp_inst_t, in1)},
     { "in2", BL_PINTYPE_FLOAT, BL_PINDIR_IN, offsetof(mycomp_inst_t, in2)},
-    { "out", BL_PINTYPE_FLOAT, BL_PINDIR_IN, offsetof(mycomp_inst_t, out)},
-    { "enable", BL_PINTYPE_FLOAT, BL_PINDIR_IN, offsetof(mycomp_inst_t, enable)},
+    { "out", BL_PINTYPE_FLOAT, BL_PINDIR_OUT, offsetof(mycomp_inst_t, out)},
+    { "enable", BL_PINTYPE_BIT, BL_PINDIR_IN, offsetof(mycomp_inst_t, enable)}
+};
+
+// function definitions - one copy in FLASH
+funct_def_t const mycomp_functs[] = {
+    { "funct", &mycomp_funct }
 };
 
 // component definition - one copy in FLASH
 comp_def_t const mycomp_def = { 
     "mycomp",
     countof(mycomp_pins),
-    mycomp_pins
+    mycomp_pins,
+    countof(mycomp_functs),
+    mycomp_functs
 };
 
 
@@ -128,11 +147,11 @@ int main (void) {
     reg |= 0x01 << GPIO_MODER_MODE6_Pos;
     LED_PORT->MODER = reg;
     
-    //printf("\nhello world\n");
-    //printf("a line with an escaped %% sign\n");
-    //printf("mycomp_def is at %p, aka %32.32B,\nwhose least significant byte is %8.8b\n", 
-    //    &mycomp_def, &mycomp_def, &mycomp_def);
-    print_ptr(&mycomp_def, 8);
+    printf("\nhello world\n");
+    printf("mycomp_def is at %p, has %d pins at %p\n", 
+        &mycomp_def, mycomp_def.pin_count, mycomp_def.pin_defs);
+    printf("and a function at %p\n", mycomp_funct);
+    //print_ptr(&mycomp_def, 8);
     print_memory((void *)0x08000A00, 384);
 
     while (1) {
