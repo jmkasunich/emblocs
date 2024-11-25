@@ -25,7 +25,7 @@ ALL_TARGETS :=
 
 # target definitions
 FOO_TARGET := main.hex
-FOO_SRCS := G431/main.c G431/startup_stm32g431kbtx.s G431/system_stm32g4xx.c G431/platform_g431.c
+FOO_SRCS := G431/main.c G431/startup_stm32g431kbtx.s G431/system_stm32g4xx.c G431/platform_g431.c printing.c
 FOO_LIBS :=
 FOO_PKG := $(PACKAGE_ROOT)/STM32Cube_FW_G4_V1.6.0
 SRC_DIRS := . G431
@@ -164,6 +164,10 @@ all : list $(ALL_TARGETS)
 # C compilation rule (with dependency tracking
 
 $(OBJ_DIR)/%.o : G431/%.c
+	@echo Compiling $(<)
+	@$(CC) $(C_STANDARD) $(CFLAGS) -c -MMD -MP -MT $(@) -MF $(DEPS_DIR)/$(*F).d $< -o $(@)
+
+$(OBJ_DIR)/%.o : ./%.c
 	@echo Compiling $(<)
 	@$(CC) $(C_STANDARD) $(CFLAGS) -c -MMD -MP -MT $(@) -MF $(DEPS_DIR)/$(*F).d $< -o $(@)
 
