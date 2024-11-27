@@ -10,40 +10,11 @@ void uart_send_dec_uint(uint32_t n);
 
 #define countof(foo)  (sizeof(foo)/sizeof(foo[0]))
 
-/******************************************/
-// generic stuff (will eventually be in emblocs.h)
-typedef struct inst_data_s {
-    char const *inst_name;
-    struct comp_def_s *definition;
-    struct inst_data_s *next;
-} inst_data_t;
-
-typedef struct pin_def_s {
-    char const * const name;
-    bl_pintype_t const type;
-    bl_pindir_t const dir;
-    int const offset;
-} pin_def_t;
-
-typedef struct funct_def_s {
-    char const * const name;
-    void (*fp) (inst_data_t *);
-} funct_def_t;
-
-typedef struct comp_def_s {
-    char const * const name;
-    int const pin_count;
-    pin_def_t const *pin_defs;
-    int const funct_count;
-    funct_def_t const *funct_defs;
-} comp_def_t;
-
-/******************************************/
 // component specific stuff, in each component file
 
 // instance data structure - one copy per instance in RAM
 typedef struct {
-    inst_data_t header;
+    bl_inst_header_t header;
     bl_float_t *in1;
 	bl_float_t *in2;
 	bl_float_t *out;
@@ -53,7 +24,7 @@ typedef struct {
 } mycomp_inst_t;
 
 // realtime code - one copy in FLASH
-void mycomp_funct(inst_data_t *ptr)
+void mycomp_funct(bl_inst_header_t *ptr)
 {
     mycomp_inst_t *p = (mycomp_inst_t *)ptr;
     if ( *(p->enable) ) {
@@ -66,8 +37,9 @@ void mycomp_funct(inst_data_t *ptr)
     }
     p->old_enable = *(p->enable);
 }
+
 // pin definitions - one copy in FLASH
-pin_def_t const mycomp_pins[] = {
+bl_pin_def_t const mycomp_pins[] = {
     { "in1", BL_PINTYPE_FLOAT, BL_PINDIR_IN, offsetof(mycomp_inst_t, in1)},
     { "in2", BL_PINTYPE_FLOAT, BL_PINDIR_IN, offsetof(mycomp_inst_t, in2)},
     { "out", BL_PINTYPE_FLOAT, BL_PINDIR_OUT, offsetof(mycomp_inst_t, out)},
@@ -75,22 +47,143 @@ pin_def_t const mycomp_pins[] = {
 };
 
 // function definitions - one copy in FLASH
-funct_def_t const mycomp_functs[] = {
+bl_funct_def_t const mycomp_functs[] = {
     { "funct", &mycomp_funct }
 };
 
 // component definition - one copy in FLASH
-comp_def_t const mycomp_def = { 
+bl_comp_def_t const mycomp_def = { 
     "mycomp",
     countof(mycomp_pins),
-    mycomp_pins,
     countof(mycomp_functs),
-    mycomp_functs
+    sizeof(mycomp_inst_t),
+    &(mycomp_pins[0]),
+    &(mycomp_functs[0])
 };
 
 
-// call in main during startup:
-// register_comp(&mycomp_def)
+
+bl_sigdata_t *bl_free_signal_list = NULL;
+bl_inst_header_t *bl_instance_list = NULL;
+
+void add_to_signal_pool(bl_sigdata_t *pool, int entries)
+{
+    bl_sigdata_t *oldroot;
+
+    while ( entries > 0 ) {
+        oldroot = bl_free_signal_list;
+        bl_free_signal_list = pool;
+        pool->next_free = oldroot;
+        pool++;
+    }
+}
+
+bl_sigdata_t * get_sig_from_pool(void)
+{
+    bl_sigdata_t *retval;
+
+    retval = bl_free_signal_list;
+    if ( retval == NULL ) {
+        // handle error here
+    }
+    bl_free_signal_list = retval->next_free;
+    retval->next_free = NULL;
+    return retval;
+}
+
+void return_sig_to_pool(bl_sigdata_t *sig)
+{
+    sig->next_free = bl_free_signal_list;
+    bl_free_signal_list = sig;
+}
+
+void new_inst(bl_comp_def_t *comp_def, bl_inst_header_t *inst_data, char const *name)
+{
+    bl_pin_def_t const *pin_def;
+    bl_sigdata_t *dummy_sig;
+    bl_sigdata_t **pin_ptr_addr;
+
+    // fill in instance data
+    inst_data->definition = comp_def;
+    inst_data->inst_name = name;
+    // link new instance into main instance list
+    inst_data->next = bl_instance_list;
+    bl_instance_list = inst_data;
+
+    // point each pin at a dummy signal and initialize the signal
+    pin_def = comp_def->pin_defs;
+    for ( int n = 0; n < comp_def->pin_count ; n++ ) {
+        dummy_sig = get_sig_from_pool();
+        // use char * arithmetic to determine where the pin pointer is stored
+        pin_ptr_addr = (bl_sigdata_t **)((char *)(inst_data) + pin_def->offset);
+        // point it at the dummy signal
+        *pin_ptr_addr = dummy_sig;
+        // store an appropriate initial value
+        switch ( pin_def->type ) {
+            case BL_PINTYPE_BIT:
+            dummy_sig->b = 0;
+            break;
+            case BL_PINTYPE_FLOAT:
+            dummy_sig->f = 0.0;
+            break;
+            case BL_PINTYPE_SINT:
+            dummy_sig->s = 0;
+            break;
+            case BL_PINTYPE_UINT:
+            dummy_sig->u = 0U;
+            break;
+            default:
+            // handle error here
+            break;
+        }
+    }
+}
+
+
+void list_all_instances(void)
+{
+    bl_inst_header_t *inst;
+
+    inst = bl_instance_list;
+    while ( inst != NULL ) {
+        printf ( "Instance '%s' of type '%s'\n", inst->inst_name, inst->definition->name);
+    }
+}
+
+
+void list_all_pins_in_instance(bl_inst_header_t *inst)
+{
+    bl_sigdata_t *pin_ptr, **pin_ptr_addr;
+    bl_pin_def_t const *pindefs = inst->definition->pin_defs;
+    int num_pins = inst->definition->pin_count;
+
+    for ( int n = 0 ; n < num_pins ; n++ ) {
+        printf ( "  Pin '%s' is type %2d, dir %2d, at offset %3d. Current value is ", 
+                pindefs[n].name, pindefs[n].type, pindefs[n].dir, pindefs[n].offset);
+        pin_ptr_addr = (bl_sigdata_t **)((char *)(inst) + pindefs[n].offset);
+        pin_ptr = *pin_ptr_addr;
+        switch ( pindefs[n].type ) {
+            case BL_PINTYPE_BIT:
+            printf ( "%s\n", pin_ptr->b ? "TRUE" : "FALSE" );
+            break;
+            case BL_PINTYPE_FLOAT:
+            printf ( "float represented by %8x\n", (uint32_t)pin_ptr->f );
+            break;
+            case BL_PINTYPE_SINT:
+            printf ( "%+d\n", pin_ptr->s);
+            break;
+            case BL_PINTYPE_UINT:
+            printf ( "%u\n", pin_ptr->u);
+            break;
+            default:
+            // handle error here
+            break;
+        }
+    }
+}
+
+
+
 
 // call in main during startup:
 //   new_inst(&mycomp_def, "instancename")

@@ -37,18 +37,40 @@ typedef bool bl_bit_t;
 typedef int32_t bl_s32_t;
 typedef uint32_t bl_u32_t;
 
-typedef union {
+typedef union bl_sigdata_u {
 	bl_float_t f;
 	bl_bit_t b;
 	bl_s32_t s;
 	bl_u32_t u;
-} bl_data_t;
+    union bl_sigdata_u *next_free;
+} bl_sigdata_t;
 
-typedef struct {
-	bl_pintype_t type;
-	bl_pindir_t dir;
-	const char *name;
-} bl_pindef_t;
+typedef struct bl_inst_header_s {
+    char const *inst_name;
+    struct bl_comp_def_s *definition;
+    struct bl_inst_header_s *next;
+} bl_inst_header_t;
+
+typedef struct bl_pin_def_s {
+    char const * const name;
+    bl_pintype_t const type;
+    bl_pindir_t const dir;
+    int const offset;
+} bl_pin_def_t;
+
+typedef struct bl_funct_def_s {
+    char const * const name;
+    void (*fp) (bl_inst_header_t *);
+} bl_funct_def_t;
+
+typedef struct bl_comp_def_s {
+    char const * const name;
+    int const pin_count;
+    int const funct_count;
+    int const inst_data_size;
+    bl_pin_def_t const *pin_defs;
+    bl_funct_def_t const *funct_defs;
+} bl_comp_def_t;
 
 
 
