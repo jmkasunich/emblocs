@@ -15,6 +15,9 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#define ARRAYCOUNT(foo)  (sizeof(foo)/sizeof((foo)[0]))
+
+
 typedef enum {
 	BL_PINTYPE_FLOAT    = 0x00,
 	BL_PINTYPE_BIT      = 0x01,
