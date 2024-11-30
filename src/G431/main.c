@@ -28,6 +28,7 @@ static void delay (unsigned int time) {
 
 extern bl_comp_def_t bl_mux2_def;
 extern bl_comp_def_t bl_sum2_def;
+extern bl_comp_def_t bl_perftimer_def;
 extern uint32_t blocs_pool[];
 
 
@@ -52,8 +53,8 @@ int main (void) {
     print_memory((void *)blocs_pool, 512);
     bl_newinst(&bl_sum2_def, "comp1");
     bl_newinst(&bl_sum2_def, "sum21");
-    bl_newinst(&bl_sum2_def, "comp4");
-    bl_newinst(&bl_sum2_def, "comp3");
+    bl_newinst(&bl_perftimer_def, "timer");
+    bl_newinst(&bl_mux2_def, "comp4");
     print_memory((void *)blocs_pool, 512);
     list_all_instances();
     
