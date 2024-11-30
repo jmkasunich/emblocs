@@ -4,41 +4,17 @@
 #include "printing.h"
 #include "main.h"
 
-
-
-
-
-// call in main during startup:
-//   new_inst(&mycomp_def, "instancename")
-// or
-//   new_inst("compname", "instancename")
-// the latter would search for compname in a list built by register_comp()
-
-
-
-_Static_assert(1==1, "pass");
-
-//_Static_assert(1==2, "fail");
-
-
-
-#if 1
-# define assert(_p) (_assert(__FILE__, __LINE__, _p))
-#else
-# define assert(_p) do {} while(1)  // just loop forever
-#endif
-
-void _assert(char *file, int line, char *msg)
+void __assert_func (const char * file, int line, const char * funct, const char *expr)
 {
-    print_string("assert(): ");
+    print_string("assert(");
+    print_string(expr);
+    print_string(") at ");
     print_string(file);
     print_string(":");
     print_uint_dec(line, 0);
-    if ( msg != NULL ) {
-        print_string(" : ");
-        print_string(msg);
-    }
-    print_string("\n");
+    print_string(" in function ");
+    print_string(funct);
+    print_string("()\n");
     // loop forever
     do {} while (1);
 }
@@ -52,10 +28,12 @@ static void delay (unsigned int time) {
 
 extern bl_comp_def_t bl_mux2_def;
 extern bl_comp_def_t bl_sum2_def;
+extern uint32_t blocs_pool[];
 
 
 int main (void) {
     uint32_t reg;
+    char *hello = "\nHello, world!\n";
 
     platform_init();
     // Put pin PC6 in general purpose output mode
@@ -64,19 +42,27 @@ int main (void) {
     reg |= 0x01 << GPIO_MODER_MODE6_Pos;
     LED_PORT->MODER = reg;
     
-    printf("\nhello world\n");
-    printf("mux2_def is at %p, has %d pins at %p\n", 
-        &bl_mux2_def, bl_mux2_def.pin_count, bl_mux2_def.pin_defs);
-    printf("and a function at %p\n", bl_mux2_def.funct_defs[0].fp);
+    printf(hello);
+    printf("sum2_def is at %p, has %d pins at %p\n", 
+        &bl_sum2_def, bl_sum2_def.pin_count, bl_sum2_def.pin_defs);
+    printf("and a function at %p\n", bl_sum2_def.funct_defs[0].fp);
     printf("sum2_def is at %p, has %d pins\n", &bl_sum2_def, bl_sum2_def.pin_count);
    //print_ptr(&mycomp_def, 8);
-    print_memory((void *)0x08000A00, 512);
+    print_memory((void *)hello, 512);
+    print_memory((void *)blocs_pool, 512);
+    bl_newinst(&bl_sum2_def, "comp1");
+    bl_newinst(&bl_sum2_def, "sum21");
+    bl_newinst(&bl_sum2_def, "comp4");
+    bl_newinst(&bl_sum2_def, "comp3");
+    print_memory((void *)blocs_pool, 512);
+    list_all_instances();
+    
 
     while (1) {
         // Reset the state of pin 6 to output low
         LED_PORT->BSRR = GPIO_BSRR_BR_6;
 
-        delay(500);
+        delay(5000);
         print_string("tick... ");
         if ( cons_rx_ready() ) {
           cons_tx_wait(cons_rx());
