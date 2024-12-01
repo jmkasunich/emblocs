@@ -4,11 +4,10 @@
 
 // instance data structure - one copy per instance in RAM
 typedef struct bl_mux2_inst_s {
-    bl_inst_header_t header;
-    bl_float_t *in0;
-	bl_float_t *in1;
-	bl_float_t *out;
-	bl_bit_t *sel;
+    bl_pin_float_t in0;
+	bl_pin_float_t in1;
+	bl_pin_float_t out;
+	bl_pin_bit_t sel;
 } bl_mux2_inst_t;
 
 _Static_assert((sizeof(bl_mux2_inst_t) < 32767), "instance structure too large");
@@ -21,7 +20,8 @@ static bl_pin_def_t const bl_mux2_pins[] = {
     { "sel", BL_PINTYPE_BIT, BL_PINDIR_IN, BL_OFFSET(bl_mux2_inst_t, sel)}
 };
 
-static void bl_mux2_funct(bl_inst_header_t *ptr);
+//static void bl_mux2_funct(void *ptr);
+static bl_funct_t bl_mux2_funct;
 
 // array of function definitions - one copy in FLASH
 static bl_funct_def_t const bl_mux2_functs[] = {
@@ -39,13 +39,15 @@ bl_comp_def_t const bl_mux2_def = {
 };
 
 // realtime code - one copy in FLASH
-static void bl_mux2_funct(bl_inst_header_t *ptr)
+static void bl_mux2_funct(void *ptr)
 {
-    bl_mux2_inst_t *p = (bl_mux2_inst_t *)ptr;
-    if ( *(p->sel) ) {
-        *(p->out) = *(p->in1);
+    bl_mux2_inst_t *p;
+    
+    p = (bl_mux2_inst_t *)ptr;
+    if ( *(p->sel.pin) ) {
+        *(p->out.pin) = *(p->in1.pin);
     } else {
-        *(p->out) = *(p->in0);
+        *(p->out.pin) = *(p->in0.pin);
     }
 }
 

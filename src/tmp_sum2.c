@@ -4,13 +4,13 @@
 
 // instance data structure - one copy per instance in RAM
 typedef struct bl_sum2_inst_s {
-    bl_inst_header_t header;
-    bl_float_t *in0;
-    bl_float_t *gain0;
-	bl_float_t *in1;
-    bl_float_t *gain1;
-    bl_float_t *offset;
-	bl_float_t *out;
+    // pins
+    bl_pin_float_t in0;
+    bl_pin_float_t gain0;
+	bl_pin_float_t in1;
+    bl_pin_float_t gain1;
+    bl_pin_float_t offset;
+	bl_pin_float_t out;
 } bl_sum2_inst_t;
 
 _Static_assert((sizeof(bl_sum2_inst_t) < 32767), "instance structure too large");
@@ -25,7 +25,7 @@ static bl_pin_def_t const bl_sum2_pins[] = {
     { "out", BL_PINTYPE_FLOAT, BL_PINDIR_OUT, BL_OFFSET(bl_sum2_inst_t, out)}
 };
 
-static void bl_sum2_funct(bl_inst_header_t *ptr);
+static bl_funct_t bl_sum2_funct;
 
 // array of function definitions - one copy in FLASH
 static bl_funct_def_t const bl_sum2_functs[] = {
@@ -43,9 +43,11 @@ bl_comp_def_t const bl_sum2_def = {
 };
 
 // realtime code - one copy in FLASH
-static void bl_sum2_funct(bl_inst_header_t *ptr)
+static void bl_sum2_funct(void *ptr)
 {
-    bl_sum2_inst_t *p = (bl_sum2_inst_t *)ptr;
-    *(p->out) = *(p->in0) * *(p->gain0) + *(p->in1) * *(p->gain1) + *(p->offset);
+    bl_sum2_inst_t *p;
+    
+    p = (bl_sum2_inst_t *)ptr;
+    *(p->out.pin) = *(p->in0.pin) * *(p->gain0.pin) + *(p->in1.pin) * *(p->gain1.pin) + *(p->offset.pin);
 }
 

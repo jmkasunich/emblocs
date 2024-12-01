@@ -19,17 +19,56 @@ void __assert_func (const char * file, int line, const char * funct, const char 
     do {} while (1);
 }
 
-
 // Quick and dirty delay
 static void delay (unsigned int time) {
     for (unsigned int i = 0; i < time; i++)
         for (volatile unsigned int j = 0; j < 20000; j++);
 }
 
+// gotta figure out how to include these structure definitions
+// these should be private to the components,
+// the only thing this file really needs to know is the size of the struct
+
+typedef struct bl_perftimer_inst_s {
+    bl_pin_u32_t time;
+	uint32_t tsc;
+} bl_perftimer_inst_t;
+
+typedef struct bl_sum2_inst_s {
+    // pins
+    bl_pin_float_t in0;
+    bl_pin_float_t gain0;
+	bl_pin_float_t in1;
+    bl_pin_float_t gain1;
+    bl_pin_float_t offset;
+	bl_pin_float_t out;
+} bl_sum2_inst_t;
+
+typedef struct bl_mux2_inst_s {
+    bl_pin_float_t in0;
+	bl_pin_float_t in1;
+	bl_pin_float_t out;
+	bl_pin_bit_t sel;
+} bl_mux2_inst_t;
+
 extern bl_comp_def_t bl_mux2_def;
 extern bl_comp_def_t bl_sum2_def;
 extern bl_comp_def_t bl_perftimer_def;
-extern uint32_t blocs_pool[];
+
+struct bl_mux2_inst_s comp1;
+struct bl_sum2_inst_s sum21;
+struct bl_perftimer_inst_s timer;
+struct bl_mux2_inst_s comp4;
+
+
+bl_inst_def_t const instances[] = {
+    { "comp1", &bl_mux2_def, &comp1 },
+    { "sum21", &bl_sum2_def, &sum21 },
+    { "timer", &bl_perftimer_def, &timer },
+    { "comp4", &bl_mux2_def, &comp4 },
+    { NULL, NULL, NULL }
+};
+
 
 
 int main (void) {
@@ -50,14 +89,16 @@ int main (void) {
     printf("sum2_def is at %p, has %d pins\n", &bl_sum2_def, bl_sum2_def.pin_count);
    //print_ptr(&mycomp_def, 8);
     print_memory((void *)hello, 512);
-    print_memory((void *)blocs_pool, 512);
-    bl_newinst(&bl_sum2_def, "comp1");
-    bl_newinst(&bl_sum2_def, "sum21");
-    bl_newinst(&bl_perftimer_def, "timer");
-    bl_newinst(&bl_mux2_def, "comp4");
-    print_memory((void *)blocs_pool, 512);
+    print_memory((void *)(0x20000000U), 512);
+    for ( unsigned int n = 0 ; n < ARRAYCOUNT(instances)-1 ; n++ ) {
+        bl_init_instance(&(instances[n]));
+    }
+    print_memory((void *)(0x20000000U), 512);
     list_all_instances();
-    
+
+
+
+
 
     while (1) {
         // Reset the state of pin 6 to output low
