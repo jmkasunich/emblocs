@@ -1,8 +1,0 @@
-{
-    "C_Cpp.default.compilerPath": "c:\\ArmGCC\\arm-gnu-toolchain-13.3.rel1-mingw-w64-i686-arm-none-eabi\\bin\\arm-none-eabi-gcc.exe",
-    "C_Cpp.dimInactiveRegions": true,
-    "files.associations": {
-        "stdint.h": "c",
-        "stdint-gcc.h": "c"
-    }
-}
