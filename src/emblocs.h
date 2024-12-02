@@ -103,6 +103,7 @@ void bl_linksp(char const *sig_name, char const *inst_name, char const *pin_name
 void list_all_signals(void);
 
 /*   list pins connected to a signal */
+void list_signal_pins(bl_sig_meta_t *sig);
 
 
 
@@ -183,6 +184,9 @@ void list_all_instances(void);
 
 /*   list all pins in an instance */
 void list_all_pins_in_instance(bl_inst_meta_t *inst);
+
+/*   list the signal connected to a pin */
+void list_pin_signal(void *sig_addr);
 
 
 #endif // EMBLOCS_H

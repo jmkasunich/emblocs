@@ -193,7 +193,6 @@ void bl_linksp(char const *sig_name, char const *inst_name, char const *pin_name
     bl_pin_def_t const *pindef;
     void *pin_addr;
 
-    printf("in bl_linksp()\n");
     sig = (bl_sig_meta_t *)find_name_in_list(sig_name, (bl_list_entry_t *)sig_list);
     assert(sig != NULL);
     inst = (bl_inst_meta_t *)find_name_in_list(inst_name, (bl_list_entry_t *)inst_list);
@@ -204,7 +203,7 @@ void bl_linksp(char const *sig_name, char const *inst_name, char const *pin_name
     assert(GET_TYPE(sig->dpwt) == pindef->type);
     // use char pointer arithmetic to determine where the pin is stored
     pin_addr = (void *)((char *)(inst->inst_data) + pindef->offset);
-    // conenct the pin to the signal
+    // connect the pin to the signal
     switch(pindef->type) {
         case BL_TYPE_BIT: {
             bl_pin_bit_t *p = (bl_pin_bit_t *)pin_addr;
@@ -232,9 +231,6 @@ void bl_linksp(char const *sig_name, char const *inst_name, char const *pin_name
         }
     }
 }
-
-
-
 
 
 void list_all_signals(void)
@@ -272,11 +268,43 @@ void list_all_signals(void)
             }
         }
         printf("\n");
-        //list_all_pins_linked_to_signal(inst);
+        list_signal_pins(sig);
         sig = (bl_sig_meta_t *)sig->header.next;
     }
 }
 
+void list_signal_pins(bl_sig_meta_t *sig)
+{
+    bl_inst_meta_t *inst;
+    bl_pin_def_t const *pindefs;
+    int num_pins;
+    void *inst_data, *pin_addr, *sig_addr;
+
+    sig_addr = GET_DPTR(sig->dpwt);
+    // to list pins connected to a signal we need to check all pins
+    inst = inst_list;
+    // loop through instances
+    while ( inst != NULL ) {
+        pindefs = inst->comp_def->pin_defs;
+        num_pins = inst->comp_def->pin_count;
+        inst_data = inst->inst_data;
+        // loop through each instance's pins
+        for ( int n = 0 ; n < num_pins ; n++ ) {
+            pin_addr = *((void **)((char *)(inst_data) + pindefs[n].offset));
+            if ( pin_addr == sig_addr ) {
+                if ( pindefs[n].dir == BL_DIR_IN ) {
+                    printf("  -->");
+                } else if ( pindefs[n].dir == BL_DIR_OUT ) {
+                    printf("  <--");
+                } else if ( pindefs[n].dir == BL_DIR_IO ) {
+                    printf("  <->");
+                }
+                printf("  %s.%s\n", inst->header.name, pindefs[n].name);
+            }
+        }
+        inst = (bl_inst_meta_t *)inst->header.next;
+    }
+}
 
 
 
@@ -419,11 +447,34 @@ void list_all_pins_in_instance(bl_inst_meta_t *inst)
                 break;
             }
         }
-        if ( sig_addr != NULL ) {
-            printf(" (linked to %p)\n", sig_addr);
-        } else {
-            printf(" (dummy)\n");
+        if ( pindefs[n].dir == BL_DIR_IN ) {
+            printf(" <-- ");
+        } else if ( pindefs[n].dir == BL_DIR_OUT ) {
+            printf(" --> ");
+        } else if ( pindefs[n].dir == BL_DIR_IO ) {
+            printf(" <-> ");
         }
+        if ( sig_addr != NULL ) {
+            list_pin_signal(sig_addr);
+        } else {
+            printf("(dummy)");
+        }
+        printf("\n");
+    }
+}
+
+void list_pin_signal(void *sig_addr)
+{
+    bl_sig_meta_t *sig;
+
+    // need to scan the signal list to find the match
+    sig = sig_list;
+    while ( sig != NULL ) {
+        if ( sig_addr == GET_DPTR(sig->dpwt) ) {
+            printf("%s", sig->header.name);
+            return;
+        }
+        sig = (bl_sig_meta_t *)sig->header.next;
     }
 }
 
