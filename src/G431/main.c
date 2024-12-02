@@ -29,7 +29,6 @@ static void delay (unsigned int time) {
 extern bl_comp_def_t bl_mux2_def;
 extern bl_comp_def_t bl_sum2_def;
 extern bl_comp_def_t bl_perftimer_def;
-extern uint32_t blocs_pool[];
 
 
 int main (void) {
@@ -48,15 +47,24 @@ int main (void) {
         &bl_sum2_def, bl_sum2_def.pin_count, bl_sum2_def.pin_defs);
     printf("and a function at %p\n", bl_sum2_def.funct_defs[0].fp);
     printf("sum2_def is at %p, has %d pins\n", &bl_sum2_def, bl_sum2_def.pin_count);
-   //print_ptr(&mycomp_def, 8);
+
     print_memory((void *)hello, 512);
-    print_memory((void *)blocs_pool, 512);
     bl_newinst(&bl_sum2_def, "comp1");
     bl_newinst(&bl_sum2_def, "sum21");
     bl_newinst(&bl_perftimer_def, "timer");
     bl_newinst(&bl_mux2_def, "comp4");
-    print_memory((void *)blocs_pool, 512);
+    bl_newsig(BL_TYPE_BIT, "sel_sig");
+    bl_newsig(BL_TYPE_FLOAT, "fp_sig");
+    bl_newsig(BL_TYPE_FLOAT, "output");
+    bl_newsig(BL_TYPE_U32, "clocks");
     list_all_instances();
+    list_all_signals();
+    bl_linksp("clocks", "timer", "time");
+    bl_linksp("fp_sig", "comp1", "out");
+    bl_linksp("fp_sig", "comp4", "in1");
+    bl_linksp("sel_sig", "comp4", "sel");
+    list_all_instances();
+    list_all_signals();
     
 
     while (1) {

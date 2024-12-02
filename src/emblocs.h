@@ -16,57 +16,144 @@
 #include <stddef.h>
 
 
-#define ARRAYCOUNT(foo)  (sizeof(foo)/sizeof((foo)[0]))
-#define BL_OFFSET(type, member)  ((bl_offset_t)(offsetof(type,member)))
+/****************************************************************
+ * sorted list data structures & functions
+ */
 
-typedef uint16_t bl_offset_t;
+typedef struct bl_list_entry_s {
+    char const * name;
+    struct bl_list_entry_s *next;
+} bl_list_entry_t;
 
-typedef enum bl_pintype_e {
-	BL_PINTYPE_FLOAT    = 0x00,
-	BL_PINTYPE_BIT      = 0x01,
-	BL_PINTYPE_SINT     = 0x02,
-	BL_PINTYPE_UINT     = 0x03
-} bl_pintype_t;
+bl_list_entry_t *find_name_in_list(char const *name, bl_list_entry_t *list);
+bl_list_entry_t **find_insertion_point(char const *name, bl_list_entry_t **list);
 
-#define BL_PINTYPE_MASK (0x03)
-
-typedef enum bl_pindir_e {
-	BL_PINDIR_IN        = 0x04,
-	BL_PINDIR_OUT       = 0x08,
-	BL_PINDIR_IO        = 0x0C,
-} bl_pindir_t;
-
-#define BL_PINDIR_MASK (0x0C)
+/****************************************************************
+ * the four pin/signal types
+ */
 
 typedef float bl_float_t;
 typedef bool bl_bit_t;
 typedef int32_t bl_s32_t;
 typedef uint32_t bl_u32_t;
 
-typedef union bl_sigdata_u {
-	bl_float_t f;
-	bl_bit_t b;
-	bl_s32_t s;
-	bl_u32_t u;
-    union bl_sigdata_u *next_free;
-} bl_sigdata_t;
+/* a union that can hold any of the four */
+typedef union bl_sig_data_u {
+    bl_bit_t b;
+    bl_float_t f;
+    bl_s32_t s;
+    bl_u32_t u;
+} bl_sig_data_t;
 
-typedef struct bl_inst_header_s {
-    char const *inst_name;
-    struct bl_inst_header_s *next_inst;
-    struct bl_comp_def_s *definition;
-} bl_inst_header_t;
+typedef enum bl_type_e {
+	BL_TYPE_FLOAT    = 0x00,
+	BL_TYPE_BIT      = 0x01,
+	BL_TYPE_S32      = 0x02,
+	BL_TYPE_U32      = 0x03
+} bl_type_t;
+
+#define BL_TYPE_MASK (0x03)
+
+typedef enum bl_dir_e {
+	BL_DIR_IN        = 0x04,
+	BL_DIR_OUT       = 0x08,
+	BL_DIR_IO        = 0x0C,
+} bl_dir_t;
+
+#define BL_DIR_MASK (0x0C)
+
+/****************************************************************
+ * named signal data structures & functions
+ */
+
+/* dpwt = data pointer with type
+ * type takes two bits, data pointers are always 4-byte aligned
+ * so use the low 2 bits of the pointer to store the type and
+ * the rest to store the pointer; with macros to manage the fields
+ */
+
+_Static_assert(sizeof(uint32_t) == sizeof(void *));
+
+typedef uint32_t bl_dpwt_t;
+#define GET_TYPE(dpwt)          ((dpwt) & BL_TYPE_MASK)
+#define GET_DPTR(dpwt)          ((void *)((dpwt) & ~BL_TYPE_MASK))
+#define MAKE_DPWT(ptr,type)     ((uint32_t)(ptr) | ((type) & BL_TYPE_MASK))
+
+/* structure to hold signal metadata */
+typedef struct bl_sig_meta_s {
+    bl_list_entry_t header;
+    bl_dpwt_t dpwt;
+} bl_sig_meta_t;
+
+/* system building functions */
+
+/*   create a signal */
+bl_sig_meta_t *bl_newsig(bl_type_t type, char const * sig_name);
+
+/*   link a pin to a signal */
+void bl_linksp(char const *sig_name, char const *inst_name, char const *pin_name);
+
+/* helpers for system building functions */
+
+/*   find a signal by name */
+
+/* listing/observation functions */
+
+/*   list all signals */
+void list_all_signals(void);
+
+/*   list pins connected to a signal */
+
+
+
+/****************************************************************
+ * component and instance structures and functions
+ */
+
+#define ARRAYCOUNT(foo)  (sizeof(foo)/sizeof((foo)[0]))
+#define BL_OFFSET(type, member)  ((bl_offset_t)(offsetof(type,member)))
+typedef uint16_t bl_offset_t;
+
+/***********************************************
+ * pin data structures
+ */
+
+typedef struct bl_pin_bit_s {
+    bl_bit_t *pin;
+    bl_bit_t dummy;
+} bl_pin_bit_t;
+
+typedef struct bl_pin_float_s {
+    bl_float_t *pin;
+    bl_float_t dummy;
+} bl_pin_float_t;
+
+typedef struct bl_pin_s32_s {
+    bl_s32_t *pin;
+    bl_s32_t dummy;
+} bl_pin_s32_t;
+
+typedef struct bl_pin_u32_s {
+    bl_u32_t *pin;
+    bl_u32_t dummy;
+} bl_pin_u32_t;
+
+typedef struct bl_inst_meta_s {
+    bl_list_entry_t header;
+    struct bl_comp_def_s *comp_def;
+    void *inst_data;
+} bl_inst_meta_t;
 
 typedef struct bl_pin_def_s {
     char const * const name;
-    bl_pintype_t const type;
-    bl_pindir_t const dir;
+    bl_type_t const type;
+    bl_dir_t const dir;
     bl_offset_t const offset;
 } bl_pin_def_t;
 
 typedef struct bl_funct_def_s {
     char const * const name;
-    void (*fp) (bl_inst_header_t *);
+    void (*fp) (void *);
 } bl_funct_def_t;
 
 typedef struct bl_comp_def_s {
@@ -78,44 +165,24 @@ typedef struct bl_comp_def_s {
     bl_funct_def_t const *funct_defs;
 } bl_comp_def_t;
 
+/* system building functions */
 
-// returns pointer to matching node, or NULL if no match
-// list does not have to be sorted
-bl_inst_header_t *find_instance_by_name(char const *name);
+/*   create an instance of a component */
+bl_inst_meta_t *bl_newinst(bl_comp_def_t *comp_def, char const *inst_name);
 
-// returns pointer to insertion point to maintain sorted list, 
-// or NULL if there is already a node with the specified name
-bl_inst_header_t **find_instance_insertion_point(char const *name);
+/* helpers for system building functions */
 
-// creates new instance of a component
-bl_inst_header_t *bl_newinst(bl_comp_def_t *comp_def, char const *inst_name);
+/*   find an instance by name */
 
+/*   find a pin by name */
+
+/* listing/observation functions */
+
+/*   list all instances */
 void list_all_instances(void);
-void list_all_pins_in_instance(bl_inst_header_t *inst);
 
-// component definition
-
-
-// component instance
-
-
-// pin definition
-
-
-// pin instance w/metadata
-
-
-// pin instance (functional only)
-
-
-// signal 
-
-
-/***********************************************************/
-
-// functions
-
-
+/*   list all pins in an instance */
+void list_all_pins_in_instance(bl_inst_meta_t *inst);
 
 
 #endif // EMBLOCS_H

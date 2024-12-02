@@ -2,9 +2,6 @@
  * 
  * printing.c - lightweight console printing functions
  * 
- * this will eventually contains a lightweight printf() but for
- * now it is mostly individual functions for printing specific items
- * 
  * These functions are optimized to use minimum RAM; things are
  * sent to the console as early as possible instead of building
  * the complete string in a buffer.

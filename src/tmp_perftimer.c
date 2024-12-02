@@ -8,8 +8,7 @@
 
 // instance data structure - one copy per instance in RAM
 typedef struct bl_mux2_inst_s {
-    bl_inst_header_t header;
-    bl_u32_t *time;
+    bl_pin_u32_t time;
 	uint32_t tsc;
 } bl_perftimer_inst_t;
 
@@ -17,11 +16,11 @@ _Static_assert((sizeof(bl_perftimer_inst_t) < 32767), "instance structure too la
 
 // array of pin definitions - one copy in FLASH
 static bl_pin_def_t const bl_perftimer_pins[] = {
-    { "time", BL_PINTYPE_UINT, BL_PINDIR_OUT, BL_OFFSET(bl_perftimer_inst_t, time)}
+    { "time", BL_TYPE_U32, BL_DIR_OUT, BL_OFFSET(bl_perftimer_inst_t, time)}
 };
 
-static void bl_perftimer_start_funct(bl_inst_header_t *ptr);
-static void bl_perftimer_stop_funct(bl_inst_header_t *ptr);
+static void bl_perftimer_start_funct(void *ptr);
+static void bl_perftimer_stop_funct(void *ptr);
 
 // array of function definitions - one copy in FLASH
 static bl_funct_def_t const bl_perftimer_functs[] = {
@@ -40,17 +39,17 @@ bl_comp_def_t const bl_perftimer_def = {
 };
 
 // realtime code - one copy in FLASH
-static void bl_perftimer_start_funct(bl_inst_header_t *ptr)
+static void bl_perftimer_start_funct(void *ptr)
 {
     bl_perftimer_inst_t *p = (bl_perftimer_inst_t *)ptr;
 
     p->tsc = tsc_read();
 }
 
-static void bl_perftimer_stop_funct(bl_inst_header_t *ptr)
+static void bl_perftimer_stop_funct(void *ptr)
 {
     bl_perftimer_inst_t *p = (bl_perftimer_inst_t *)ptr;
 
-    *(p->time) = tsc_read() - p->tsc;
+    *(p->time.pin) = tsc_read() - p->tsc;
 }
 
