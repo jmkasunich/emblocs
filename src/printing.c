@@ -202,6 +202,152 @@ void print_uint_bin(uint32_t n, int width, int digits, int group)
     }
 }
 
+
+static float p10(int pow)
+{
+    float result;
+    int32_t iresult, ifactor;
+
+    if ( pow < 0 ) {
+        result = 1.0f / p10(-pow);
+        return result;
+    }
+    if ( pow > 38 ) {
+        pow = 38;
+    }
+    result = 1.0f;
+    while ( pow >= 8 ) {
+        result *= 1e8f;
+        pow -= 8;
+    }
+    ifactor = 10;
+    iresult = 1;
+    while ( pow > 0 ) {
+        if ( pow & 1 ) {
+            iresult = iresult * ifactor;
+        }
+        ifactor = ifactor * ifactor;
+        pow >>= 1;
+    }
+    result = result * (float)iresult;
+    return result;
+}
+
+
+void print_float(float v, int precision)
+{
+    float pow;
+    
+    if ( v < 0.0 ) {
+        v = -v;
+        print_char('-');
+    }
+    if ( v > 1e8 ) {
+        // too large for regular printing
+        print_float_sci(v, precision);
+        return;
+    }
+    if ( precision > 7 ) {
+        precision = 7;
+    } else if ( precision < 1 ) {
+        precision = 1;
+    }
+    pow = p10(precision);
+    if ( v < (1.0f / pow) ) {
+        // too small for regular printing
+        print_float_sci(v, precision);
+        return;
+    }
+    // round to nearest at specified precision
+    
+
+
+
+    if ( v > 1e8f ) {
+        print_float_sci(v, precision);
+        return;
+    }
+
+
+
+}
+
+
+
+void print_float_sci(float v, int precision)
+{
+    int exponent;
+    char digit;
+
+    if ( v < 0.0 ) {
+        v = -v;
+        print_char('-');
+    }
+    if ( precision > 7 ) {
+        precision = 7;
+    } else if ( precision < 0 ) {
+        precision = 0;
+    }
+    exponent = 0;
+    if ( v < 1.0f ) {
+        // small number, make it bigger
+        while ( v < 1e-8f ) {
+            v *= 1e8f;
+            exponent -= 8;
+        }
+        while ( v < 1e-3f ) {
+            v *= 1e3f;
+            exponent -= 3;
+        }
+        while ( v < 1e-1f ) {
+            v *= 1e1f;
+            exponent -= 1;
+        }
+    } else {
+        // large number, make it smaller
+        while ( v >= 1e8f ) {
+            v *= 1e-8f;
+            exponent += 8;
+        }
+        while ( v >= 1e3f ) {
+            v *= 1e-3f;
+            exponent += 3;
+        }
+        while ( v >= 1e1f ) {
+            v *= 1e-1f;
+            exponent += 1;
+        }
+    }
+    // perform rounding to specified precision
+    v = v + 0.5f * p10(-precision);
+    // there is a small chance that rounding pushed it over 10.0
+    if ( v >= 10.0f ) {
+        v *= 0.1f;
+        exponent += 1;
+    }
+    // print the first digit
+    digit = (char)v;
+    print_char('0' + digit);
+    if ( precision > 0 ) {
+        print_char('.');
+        do {
+            v = v * 0.1f;
+            digit = (char)v;
+            print_char('0' + digit);
+        } while ( --precision > 0 );
+    }
+    print_char('e');
+    if ( exponent < 0 ) {
+        print_char('-');
+        exponent = -exponent;
+    }
+    digit = (char)(exponent/10);
+    print_char('0' + digit);
+    digit = (char)(exponent%10);
+    print_char('0' + digit);
+}
+
+
 // private helpers for printf
 static inline int _is_digit(char ch)
 {
