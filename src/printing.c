@@ -272,57 +272,76 @@ void print_float(float v, int precision)
 
 }
 
+#include <math.h>
 
-
-void print_float_sci(float v, int precision)
+void print_double_sci(double v, int precision)
 {
-    int exponent;
+    int c, exponent;
     char digit;
 
-    if ( v < 0.0 ) {
+    if ( signbit(v) ) {
         v = -v;
         print_char('-');
     }
-    if ( precision > 7 ) {
-        precision = 7;
+    if ( precision > 16 ) {
+        precision = 16;
     } else if ( precision < 0 ) {
         precision = 0;
     }
+    c = fpclassify(v);
+    if ( c == FP_NAN ) {
+        print_string("nan");
+        return;
+    }
+    if ( c == FP_INFINITE ) {
+        print_string("inf");
+        return;
+    }
+    if ( c == FP_ZERO ) {
+        print_char('0');
+        if ( precision > 0 ) {
+            print_char('.');
+            while ( precision-- > 0 ) {
+                print_char('0');
+            }
+        }
+        return;
+    }
     exponent = 0;
-    if ( v < 1.0f ) {
+    if ( v < 1.0 ) {
         // small number, make it bigger
-        while ( v < 1e-8f ) {
-            v *= 1e8f;
+        while ( v < 1e-8 ) {
+            v *= 1e8;
             exponent -= 8;
         }
-        while ( v < 1e-3f ) {
-            v *= 1e3f;
+        while ( v < 1e-3 ) {
+            v *= 1e3;
             exponent -= 3;
         }
-        while ( v < 1e-1f ) {
-            v *= 1e1f;
+        while ( v < 1.0 ) {
+            v *= 10.0;
             exponent -= 1;
         }
     } else {
         // large number, make it smaller
-        while ( v >= 1e8f ) {
-            v *= 1e-8f;
+        while ( v >= 1e8 ) {
+            v *= 1e-8;
             exponent += 8;
         }
-        while ( v >= 1e3f ) {
-            v *= 1e-3f;
+        while ( v >= 1e3 ) {
+            v *= 1e-3;
             exponent += 3;
         }
-        while ( v >= 1e1f ) {
-            v *= 1e-1f;
+        while ( v >= 1e1 ) {
+            v *= 1e-1;
             exponent += 1;
         }
     }
     // perform rounding to specified precision
-    v = v + 0.5f * p10(-precision);
+    v = v + 0.5 * p10(-precision);
     // there is a small chance that rounding pushed it over 10.0
-    if ( v >= 10.0f ) {
-        v *= 0.1f;
+    if ( v >= 10.0 ) {
+        v *= 0.1;
         exponent += 1;
     }
     // print the first digit
@@ -331,7 +350,8 @@ void print_float_sci(float v, int precision)
     if ( precision > 0 ) {
         print_char('.');
         do {
-            v = v * 0.1f;
+            v = v - digit;
+            v = v * 10.0;
             digit = (char)v;
             print_char('0' + digit);
         } while ( --precision > 0 );
@@ -340,6 +360,8 @@ void print_float_sci(float v, int precision)
     if ( exponent < 0 ) {
         print_char('-');
         exponent = -exponent;
+    } else {
+        print_char('+');
     }
     digit = (char)(exponent/10);
     print_char('0' + digit);

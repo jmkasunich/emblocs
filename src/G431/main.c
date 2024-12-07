@@ -34,6 +34,8 @@ extern bl_comp_def_t bl_perftimer_def;
 int main (void) {
     uint32_t reg;
     char *hello = "\nHello, world!\n";
+    double f;
+    int prec;
 
     platform_init();
     // Put pin PC6 in general purpose output mode
@@ -42,11 +44,24 @@ int main (void) {
     reg |= 0x01 << GPIO_MODER_MODE6_Pos;
     LED_PORT->MODER = reg;
     
-    printf(hello);
-    printf("sum2_def is at %p, has %d pins at %p\n", 
-        &bl_sum2_def, bl_sum2_def.pin_count, bl_sum2_def.pin_defs);
-    printf("and a function at %p\n", bl_sum2_def.funct_defs[0].fp);
-    printf("sum2_def is at %p, has %d pins\n", &bl_sum2_def, bl_sum2_def.pin_count);
+    print_string(hello);
+    //printf("sum2_def is at %p, has %d pins at %p\n", 
+    //    &bl_sum2_def, bl_sum2_def.pin_count, bl_sum2_def.pin_defs);
+    //printf("and a function at %p\n", bl_sum2_def.funct_defs[0].fp);
+    //printf("sum2_def is at %p, has %d pins\n", &bl_sum2_def, bl_sum2_def.pin_count);
+
+    for ( f = 0.0123456789987654321; f < 0.1 ; f += 0.01 ) {
+
+        print_char('\n');
+        print_string("float 0.0");
+        print_int_dec(100.0f * f, 0, '_');
+        print_char('\n');
+        for ( prec = 0 ; prec < 16 ; prec++ ) {
+            print_double_sci(f, prec);
+            print_char('\n');
+        }
+    }
+    while(1) {}
 
     print_memory((void *)hello, 512);
     bl_newinst(&bl_sum2_def, "comp1");
