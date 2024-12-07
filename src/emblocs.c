@@ -11,17 +11,18 @@
 
 uint8_t blocs_rt_pool[BLOCS_RT_POOL_SIZE & ~3]  __attribute__ ((aligned(4)));
 static uint8_t *rt_pool_next = blocs_rt_pool;
-static uint32_t rt_pool_avail = sizeof(blocs_rt_pool);
+static int32_t rt_pool_avail = sizeof(blocs_rt_pool);
 
 uint8_t blocs_meta_pool[BLOCS_META_POOL_SIZE & ~3]  __attribute__ ((aligned(4)));
 static uint8_t *meta_pool_next = blocs_meta_pool;
-static uint32_t meta_pool_avail = sizeof(blocs_meta_pool);
+static int32_t meta_pool_avail = sizeof(blocs_meta_pool);
 
-static void *alloc_from_rt_pool(uint32_t size)
+static void *alloc_from_rt_pool(int32_t size)
 {
     void *retval;
 
     printf("alloc rt   (%d)", size);
+    assert ( size > 0 );
     // round size up to multiple of 4
     if ( size & 3 ) {
         size += 4;
@@ -35,11 +36,12 @@ static void *alloc_from_rt_pool(uint32_t size)
     return retval;
 }
 
-static void *alloc_from_meta_pool(uint32_t size)
+static void *alloc_from_meta_pool(int32_t size)
 {
     void *retval;
 
     printf("alloc meta (%d)", size);
+    assert ( size > 0 );
     // round size up to multiple of 4
     if ( size & 3 ) {
         size += 4;
