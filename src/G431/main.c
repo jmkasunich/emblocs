@@ -34,8 +34,10 @@ extern bl_comp_def_t bl_perftimer_def;
 int main (void) {
     uint32_t reg;
     char *hello = "\nHello, world!\n";
-    double f;
+    double d1, d2, d3;
+    float f1, f2, f3;
     int prec;
+    uint32_t start, end;
 
     platform_init();
     // Put pin PC6 in general purpose output mode
@@ -45,22 +47,95 @@ int main (void) {
     LED_PORT->MODER = reg;
     
     print_string(hello);
+    delay(500);
     //printf("sum2_def is at %p, has %d pins at %p\n", 
     //    &bl_sum2_def, bl_sum2_def.pin_count, bl_sum2_def.pin_defs);
     //printf("and a function at %p\n", bl_sum2_def.funct_defs[0].fp);
     //printf("sum2_def is at %p, has %d pins\n", &bl_sum2_def, bl_sum2_def.pin_count);
 
-    for ( f = 0.0123456789987654321; f < 0.1 ; f += 0.01 ) {
+    start = tsc_read();
+    for ( d1 = start*1000.0; d1 > 1e-8 ; d1 /= 10.0 ) {
 
         print_char('\n');
-        print_string("float 0.0");
-        print_int_dec(100.0f * f, 0, '_');
+        print_int_dec(start, 0, '_');
+        print_string("000\n");
         print_char('\n');
         for ( prec = 0 ; prec < 16 ; prec++ ) {
-            print_double_sci(f, prec);
+            print_double(d1, prec);
+            print_char('\n');
+            print_double_sci(d1, prec);
             print_char('\n');
         }
     }
+
+    d1 = 0.0;
+    print_double(d1, 6);
+    print_char('\n');
+    print_double_sci(d1, 6);
+    print_char('\n');
+
+    d1 = -0.0;
+    print_double(d1, 6);
+    print_char('\n');
+    print_double_sci(d1, 6);
+    print_char('\n');
+
+    d1 = 0.0;
+    print_double(d1, 0);
+    print_char('\n');
+    print_double_sci(d1, 0);
+    print_char('\n');
+
+    d1 = -0.0/0.0;
+    print_double(d1, 0);
+    print_char('\n');
+    print_double_sci(d1, 0);
+    print_char('\n');
+
+    d1 = 1.0/0.0;
+    print_double(d1, 0);
+    print_char('\n');
+    print_double_sci(d1, 0);
+    print_char('\n');
+
+    d1 = -1.0/0.0;
+    print_double(d1, 0);
+    print_char('\n');
+    print_double_sci(d1, 0);
+    print_char('\n');
+
+
+    print_string("timing checks\n");
+    f1 = tsc_read();
+    f2 = tsc_read();
+    start = tsc_read();
+    f3 = f1 - f2;
+    end = tsc_read();
+    print_string("float: ");
+    print_int_dec(end-start, 10, ' ');
+    print_string(" clocks to get answer ");
+    print_double_sci(f1, 10);
+    print_string(" - ");
+    print_double_sci(f2, 10);
+    print_string(" = ");
+    print_double_sci(f3, 10);
+    print_string("\n");
+    d1 = tsc_read();
+    d2 = tsc_read();
+    start = tsc_read();
+    d3 = d1 - d2;
+    end = tsc_read();
+    print_string("double: ");
+    print_int_dec(end-start, 10, ' ');
+    print_string(" clocks to get answer ");
+    print_string(" clocks to get answer ");
+    print_double_sci(d1, 10);
+    print_string(" - ");
+    print_double_sci(d2, 10);
+    print_string(" = ");
+    print_double_sci(d3, 10);
+    print_string("\n");
+
     while(1) {}
 
     print_memory((void *)hello, 512);

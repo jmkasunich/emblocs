@@ -57,6 +57,7 @@ void print_uint_bin(uint32_t n, int width, int digits, int group);
 
 // print a floating point number in scientific notation
 //   prints 'precision' digits after the decimal point
+void print_double(double v, int precision);
 void print_double_sci(double v, int precision);
 
 // formatted printing

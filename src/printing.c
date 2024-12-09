@@ -233,46 +233,94 @@ static float p10(int pow)
     return result;
 }
 
+#include <math.h>
 
-void print_float(float v, int precision)
+void print_double(double v, int precision)
 {
-    float pow;
-    
-    if ( v < 0.0 ) {
+    int c;
+    uint32_t int_part;
+    double frac_part;
+    char digit;
+
+    if ( signbit(v) ) {
         v = -v;
         print_char('-');
     }
-    if ( v > 1e8 ) {
+    if ( precision > 16 ) {
+        precision = 16;
+    } else if ( precision < 0 ) {
+        precision = 0;
+    }
+    c = fpclassify(v);
+    if ( c == FP_NAN ) {
+        print_string("nan");
+        return;
+    }
+    if ( c == FP_INFINITE ) {
+        print_string("inf");
+        return;
+    }
+    if ( c == FP_ZERO ) {
+        print_char('0');
+        if ( precision > 0 ) {
+            print_char('.');
+            while ( precision-- > 0 ) {
+                print_char('0');
+            }
+        }
+        return;
+    }
+    if ( v > 4294967295.0 ) {
         // too large for regular printing
-        print_float_sci(v, precision);
+        print_double_sci(v, precision);
         return;
     }
-    if ( precision > 7 ) {
-        precision = 7;
-    } else if ( precision < 1 ) {
-        precision = 1;
-    }
-    pow = p10(precision);
-    if ( v < (1.0f / pow) ) {
+    if ( v < 1e-6 ) {
         // too small for regular printing
-        print_float_sci(v, precision);
+        print_double_sci(v, precision);
         return;
     }
-    // round to nearest at specified precision
-    
-
-
-
-    if ( v > 1e8f ) {
-        print_float_sci(v, precision);
-        return;
+    // perform rounding to specified precision
+    v = v + 0.5 * p10(-precision);
+    // split into integer and fractional parts
+    int_part = (uint32_t)v;
+    frac_part = v - int_part;
+    print_uint_dec(int_part, 0);
+    if ( precision > 0 ) {
+        print_char('.');
+        do {
+            frac_part = frac_part * 10.0;
+            digit = (char)frac_part;
+            frac_part -= digit;
+            print_char('0' + digit);
+        } while ( --precision > 0 );
     }
-
-
-
 }
 
-#include <math.h>
+
+typedef union {
+    float f;
+    struct {
+        unsigned int mantissa:23;
+        unsigned int exponent:8;
+        unsigned int negative:1;
+    } ieee;
+} ieee_float_t;
+
+#define IEEE754_FLOAT_BIAS        0x7f /* Added to exponent.  */
+
+typedef union {
+    double d;
+    struct {
+        unsigned int mantissa1:32;
+        unsigned int mantissa0:20;
+        unsigned int exponent:11;
+        unsigned int negative:1;
+    } ieee;
+} ieee_double_t;
+
+#define IEEE754_DOUBLE_BIAS        0x3ff /* Added to exponent.  */
+
 
 void print_double_sci(double v, int precision)
 {
@@ -304,6 +352,7 @@ void print_double_sci(double v, int precision)
             while ( precision-- > 0 ) {
                 print_char('0');
             }
+            print_string("e+00");
         }
         return;
     }
