@@ -73,4 +73,28 @@ void printf_(char const *fmt, ...);
 // prints 16 bytes per line, hex and ASCII
 void print_memory(void const *mem, uint32_t len);
 
+
+
+// these are newer, buffer based versions
+
+// writes 'string' to 'buf', truncating if needed to fit in 'size'
+// returns number of characters written, not including terminating '\0'
+int snprint_string(char *buf, int size, const char *string);
+
+// writes 'value' to 'buf' in decimal
+// 'size' must be at least 12 characters (sign + 10 digits plus terminator)
+// negative numbers always start with '-'; if 'sign' is '+' or ' ', positive
+// numbers start with 'sign', otherwise positive numbers have no prefix.  
+// returns number of characters written, not including terminating '\0'
+int snprint_int_dec(char *buf, int size, int32_t value, char sign);
+
+// writes 'value' to 'buf' in decimal
+// 'size' must be at least 11 characters (10 digits plus terminator)
+// returns number of characters written, not including terminating '\0'
+int snprint_uint_dec(char *buf, int size, uint32_t value);
+
+
+
+
+
 #endif // PRINTING_H

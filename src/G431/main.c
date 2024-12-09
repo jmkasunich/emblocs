@@ -30,6 +30,23 @@ extern bl_comp_def_t bl_mux2_def;
 extern bl_comp_def_t bl_sum2_def;
 extern bl_comp_def_t bl_perftimer_def;
 
+void test_int_print(uint32_t value)
+{
+    char buf[20];
+
+    print_int_hex(value, 8, 8, 1);
+    print_string(" as int: '");
+    print_int_dec(value, 10, '+');
+    print_string("' = '");
+    snprint_int_dec(buf, 20, value, '+');
+    print_string(buf);
+    print_string("'  as uint: '");
+    print_uint_dec(value, 10);
+    print_string("' = '");
+    snprint_uint_dec(buf, 20, value);
+    print_string(buf);
+    print_string("'\n");
+}
 
 int main (void) {
     uint32_t reg;
@@ -54,6 +71,16 @@ int main (void) {
     //printf("sum2_def is at %p, has %d pins\n", &bl_sum2_def, bl_sum2_def.pin_count);
 
     start = tsc_read();
+    test_int_print(start);
+    test_int_print(0);
+    test_int_print(0x7FFFFFFF);
+    test_int_print(0x80000000);
+    test_int_print(0x80000001);
+    test_int_print(0xFFFFFFFF);
+
+    
+
+/*    
     for ( d1 = start*1000.0; d1 > 1e-8 ; d1 /= 10.0 ) {
 
         print_char('\n');
@@ -67,7 +94,7 @@ int main (void) {
             print_char('\n');
         }
     }
-
+*/
     d1 = 0.0;
     print_double(d1, 6);
     print_char('\n');

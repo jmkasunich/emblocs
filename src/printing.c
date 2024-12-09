@@ -11,6 +11,8 @@
 #include "printing.h"
 #include "platform.h"
 #include <stdarg.h>
+#include <assert.h>
+
 
 // print a character
 void print_char(char c)
@@ -27,6 +29,27 @@ void print_string(const char *string)
         string++;
     }
 }
+
+
+int snprint_string(char *buf, int size, const char *string)
+{
+    char c;
+    int n = 0;
+
+    if ( string == NULL ) return 0;
+    // make sure there will be room for the terminating '\0'
+    size--;
+    // copy characters to buffer
+    while ( ( n < size ) && ( (c = string[n]) != '\0' ) ) {
+        buf[n++] = c;
+    }
+    // terminate the string
+    buf[n] = '\0';
+    return n;
+}
+
+
+
 
 // private helper function for padding with spaces
 static void pad(int spaces)
@@ -104,11 +127,59 @@ void print_int_dec(int32_t n, int width, char sign)
     }
 }
 
+
+int snprint_int_dec(char *buf, int size, int32_t value, char sign)
+{
+
+    assert(size >= 12);
+    if ( value < 0 ) {
+        *(buf++) = '-';
+        return snprint_uint_dec(buf, size-1, -value) + 1;
+    } else {
+        if ( ( sign == ' ' ) || ( sign == '+' ) ) {
+            *(buf++) = sign;
+            return snprint_uint_dec(buf, size-1, value) + 1;
+        } else {
+            return snprint_uint_dec(buf, size, value);
+        }
+    }
+}
+
 // print an unsigned decimal integer
 void print_uint_dec(uint32_t n, int width)
 {
     print_dec(n, width, '\0');
 }
+
+
+int snprint_uint_dec(char *buf, int size, uint32_t value)
+{
+    int digit, len;
+    char *start, *end, tmp;
+
+    assert(size >= 11);
+    // calculate digits in reverse order, then reverse them
+    // init start and end pointers
+    start = end = buf;
+    // final digit must be printed even if value = 0
+    do {
+        digit = value % 10;
+        value = value / 10;
+        *(end++) = (char)('0' + digit);
+        // loop till no more digits
+    } while ( value > 0 );
+    len = end - start;
+    // terminate the string and point at last non-terminator character
+    *(end--) = '\0';
+    // reverse the string
+    while ( end > start ) {
+        tmp = *end;
+        *(end--) = *start;
+        *(start++) = tmp;
+    }
+    return len;
+}
+
 
 
 // translation tables for hex printing
