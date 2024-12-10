@@ -11,7 +11,7 @@ void __assert_func (const char * file, int line, const char * funct, const char 
     print_string(") at ");
     print_string(file);
     print_string(":");
-    print_uint_dec(line, 0);
+    print_uint_dec(line);
     print_string(" in function ");
     print_string(funct);
     print_string("()\n");
@@ -34,14 +34,14 @@ void test_int_print(uint32_t value)
 {
     char buf[20];
 
-    print_int_hex(value, 8, 8, 1);
+    print_int_hex(value, 8, 1, 0);
     print_string(" as int: '");
-    print_int_dec(value, 10, '+');
+    print_int_dec(value, '+');
     print_string("' = '");
     snprint_int_dec(buf, 20, value, '+');
     print_string(buf);
     print_string("'  as uint: '");
-    print_uint_dec(value, 10);
+    print_uint_dec(value);
     print_string("' = '");
     snprint_uint_dec(buf, 20, value);
     print_string(buf);
@@ -52,7 +52,7 @@ void test_binhex_print(uint32_t value)
 {
     char buf[50];
 
-    print_int_hex(value, 8, 8, 1);
+    print_int_hex(value, 8, 1, 0);
     print_string(" as hex: '");
     snprint_int_hex(buf, 50, value, 2, 1, 0);
     print_string(buf);
@@ -159,7 +159,7 @@ int main (void) {
     f3 = f1 - f2;
     end = tsc_read();
     print_string("float: ");
-    print_int_dec(end-start, 10, ' ');
+    print_int_dec(end-start, ' ');
     print_string(" clocks to get answer ");
     print_double_sci(f1, 10);
     print_string(" - ");
@@ -173,7 +173,7 @@ int main (void) {
     d3 = d1 - d2;
     end = tsc_read();
     print_string("double: ");
-    print_int_dec(end-start, 10, ' ');
+    print_int_dec(end-start, ' ');
     print_string(" clocks to get answer ");
     print_double_sci(d1, 10);
     print_string(" - ");

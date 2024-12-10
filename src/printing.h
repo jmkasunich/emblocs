@@ -28,32 +28,30 @@ void print_string(const char *string);
 void print_string_width(const char *string, int width, int maxlen);
 
 // print a signed decimal integer
-//   always displays the whole number even if width is smaller
 //   sign of '+' or ' ' is prefixed to positive numbers, any other
 //   value means no prefix, '-' is always prefixed to negative 
-void print_int_dec(int32_t n, int width, char sign);
+void print_int_dec(int32_t n, char sign);
 
 // print an unsigned decimal integer
-//   always displays the whole number even if width is smaller
-void print_uint_dec(uint32_t n, int width);
+void print_uint_dec(uint32_t n);
 
 // print a hex integer
 //   both versions work the same; the int version avoids a warning
-//   displays low 'digits', left padded with space to 'width'
+//   displays low 'digits', with '-' separator after every 'group' digits
 //   if uc is non-zero, uses upper case letters
-void print_int_hex(int32_t n, int width, int digits, int uc);
-void print_uint_hex(uint32_t n, int width, int digits, int uc);
+void print_int_hex(int32_t n, int digits, int uc, int group);
+void print_uint_hex(uint32_t n, int digits, int uc, int group);
 
 // print a pointer
-//   displays 8 hex digits, left padded with space to 'width'
-void print_ptr(void const * ptr, int width);
+//   displays 8 hex digits
+void print_ptr(void const * ptr);
 
 // print a binary integer
 //   both versions work the same; the int version avoids a warning
-//   displays low 'digits', left padded with space to 'width'
-//   if 'group' is non-zero, print a . between each 'group' bits
-void print_int_bin(int32_t n, int width, int digits, int group);
-void print_uint_bin(uint32_t n, int width, int digits, int group);
+//   displays low 'digits'
+//   if 'group' is non-zero, print a '-' between each 'group' bits
+void print_int_bin(int32_t n, int digits, int group);
+void print_uint_bin(uint32_t n, int digits, int group);
 
 // print a floating point number in scientific notation
 //   prints 'precision' digits after the decimal point
@@ -119,7 +117,7 @@ int snprint_int_bin(char *buf, int size, int32_t value, int digits, int group);
 // writes 'ptr' to 'buf' in hex
 // 'size' must be at least 9 characters
 // returns number of characters written, not including terminating '\0'
-int snprint_prt(char *buf, int size, void *ptr);
+int snprint_ptr(char *buf, int size, void *ptr);
 
 
 
