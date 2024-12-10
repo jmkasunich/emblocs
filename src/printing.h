@@ -93,7 +93,33 @@ int snprint_int_dec(char *buf, int size, int32_t value, char sign);
 // returns number of characters written, not including terminating '\0'
 int snprint_uint_dec(char *buf, int size, uint32_t value);
 
+// writes least significant 'digits' of 'value' to 'buf' in hex
+// 'size' must be at least big enough to hold digits and group separators
+// a size of 17 characters is always big enough
+// 'digits' can be 1-8, other values become 8; always shows the
+// requested number of digits, leading zeros are always displayed
+// if 'uc' is non-zero, uses uppercase for a-f
+// if 'group' is non-zero, inserts a '-' between each 'group' digits
+// returns number of characters written, not including terminating '\0'
+// the int version is exactly the same, but avoids a type conversion warning
+int snprint_uint_hex(char *buf, int size, uint32_t value, int digits, int uc, int group);
+int snprint_int_hex(char *buf, int size, int32_t value, int digits, int uc, int group);
 
+// writes least significant 'digits' of 'value' to 'buf' in binary
+// 'size' must be at least big enough to hold digits and group separators
+// a size of 65 characters is always big enough
+// 'digits' can be 1-32, other values become 32; always shows the
+// requested number of digits, leading zeros are always displayed
+// if 'group' is non-zero, inserts a '-' between each 'group' digits
+// returns number of characters written, not including terminating '\0'
+// the int version is exactly the same, but avoids a type conversion warning
+int snprint_uint_bin(char *buf, int size, uint32_t value, int digits, int group);
+int snprint_int_bin(char *buf, int size, int32_t value, int digits, int group);
+
+// writes 'ptr' to 'buf' in hex
+// 'size' must be at least 9 characters
+// returns number of characters written, not including terminating '\0'
+int snprint_prt(char *buf, int size, void *ptr);
 
 
 

@@ -48,6 +48,26 @@ void test_int_print(uint32_t value)
     print_string("'\n");
 }
 
+void test_binhex_print(uint32_t value)
+{
+    char buf[50];
+
+    print_int_hex(value, 8, 8, 1);
+    print_string(" as hex: '");
+    snprint_int_hex(buf, 50, value, 2, 1, 0);
+    print_string(buf);
+    print_string("' = '");
+    snprint_int_hex(buf, 50, value, 8, 0, 3);
+    print_string(buf);
+    print_string("'  as binary: '");
+    snprint_uint_bin(buf, 50, value, 32, 7 );
+    print_string(buf);
+    print_string("' = '");
+    snprint_uint_bin(buf, 50, value, 32, 4);
+    print_string(buf);
+    print_string("'\n");
+}
+
 int main (void) {
     uint32_t reg;
     char *hello = "\nHello, world!\n";
@@ -71,12 +91,12 @@ int main (void) {
     //printf("sum2_def is at %p, has %d pins\n", &bl_sum2_def, bl_sum2_def.pin_count);
 
     start = tsc_read();
-    test_int_print(start);
-    test_int_print(0);
-    test_int_print(0x7FFFFFFF);
-    test_int_print(0x80000000);
-    test_int_print(0x80000001);
-    test_int_print(0xFFFFFFFF);
+    test_binhex_print(start);
+    test_binhex_print(0);
+    test_binhex_print(0x7FFFFFFF);
+    test_binhex_print(0x80000000);
+    test_binhex_print(0x80000001);
+    test_binhex_print(0xFFFFFFFF);
 
     
 
@@ -154,7 +174,6 @@ int main (void) {
     end = tsc_read();
     print_string("double: ");
     print_int_dec(end-start, 10, ' ');
-    print_string(" clocks to get answer ");
     print_string(" clocks to get answer ");
     print_double_sci(d1, 10);
     print_string(" - ");

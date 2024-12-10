@@ -225,6 +225,81 @@ void print_uint_hex(uint32_t n, int width, int digits, int uc)
     print_string(cp);
 }
 
+// private common code for binary and hex printing
+
+static int snprint_uint_bin_hex(char *buf, int size, uint32_t value, int base, int digits, int uc, int group)
+{
+    char *cp, alpha;
+    int digit, dividers, group_cnt;
+    int mask, shift, maxdigits;
+
+    if ( base == 2 ) {
+        mask = 0x01;
+        shift = 1;
+        maxdigits = 32;
+    } else if ( base == 16 ) {
+        mask = 0x0F;
+        shift = 4;
+        maxdigits = 8;
+    } else {
+        assert(1);
+        return 0;  // make compiler happy
+    }
+    if ( ( digits < 1 ) || ( digits > maxdigits ) ) digits = maxdigits;
+    if ( ( group < 1 ) || ( group > maxdigits ) ) group = maxdigits;
+    if ( group < digits ) {
+        dividers = (digits - 1) / group;
+    } else {
+        dividers = 0;
+    }
+    alpha = uc ? 'A' : 'a';
+    assert(size > (digits + dividers + 1));
+    // start at the end and work backwards
+    cp = buf + digits + dividers;
+    *(cp--) = '\0';
+    group_cnt = group;
+    // build the number
+    while ( digits > 0 ) {
+        if ( group_cnt <= 0 ) {
+            *(cp--) = '-';
+            group_cnt = group;
+        }
+        group_cnt--;
+        digit = value & mask;
+        *(cp--) = (char)(( digit > 9 ) ? ( alpha + digit - 10 ) : ( '0' + digit ) );
+        digits--;
+        value >>= shift;
+    }
+    return digits + dividers;
+}
+
+
+int snprint_uint_hex(char *buf, int size, uint32_t value, int digits, int uc, int group)
+{
+    return snprint_uint_bin_hex(buf, size, value, 16, digits, uc, group);
+}
+
+int snprint_int_hex(char *buf, int size, int32_t value, int digits, int uc, int group)
+{
+    return snprint_uint_bin_hex(buf, size, (uint32_t)value, 16, digits, uc, group);
+}
+
+int snprint_uint_bin(char *buf, int size, uint32_t value, int digits, int group)
+{
+    return snprint_uint_bin_hex(buf, size, value, 2, digits, 0, group);
+}
+
+int snprint_int_bin(char *buf, int size, int32_t value, int digits, int group)
+{
+    return snprint_uint_bin_hex(buf, size, (uint32_t)value, 2, digits, 0, group);
+}
+
+int snprint_prt(char *buf, int size, void *ptr)
+{
+    return snprint_uint_bin_hex(buf, size, (uint32_t)ptr, 16, 8, 1, 0);
+}
+
+
 // print a pointer
 void print_ptr(void const * ptr, int width)
 {
