@@ -34,7 +34,7 @@ void test_int_print(uint32_t value)
 {
     char buf[20];
 
-    print_int_hex(value, 8, 1, 0);
+    print_uint_hex((uint32_t)value, 8, 1, 0);
     print_string(" as int: '");
     print_int_dec(value, '+');
     print_string("' = '");
@@ -52,12 +52,12 @@ void test_binhex_print(uint32_t value)
 {
     char buf[50];
 
-    print_int_hex(value, 8, 1, 0);
+    print_uint_hex((uint32_t)value, 8, 1, 0);
     print_string(" as hex: '");
-    snprint_int_hex(buf, 50, value, 2, 1, 0);
+    snprint_uint_hex(buf, 50, (uint32_t)value, 2, 1, 0);
     print_string(buf);
     print_string("' = '");
-    snprint_int_hex(buf, 50, value, 8, 0, 3);
+    snprint_uint_hex(buf, 50, (uint32_t)value, 8, 0, 3);
     print_string(buf);
     print_string("'  as binary: '");
     snprint_uint_bin(buf, 50, value, 32, 7 );

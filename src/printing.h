@@ -2,61 +2,172 @@
  * 
  * printing.h - lightweight console printing functions
  * 
- * this will eventually contains a lightweight printf() but for
- * now it is mostly individual functions for printing specific items
- * 
- * These functions are optimized to use minimum RAM; things are
- * sent to the console as early as possible instead of building
- * the complete string in a buffer.
  *
- * *************************************************************/
+ * This module contains two kinds of functions:
+ *   snprint_xxxx(buf, size, ...) functions generate their
+ *     output in the supplied buffer, and return the number
+ *     of characters generated.
+ *   print_xxxx(...) functions send their output to the 
+ *     console UART and return nothing.  For the most part,
+ *     they call their snprint counterparts, then print the
+ *     resulting string.
+ * 
+ * The 'snprint' functions mostly use assert() to check buffer
+ * sizes; if assert() is disabled buffer overruns are possible.
+ * 
+ * When the console printing functions call their 'snprint' 
+ * counterparts, they allocate suitable buffers on the stack;
+ * they should never assert or overflow.
+ *
+ **************************************************************/
 
 #ifndef PRINTING_H
 #define PRINTING_H
 
 #include <stdint.h>
 
-// print a character
+/***************************************************************
+ * writes 'string' to 'buf', truncating if needed to fit in 'size'
+ * returns number of characters written, not including terminating '\0'
+ */
+int snprint_string(char *buf, int size, const char *string);
+
+/***************************************************************
+ * writes 'value' to 'buf' in decimal
+ * 'size' must be at least 12 (sign + 10 digits plus terminator)
+ * negative numbers always start with '-'; if 'sign' is '+' or
+ * ' ', positive numbers start with 'sign', otherwise positive
+ * numbers have no prefix.  
+ * returns number of characters written, not including terminating '\0'
+ */
+int snprint_int_dec(char *buf, int size, int32_t value, char sign);
+
+/***************************************************************
+ * writes 'value' to 'buf' in decimal
+ * 'size' must be at least 11 (10 digits plus terminator)
+ * returns number of characters written, not including terminating '\0'
+ */
+int snprint_uint_dec(char *buf, int size, uint32_t value);
+
+/***************************************************************
+ * writes least significant 'digits' of 'value' to 'buf' in hex
+ * 'size' must be big enough to hold digits and group separators;
+ * 17 bytes is always big enough
+ * 'digits' can be 1-8, other values become 8; always shows the
+ * requested number of digits (leading zeros are always displayed)
+ * if 'group' is non-zero, inserts a '-' between each 'group' digits
+ * if 'uc' is non-zero, uses uppercase for a-f
+ * returns number of characters written, not including terminating '\0'
+ */
+int snprint_uint_hex(char *buf, int size, uint32_t value, int digits, int group, int uc);
+
+/***************************************************************
+ * writes least significant 'digits' of 'value' to 'buf' in binary
+ * 'size' must be big enough to hold digits and group separators;
+ * 65 bytes is always big enough, or 34 if 'group' = 0
+ * 'digits' can be 1-32, other values become 32; always shows the
+ * requested number of digits (leading zeros are always displayed)
+ * if 'group' is non-zero, inserts a '-' between each 'group' digits
+ * returns number of characters written, not including terminating '\0'
+ */
+int snprint_uint_bin(char *buf, int size, uint32_t value, int digits, int group);
+
+/***************************************************************
+ * writes 'ptr' to 'buf' in hex
+ * 'size' must be at least 9 characters
+ * returns number of characters written, not including terminating '\0'
+ */
+int snprint_ptr(char *buf, int size, void *ptr);
+
+/***************************************************************
+ * writes 'value' to 'buf' as a floating point number
+ * 'size' must be big enough to hold the converted number
+ * 30 bytes is always big enough
+ * 'precision' digits are printed after the decimal point;
+ * 'precision' can be 0-15, other values become 15
+ * values larger than 2^32 or smaller than 1e-6 are printed
+ * in scientific notation using snprint_double_sci()
+ * returns number of characters written, not including terminating '\0'
+ */
+int snprint_double(char *buf, int size, double value, int precision);
+
+/***************************************************************
+ * writes 'value' to 'buf' in scientific notation
+ * 'size' must be big enough to hold the converted number
+ * 25 bytes is always big enough
+ * 'precision' digits are printed after the decimal point;
+ * 'precision' can be 0-15, other values become 15
+ * returns number of characters written, not including terminating '\0'
+ */
+int snprint_double_sci(char *buf, int size, double value, int precision);
+
+
+
+
+/***************************************************************
+ * sends 'c' to the console
+ * all of the console printing functions in this header
+ * eventually use print_char() to send their output
+ */
 void print_char(char c);
 
-// print a string, no truncation or padding
+/***************************************************************
+ * sends 'string' to the console
+ * no truncation or padding
+ */
 void print_string(const char *string);
 
-// print a string with padding and/or truncation
-//   pads to at least 'width' using spaces
-//   truncates at maxlen unless maxlen = 0
-void print_string_width(const char *string, int width, int maxlen);
+/***************************************************************
+ * sends 'value' to the console as a decimal integer
+ * negative numbers always start with '-'; if 'sign' is '+' or
+ * ' ', positive numbers start with 'sign', otherwise positive
+ * numbers have no prefix.
+ */
+void print_int_dec(int32_t value, char sign);
 
-// print a signed decimal integer
-//   sign of '+' or ' ' is prefixed to positive numbers, any other
-//   value means no prefix, '-' is always prefixed to negative 
-void print_int_dec(int32_t n, char sign);
+/***************************************************************
+ * sends 'value' to the console as an unsigned decimal integer
+ */
+void print_uint_dec(uint32_t value);
 
-// print an unsigned decimal integer
-void print_uint_dec(uint32_t n);
+/***************************************************************
+ * sends 'value' to the console as hexadecimal
+ * 'digits' can be 1-8, other values become 8; always shows the
+ * requested number of digits (leading zeros are always displayed)
+ * if 'group' is non-zero, inserts a '-' between each 'group' digits
+ * if 'uc' is non-zero, uses uppercase for a-f
+ */
+void print_uint_hex(uint32_t value, int digits, int group, int uc);
 
-// print a hex integer
-//   both versions work the same; the int version avoids a warning
-//   displays low 'digits', with '-' separator after every 'group' digits
-//   if uc is non-zero, uses upper case letters
-void print_int_hex(int32_t n, int digits, int uc, int group);
-void print_uint_hex(uint32_t n, int digits, int uc, int group);
+/***************************************************************
+ * sends 'value' to the console as binary
+ * 'digits' can be 1-32, other values become 32; always shows the
+ * requested number of digits (leading zeros are always displayed)
+ * if 'group' is non-zero, inserts a '-' between each 'group' digits
+ */
+void print_uint_bin(uint32_t value, int digits, int group);
 
-// print a pointer
-//   displays 8 hex digits
+/***************************************************************
+ * sends 'ptr' to the console as 8 hex digits
+ */
 void print_ptr(void const * ptr);
 
-// print a binary integer
-//   both versions work the same; the int version avoids a warning
-//   displays low 'digits'
-//   if 'group' is non-zero, print a '-' between each 'group' bits
-void print_int_bin(int32_t n, int digits, int group);
-void print_uint_bin(uint32_t n, int digits, int group);
+/***************************************************************
+ * sends 'value' to the console as a floating point number
+ * 'precision' digits are printed after the decimal point;
+ * 'precision' can be 0-15, other values become 15
+ * values larger than 2^32 or smaller than 1e-6 are printed
+ * in scientific notation using print_double_sci()
+ */
+void print_double(double value, int precision);
 
-// print a floating point number in scientific notation
-//   prints 'precision' digits after the decimal point
-void print_double(double v, int precision);
-void print_double_sci(double v, int precision);
+/***************************************************************
+ * sends 'value' to the console in scientific notation
+ * 'precision' digits are printed after the decimal point;
+ * 'precision' can be 0-15, other values become 15
+ */
+void print_double_sci(double value, int precision);
+
 
 // formatted printing
 //   this is trimmed down printf, supports only the following:
@@ -67,57 +178,15 @@ void print_double_sci(double v, int precision);
 #define printf printf_
 void printf_(char const *fmt, ...);
 
+// print a string with padding and/or truncation
+//   pads to at least 'width' using spaces
+//   truncates at maxlen unless maxlen = 0
+void print_string_width(const char *string, int width, int maxlen);
+
 // memory dump
 // prints 16 bytes per line, hex and ASCII
 void print_memory(void const *mem, uint32_t len);
 
-
-
-// these are newer, buffer based versions
-
-// writes 'string' to 'buf', truncating if needed to fit in 'size'
-// returns number of characters written, not including terminating '\0'
-int snprint_string(char *buf, int size, const char *string);
-
-// writes 'value' to 'buf' in decimal
-// 'size' must be at least 12 characters (sign + 10 digits plus terminator)
-// negative numbers always start with '-'; if 'sign' is '+' or ' ', positive
-// numbers start with 'sign', otherwise positive numbers have no prefix.  
-// returns number of characters written, not including terminating '\0'
-int snprint_int_dec(char *buf, int size, int32_t value, char sign);
-
-// writes 'value' to 'buf' in decimal
-// 'size' must be at least 11 characters (10 digits plus terminator)
-// returns number of characters written, not including terminating '\0'
-int snprint_uint_dec(char *buf, int size, uint32_t value);
-
-// writes least significant 'digits' of 'value' to 'buf' in hex
-// 'size' must be at least big enough to hold digits and group separators
-// a size of 17 characters is always big enough
-// 'digits' can be 1-8, other values become 8; always shows the
-// requested number of digits, leading zeros are always displayed
-// if 'uc' is non-zero, uses uppercase for a-f
-// if 'group' is non-zero, inserts a '-' between each 'group' digits
-// returns number of characters written, not including terminating '\0'
-// the int version is exactly the same, but avoids a type conversion warning
-int snprint_uint_hex(char *buf, int size, uint32_t value, int digits, int uc, int group);
-int snprint_int_hex(char *buf, int size, int32_t value, int digits, int uc, int group);
-
-// writes least significant 'digits' of 'value' to 'buf' in binary
-// 'size' must be at least big enough to hold digits and group separators
-// a size of 65 characters is always big enough
-// 'digits' can be 1-32, other values become 32; always shows the
-// requested number of digits, leading zeros are always displayed
-// if 'group' is non-zero, inserts a '-' between each 'group' digits
-// returns number of characters written, not including terminating '\0'
-// the int version is exactly the same, but avoids a type conversion warning
-int snprint_uint_bin(char *buf, int size, uint32_t value, int digits, int group);
-int snprint_int_bin(char *buf, int size, int32_t value, int digits, int group);
-
-// writes 'ptr' to 'buf' in hex
-// 'size' must be at least 9 characters
-// returns number of characters written, not including terminating '\0'
-int snprint_ptr(char *buf, int size, void *ptr);
 
 
 

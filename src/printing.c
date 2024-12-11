@@ -2,33 +2,15 @@
  * 
  * printing.c - lightweight console printing functions
  * 
- * These functions are optimized to use minimum RAM; things are
- * sent to the console as early as possible instead of building
- * the complete string in a buffer.
- *
+ * see printing.h for API details
+ * 
  * *************************************************************/
 
 #include "printing.h"
 #include "platform.h"
 #include <stdarg.h>
 #include <assert.h>
-
-
-// print a character
-void print_char(char c)
-{
-    cons_tx_wait(c);
-}
-
-// print a string, no truncation or padding
-void print_string(const char *string)
-{
-    if ( string == NULL ) return;
-    while ( *string != '\0' ) {
-        print_char(*string);
-        string++;
-    }
-}
+#include <math.h>
 
 
 int snprint_string(char *buf, int size, const char *string)
@@ -48,46 +30,8 @@ int snprint_string(char *buf, int size, const char *string)
     return n;
 }
 
-
-
-
-// private helper function for padding with spaces
-static void pad(int spaces)
-{
-    while ( spaces > 0 ) {
-        print_char(' ');
-        spaces--;
-    }
-}
-
-// print a string with padding and/or truncation
-void print_string_width(char const *string, int width, int maxlen)
-{
-    if ( string == NULL ) return;
-    if ( maxlen <= 0 ) maxlen = 0x7FFFFFFF;
-    if ( width < 0 ) width = 0;
-    if ( width > maxlen ) width = maxlen;
-    if ( width > 0 ) {
-        // need to see how long the string is
-        char const* cp = string;
-        while ( ( *cp != '\0' ) && ( width > 0 ) ) {
-            cp++;
-            width--;
-        }
-        // print the leading spaces
-        pad(width);
-    }
-    while ( ( *string != '\0' ) && ( maxlen > 0 ) ) {
-        print_char(*string);
-        string++;
-        maxlen--;
-    }
-}
-
-
 int snprint_int_dec(char *buf, int size, int32_t value, char sign)
 {
-
     assert(size >= 12);
     if ( value < 0 ) {
         *(buf++) = '-';
@@ -101,7 +45,6 @@ int snprint_int_dec(char *buf, int size, int32_t value, char sign)
         }
     }
 }
-
 
 int snprint_uint_dec(char *buf, int size, uint32_t value)
 {
@@ -131,9 +74,8 @@ int snprint_uint_dec(char *buf, int size, uint32_t value)
     return len;
 }
 
-// private common code for binary and hex printing
-
-static int snprint_uint_bin_hex(char *buf, int size, uint32_t value, int base, int digits, int uc, int group)
+// private common code for binary, hex, and pointer printing
+static int snprint_uint_bin_hex(char *buf, int size, uint32_t value, int base, int digits, int group, int uc)
 {
     char *cp, alpha;
     int digit, dividers, group_cnt;
@@ -179,93 +121,55 @@ static int snprint_uint_bin_hex(char *buf, int size, uint32_t value, int base, i
     return digits + dividers;
 }
 
-
 int snprint_uint_hex(char *buf, int size, uint32_t value, int digits, int uc, int group)
 {
-    return snprint_uint_bin_hex(buf, size, value, 16, digits, uc, group);
-}
-
-int snprint_int_hex(char *buf, int size, int32_t value, int digits, int uc, int group)
-{
-    return snprint_uint_bin_hex(buf, size, (uint32_t)value, 16, digits, uc, group);
+    return snprint_uint_bin_hex(buf, size, value, 16, digits, group, uc);
 }
 
 int snprint_uint_bin(char *buf, int size, uint32_t value, int digits, int group)
 {
-    return snprint_uint_bin_hex(buf, size, value, 2, digits, 0, group);
-}
-
-int snprint_int_bin(char *buf, int size, int32_t value, int digits, int group)
-{
-    return snprint_uint_bin_hex(buf, size, (uint32_t)value, 2, digits, 0, group);
+    return snprint_uint_bin_hex(buf, size, value, 2, digits, group, 0);
 }
 
 int snprint_ptr(char *buf, int size, void *ptr)
 {
-    return snprint_uint_bin_hex(buf, size, (uint32_t)ptr, 16, 8, 1, 0);
+    return snprint_uint_bin_hex(buf, size, (uint32_t)ptr, 16, 8, 0, 1);
 }
 
-// print a signed decimal integer
-void print_int_dec(int32_t n, char sign)
-{
-    char buffer[20];
-    snprint_int_dec(buffer, 20, n, sign);
-    print_string(buffer);
-}
+/* private typedefs and functions for dealing with floating point */
+typedef union {
+    float f;
+    struct {
+        unsigned int mantissa:23;
+        unsigned int exponent:8;
+        unsigned int negative:1;
+    } ieee;
+} ieee_float_t;
+#define IEEE754_FLOAT_BIAS        0x7f /* Added to exponent.  */
 
-// print an unsigned decimal integer
-void print_uint_dec(uint32_t n)
-{
-    char buffer[20];
-    snprint_uint_dec(buffer, 20, n);
-    print_string(buffer);
-}
+typedef union {
+    double d;
+    struct {
+        unsigned int mantissa1:32;
+        unsigned int mantissa0:20;
+        unsigned int exponent:11;
+        unsigned int negative:1;
+    } ieee;
+} ieee_double_t;
+#define IEEE754_DOUBLE_BIAS        0x3ff /* Added to exponent.  */
 
-// print a hex integer
-void print_int_hex(int32_t n, int digits, int uc, int group)
+/* private function to return 10^pow for integer 'pow' */
+static double p10(int pow)
 {
-    print_uint_hex((uint32_t)n, digits, uc, group);
-}
-
-void print_uint_hex(uint32_t n, int digits, int uc, int group)
-{
-    char buffer[20];
-    snprint_uint_bin_hex(buffer, 20, n, 16, digits, uc, group);
-    print_string(buffer);
-}
-
-// print a binary integer
-void print_int_bin(int32_t n, int digits, int group)
-{
-    print_uint_bin((uint32_t)n, digits, group);
-}
-
-void print_uint_bin(uint32_t n, int digits, int group)
-{
-    char buffer[68];
-    snprint_uint_bin_hex(buffer, 68, n, 2, digits, 0, group);
-    print_string(buffer);
-}
-
-// print a pointer
-void print_ptr(void const * ptr)
-{
-    print_uint_hex((uint32_t)ptr, 8, 1, 0);
-}
-
-static float p10(int pow)
-{
-    float result;
+    double result;
     int32_t iresult, ifactor;
 
     if ( pow < 0 ) {
-        result = 1.0f / p10(-pow);
+        result = 1.0 / p10(-pow);
         return result;
     }
-    if ( pow > 38 ) {
-        pow = 38;
-    }
-    result = 1.0f;
+    assert(pow < 308);
+    result = 1.0;
     while ( pow >= 8 ) {
         result *= 1e8f;
         pow -= 8;
@@ -283,7 +187,160 @@ static float p10(int pow)
     return result;
 }
 
-#include <math.h>
+/* private function to deal with floating point special cases
+ *   (nan, infinity, zero, negative)
+ * returns number of chars written into buffer
+ * if 0, *value is positive and non-zero
+ * if 1, *value was negative and non-zero, is now positive , '-' is in buffer
+ * if > 1, value was zero, nan, or inf and the appropriate string is in the buffer
+ * 'precision' and 'use_sci' describe the string to be output for zero
+ * caller must ensure that the buffer can hold the specified representation
+ * of zero, either '0.<precision>' or '0.<precision>e+00', as well as '-nan'
+ * or '-inf'; this function does not know the buffer size
+ */
+int snprint_double_handle_special_cases(char *buf, double *value, int precision, int use_sci)
+{
+    int len = 0;
+    int fpclass;
+
+    if ( signbit(*value) ) {
+        *value = -(*value);
+        *(buf++) = '-';
+        len++;
+    }
+    fpclass = fpclassify(*value);
+    if ( fpclass == FP_NAN ) {
+        len += snprint_string(buf, 4, "nan");
+    } else if ( fpclass == FP_INFINITE ) {
+        len += snprint_string(buf, 4, "inf");
+    } else if ( fpclass == FP_ZERO ) {
+        *(buf++) = '0';
+        len++;
+        if ( precision > 0 ) {
+            *(buf++) = '.';
+            len++;
+            while ( precision-- > 0 ) {
+                *(buf++) = '0';
+                len++;
+            }
+        }
+        if ( use_sci ) {
+            len += snprint_string(buf, 5, "e+00");
+        }
+    }
+    return len;
+}
+
+int snprint_double(char *buf, int size, double value, int precision)
+{
+    int len;
+    uint32_t int_part;
+    double frac_part;
+    char digit;
+
+    if ( precision > 16 ) {
+        precision = 16;
+    } else if ( precision < 0 ) {
+        precision = 0;
+    }
+    /* check buffer size - worst case is '-' plus 10-digit integer
+       plus '.' plus 'precision' trailing digits plus terminator */
+    assert(size > (precision + 13));
+    len = snprint_double_handle_special_cases(buf, &value, precision, 0);
+    if ( len > 1 ) return len;
+    if ( value > 4294967295.0 ) {
+        // too large for regular printing
+        return len + snprint_double_sci(buf+len, size-len, value, precision);
+    }
+    if ( value < 1e-6 ) {
+        // too small for regular printing
+        return snprint_double_sci(buf+len, size-len, value, precision);
+    }
+    // perform rounding to specified precision
+    value = value + 0.5 * p10(-precision);
+    // split into integer and fractional parts
+    int_part = (uint32_t)value;
+    frac_part = value - int_part;
+    len += snprint_uint_dec(buf+len, size-len, int_part);
+    if ( precision > 0 ) {
+        *(buf+len) = '.';
+        len++;
+        do {
+            frac_part = frac_part * 10.0;
+            digit = (char)frac_part;
+            frac_part -= digit;
+            *(buf+len) = '.';
+            len++;
+        } while ( --precision > 0 );
+    }
+    // terminate the string
+    *(buf+len) = '\0';
+    return len;
+}
+
+
+
+
+
+
+
+
+
+void print_char(char c)
+{
+    cons_tx_wait(c);
+}
+
+void print_string(const char *string)
+{
+    if ( string == NULL ) return;
+    while ( *string != '\0' ) {
+        print_char(*string);
+        string++;
+    }
+}
+
+void print_int_dec(int32_t value, char sign)
+{
+    char buffer[16];
+    snprint_int_dec(buffer, 16, value, sign);
+    print_string(buffer);
+}
+
+void print_uint_dec(uint32_t value)
+{
+    char buffer[16];
+    snprint_uint_dec(buffer, 16, value);
+    print_string(buffer);
+}
+
+void print_uint_hex(uint32_t n, int digits, int group, int uc)
+{
+    char buffer[20];
+    snprint_uint_bin_hex(buffer, 20, n, 16, digits, group, uc);
+    print_string(buffer);
+}
+
+void print_uint_bin(uint32_t n, int digits, int group)
+{
+    char buffer[68];
+    snprint_uint_bin_hex(buffer, 68, n, 2, digits, group, 0);
+    print_string(buffer);
+}
+
+// print a pointer
+void print_ptr(void const * ptr)
+{
+    print_uint_hex((uint32_t)ptr, 8, 0, 1);
+}
+
+
+
+
+
+
+
+
 
 void print_double(double v, int precision)
 {
@@ -346,30 +403,6 @@ void print_double(double v, int precision)
         } while ( --precision > 0 );
     }
 }
-
-
-typedef union {
-    float f;
-    struct {
-        unsigned int mantissa:23;
-        unsigned int exponent:8;
-        unsigned int negative:1;
-    } ieee;
-} ieee_float_t;
-
-#define IEEE754_FLOAT_BIAS        0x7f /* Added to exponent.  */
-
-typedef union {
-    double d;
-    struct {
-        unsigned int mantissa1:32;
-        unsigned int mantissa0:20;
-        unsigned int exponent:11;
-        unsigned int negative:1;
-    } ieee;
-} ieee_double_t;
-
-#define IEEE754_DOUBLE_BIAS        0x3ff /* Added to exponent.  */
 
 
 void print_double_sci(double v, int precision)
@@ -469,6 +502,12 @@ void print_double_sci(double v, int precision)
 }
 
 
+
+
+
+
+#if 0
+
 // private helpers for printf
 static inline int _is_digit(char ch)
 {
@@ -554,6 +593,11 @@ void printf_(char const *fmt, ...)
     va_end(ap);
 }   
 
+
+
+
+
+
 void print_memory(void const *mem, uint32_t len)
 {
     uint8_t const *start, *end, *row, *addr;
@@ -596,4 +640,41 @@ void print_memory(void const *mem, uint32_t len)
     }
     print_char('\n');
 }
+
+
+
+// private helper function for padding with spaces
+static void pad(int spaces)
+{
+    while ( spaces > 0 ) {
+        print_char(' ');
+        spaces--;
+    }
+}
+
+// print a string with padding and/or truncation
+void print_string_width(char const *string, int width, int maxlen)
+{
+    if ( string == NULL ) return;
+    if ( maxlen <= 0 ) maxlen = 0x7FFFFFFF;
+    if ( width < 0 ) width = 0;
+    if ( width > maxlen ) width = maxlen;
+    if ( width > 0 ) {
+        // need to see how long the string is
+        char const* cp = string;
+        while ( ( *cp != '\0' ) && ( width > 0 ) ) {
+            cp++;
+            width--;
+        }
+        // print the leading spaces
+        pad(width);
+    }
+    while ( ( *string != '\0' ) && ( maxlen > 0 ) ) {
+        print_char(*string);
+        string++;
+        maxlen--;
+    }
+}
+
+#endif // 0
 
