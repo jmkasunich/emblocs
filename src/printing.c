@@ -32,18 +32,17 @@ int snprint_string(char *buf, int size, const char *string)
 
 int snprint_int_dec(char *buf, int size, int32_t value, char sign)
 {
+    int len = 0;
+
     assert(size >= 12);
     if ( value < 0 ) {
-        *(buf++) = '-';
-        return snprint_uint_dec(buf, size-1, -value) + 1;
-    } else {
-        if ( ( sign == ' ' ) || ( sign == '+' ) ) {
-            *(buf++) = sign;
-            return snprint_uint_dec(buf, size-1, value) + 1;
-        } else {
-            return snprint_uint_dec(buf, size, value);
-        }
+        buf[len++] = '-';
+        value = -value;
+    } else if ( ( sign == ' ' ) || ( sign == '+' ) ) {
+        buf[len++] = sign;
     }
+    len += snprint_uint_dec(buf+len, size-len, value);
+    return len;
 }
 
 int snprint_uint_dec(char *buf, int size, uint32_t value)
@@ -197,7 +196,7 @@ static double p10(int pow)
  * of zero, either '0.<precision>' or '0.<precision>e+00', as well as '-nan'
  * or '-inf'; this function does not know the buffer size
  */
-int snprint_double_handle_special_cases(char *buf, double *value, int precision, int use_sci)
+static int snprint_double_handle_special_cases(char *buf, double *value, int precision, int use_sci)
 {
     int len = 0;
     int fpclass;
