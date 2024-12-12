@@ -107,7 +107,7 @@ static int snprint_uint_bin_hex(char *buf, int size, uint32_t value, int base, i
     *(cp--) = '\0';
     group_cnt = group;
     // build the number
-    while ( digits > 0 ) {
+    for ( int n = digits ; n > 0 ; n-- ) {
         if ( group_cnt <= 0 ) {
             *(cp--) = '-';
             group_cnt = group;
@@ -115,13 +115,12 @@ static int snprint_uint_bin_hex(char *buf, int size, uint32_t value, int base, i
         group_cnt--;
         digit = value & mask;
         *(cp--) = (char)(( digit > 9 ) ? ( alpha + digit - 10 ) : ( '0' + digit ) );
-        digits--;
         value >>= shift;
     }
     return digits + dividers;
 }
 
-int snprint_uint_hex(char *buf, int size, uint32_t value, int digits, int uc, int group)
+int snprint_uint_hex(char *buf, int size, uint32_t value, int digits, int group, int uc)
 {
     return snprint_uint_bin_hex(buf, size, value, 16, digits, group, uc);
 }
@@ -205,29 +204,26 @@ int snprint_double_handle_special_cases(char *buf, double *value, int precision,
 
     if ( signbit(*value) ) {
         *value = -(*value);
-        *(buf++) = '-';
-        len++;
+        buf[len++] = '-';
     }
     fpclass = fpclassify(*value);
     if ( fpclass == FP_NAN ) {
-        len += snprint_string(buf, 4, "nan");
+        len += snprint_string(buf+len, 4, "nan");
     } else if ( fpclass == FP_INFINITE ) {
-        len += snprint_string(buf, 4, "inf");
+        len += snprint_string(buf+len, 4, "inf");
     } else if ( fpclass == FP_ZERO ) {
-        *(buf++) = '0';
-        len++;
+        buf[len++] = '0';
         if ( precision > 0 ) {
-            *(buf++) = '.';
-            len++;
+            buf[len++] = '.';
             while ( precision-- > 0 ) {
-                *(buf++) = '0';
-                len++;
+                buf[len++] = '0';
             }
         }
         if ( use_sci ) {
-            len += snprint_string(buf, 5, "e+00");
+            len += snprint_string(buf+len, 5, "e+00");
         }
     }
+    buf[len] = '\0';
     return len;
 }
 
@@ -269,7 +265,7 @@ int snprint_double(char *buf, int size, double value, int precision)
             frac_part = frac_part * 10.0;
             digit = (char)frac_part;
             frac_part -= digit;
-            *(buf+len) = '.';
+            *(buf+len) = '0' + digit;
             len++;
         } while ( --precision > 0 );
     }
@@ -278,6 +274,98 @@ int snprint_double(char *buf, int size, double value, int precision)
     return len;
 }
 
+int snprint_double_sci(char *buf, int size, double value, int precision)
+{
+    int len;
+    int exponent;
+    char digit;
+
+    if ( precision > 16 ) {
+        precision = 16;
+    } else if ( precision < 0 ) {
+        precision = 0;
+    }
+    /* check buffer size - worst case is '-' plus 1 digit plus '.' plus
+       'precision' trailing digits plus 'e+123' plus terminator */
+    assert(size > (precision + 9));
+    len = snprint_double_handle_special_cases(buf, &value, precision, 1);
+    if ( len > 1 ) return len;
+    exponent = 0;
+    if ( value < 1.0 ) {
+        // small number, make it bigger
+        while ( value < 1e-8 ) {
+            value *= 1e8;
+            exponent -= 8;
+        }
+        while ( value < 1e-3 ) {
+            value *= 1e3;
+            exponent -= 3;
+        }
+        while ( value < 1.0 ) {
+            value *= 10.0;
+            exponent -= 1;
+        }
+    } else {
+        // large number, make it smaller
+        while ( value >= 1e8 ) {
+            value *= 1e-8;
+            exponent += 8;
+        }
+        while ( value >= 1e3 ) {
+            value *= 1e-3;
+            exponent += 3;
+        }
+        while ( value >= 1e1 ) {
+            value *= 1e-1;
+            exponent += 1;
+        }
+    }
+    // perform rounding to specified precision
+    value = value + 0.5 * p10(-precision);
+    // there is a small chance that rounding pushed it over 10.0
+    if ( value >= 10.0 ) {
+        value *= 0.1;
+        exponent += 1;
+    }
+    // print the first digit
+    digit = (char)value;
+    *(buf+len) = '0' + digit;
+    len++;
+    if ( precision > 0 ) {
+        *(buf+len) = '.';
+        len++;
+        do {
+            value = value - digit;
+            value = value * 10.0;
+            digit = (char)value;
+            *(buf+len) = '0' + digit;
+            len++;
+        } while ( --precision > 0 );
+    }
+    *(buf+len) = 'e';
+    len++;
+    if ( exponent < 0 ) {
+        *(buf+len) = '-';
+        exponent = -exponent;
+    } else {
+        *(buf+len) = '+';
+    }
+    len++;
+    if ( exponent > 99 ) {
+        digit = (char)(exponent/100);
+        *(buf+len) = '0' + digit;
+        len++;
+        exponent -= digit * 100;
+    }
+    digit = (char)(exponent/10);
+    *(buf+len) = '0' + digit;
+    len++;
+    digit = (char)(exponent%10);
+    *(buf+len) = '0' + digit;
+    len++;
+    *(buf+len) = '\0';
+    return len;
+}
 
 
 
