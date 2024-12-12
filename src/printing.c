@@ -402,17 +402,17 @@ void print_uint_dec(uint32_t value)
     print_string(buffer);
 }
 
-void print_uint_hex(uint32_t n, int digits, int group, int uc)
+void print_uint_hex(uint32_t value, int digits, int group, int uc)
 {
     char buffer[20];
-    snprint_uint_bin_hex(buffer, 20, n, 16, digits, group, uc);
+    snprint_uint_bin_hex(buffer, 20, value, 16, digits, group, uc);
     print_string(buffer);
 }
 
-void print_uint_bin(uint32_t n, int digits, int group)
+void print_uint_bin(uint32_t value, int digits, int group)
 {
     char buffer[68];
-    snprint_uint_bin_hex(buffer, 68, n, 2, digits, group, 0);
+    snprint_uint_bin_hex(buffer, 68, value, 2, digits, group, 0);
     print_string(buffer);
 }
 
@@ -422,173 +422,19 @@ void print_ptr(void const * ptr)
     print_uint_hex((uint32_t)ptr, 8, 0, 1);
 }
 
-
-
-
-
-
-
-
-
-void print_double(double v, int precision)
+void print_double(double value, int precision)
 {
-    int c;
-    uint32_t int_part;
-    double frac_part;
-    char digit;
-
-    if ( signbit(v) ) {
-        v = -v;
-        print_char('-');
-    }
-    if ( precision > 16 ) {
-        precision = 16;
-    } else if ( precision < 0 ) {
-        precision = 0;
-    }
-    c = fpclassify(v);
-    if ( c == FP_NAN ) {
-        print_string("nan");
-        return;
-    }
-    if ( c == FP_INFINITE ) {
-        print_string("inf");
-        return;
-    }
-    if ( c == FP_ZERO ) {
-        print_char('0');
-        if ( precision > 0 ) {
-            print_char('.');
-            while ( precision-- > 0 ) {
-                print_char('0');
-            }
-        }
-        return;
-    }
-    if ( v > 4294967295.0 ) {
-        // too large for regular printing
-        print_double_sci(v, precision);
-        return;
-    }
-    if ( v < 1e-6 ) {
-        // too small for regular printing
-        print_double_sci(v, precision);
-        return;
-    }
-    // perform rounding to specified precision
-    v = v + 0.5 * p10(-precision);
-    // split into integer and fractional parts
-    int_part = (uint32_t)v;
-    frac_part = v - int_part;
-    print_uint_dec(int_part);
-    if ( precision > 0 ) {
-        print_char('.');
-        do {
-            frac_part = frac_part * 10.0;
-            digit = (char)frac_part;
-            frac_part -= digit;
-            print_char('0' + digit);
-        } while ( --precision > 0 );
-    }
+    char buffer[32];
+    snprint_double(buffer, 32, value, precision);
+    print_string(buffer);
 }
 
-
-void print_double_sci(double v, int precision)
+void print_double_sci(double value, int precision)
 {
-    int c, exponent;
-    char digit;
-
-    if ( signbit(v) ) {
-        v = -v;
-        print_char('-');
-    }
-    if ( precision > 16 ) {
-        precision = 16;
-    } else if ( precision < 0 ) {
-        precision = 0;
-    }
-    c = fpclassify(v);
-    if ( c == FP_NAN ) {
-        print_string("nan");
-        return;
-    }
-    if ( c == FP_INFINITE ) {
-        print_string("inf");
-        return;
-    }
-    if ( c == FP_ZERO ) {
-        print_char('0');
-        if ( precision > 0 ) {
-            print_char('.');
-            while ( precision-- > 0 ) {
-                print_char('0');
-            }
-            print_string("e+00");
-        }
-        return;
-    }
-    exponent = 0;
-    if ( v < 1.0 ) {
-        // small number, make it bigger
-        while ( v < 1e-8 ) {
-            v *= 1e8;
-            exponent -= 8;
-        }
-        while ( v < 1e-3 ) {
-            v *= 1e3;
-            exponent -= 3;
-        }
-        while ( v < 1.0 ) {
-            v *= 10.0;
-            exponent -= 1;
-        }
-    } else {
-        // large number, make it smaller
-        while ( v >= 1e8 ) {
-            v *= 1e-8;
-            exponent += 8;
-        }
-        while ( v >= 1e3 ) {
-            v *= 1e-3;
-            exponent += 3;
-        }
-        while ( v >= 1e1 ) {
-            v *= 1e-1;
-            exponent += 1;
-        }
-    }
-    // perform rounding to specified precision
-    v = v + 0.5 * p10(-precision);
-    // there is a small chance that rounding pushed it over 10.0
-    if ( v >= 10.0 ) {
-        v *= 0.1;
-        exponent += 1;
-    }
-    // print the first digit
-    digit = (char)v;
-    print_char('0' + digit);
-    if ( precision > 0 ) {
-        print_char('.');
-        do {
-            v = v - digit;
-            v = v * 10.0;
-            digit = (char)v;
-            print_char('0' + digit);
-        } while ( --precision > 0 );
-    }
-    print_char('e');
-    if ( exponent < 0 ) {
-        print_char('-');
-        exponent = -exponent;
-    } else {
-        print_char('+');
-    }
-    digit = (char)(exponent/10);
-    print_char('0' + digit);
-    digit = (char)(exponent%10);
-    print_char('0' + digit);
+    char buffer[28];
+    snprint_double_sci(buffer, 32, value, precision);
+    print_string(buffer);
 }
-
 
 
 
