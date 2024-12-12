@@ -188,6 +188,7 @@ void print_string_width(const char *string, int width, int maxlen);
 void print_memory(void const *mem, uint32_t len);
 
 
+void pow_test(void);
 
 
 #endif // PRINTING_H

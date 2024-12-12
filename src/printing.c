@@ -200,6 +200,78 @@ static double p10(int pow)
     return result;
 }
 
+static double p10_new(int pow)
+{
+    double dresult, dfactor;
+    float fresult, ffactor;
+//    int32_t iresult, ifactor;
+
+    if ( pow < 0 ) {
+        pow = -pow;
+        dfactor = 0.1;
+    } else if ( pow > 0 ) {
+        dfactor = 10.0;
+    } else { 
+        return 1.0;
+    }
+    assert(pow < 308);
+    if ( pow < 32 ) {
+        // can use single precision for speed
+        fresult = 1.0f;
+        ffactor = dfactor;
+        while ( pow > 0 ) {
+            if ( pow & 1 ) {
+                fresult = fresult * ffactor;
+            }
+            ffactor = ffactor * ffactor;
+            pow >>= 1;
+        }
+        return fresult;
+    } else {
+        dresult = 1.0;
+        while ( pow > 0 ) {
+            if ( pow & 1 ) {
+                dresult = dresult * dfactor;
+            }
+            dfactor = dfactor * dfactor;
+            pow >>= 1;
+        }
+        return dresult;
+    }
+}
+
+#define abs(x)  ((x < 0 ) ? (-(x)) : (x))
+
+void pow_test(void)
+{
+    uint32_t start, end;
+    int n;
+    double result;
+
+    n = -300;
+    while ( n <= 300 ) {
+        start = tsc_read();
+        result = p10_new(n);
+        end = tsc_read();
+        print_string("p10(");
+        print_int_dec(n,'+');
+        print_string(") took ");
+        print_uint_dec(end-start);
+        print_string(" clocks, result = ");
+        print_double_sci(result, 16);
+        print_string("\n");
+        if ( abs(n) >= 100 ) {
+            n += 50;
+        } else if ( abs(n) >= 50 ) {
+            n += 10;
+        } else if ( abs(n) >= 20 ) {
+            n += 5;
+        } else {
+            n += 1;
+        }
+    }
+}
+
 /* private function to deal with floating point special cases
  *   (nan, infinity, zero, negative)
  * returns number of chars written into buffer
@@ -242,6 +314,53 @@ static int snprint_double_handle_special_cases(char *buf, double *value, int pre
 }
 
 int snprint_double(char *buf, int size, double value, int precision)
+{
+    int len;
+    uint32_t int_part;
+    double frac_part;
+    int digits;
+
+    if ( precision > 16 ) {
+        precision = 16;
+    } else if ( precision < 0 ) {
+        precision = 0;
+    }
+    /* check buffer size - worst case is '-' plus 10-digit integer
+       plus '.' plus 'precision' trailing digits plus terminator */
+    assert(size > (precision + 13));
+    len = snprint_double_handle_special_cases(buf, &value, precision, 0);
+    if ( len > 1 ) return len;
+    if ( value > 4294967295.0 ) {
+        // too large for regular printing
+        return len + snprint_double_sci(buf+len, size-len, value, precision);
+    }
+    if ( value < 1e-6 ) {
+        // too small for regular printing
+        return snprint_double_sci(buf+len, size-len, value, precision);
+    }
+    // perform rounding to specified precision
+    value = value + 0.5 * p10(-precision);
+    // split into integer and fractional parts
+    int_part = (uint32_t)value;
+    value -= int_part;
+    len += snprint_uint_dec_helper(buf+len, size-len, int_part, 0);
+    if ( precision > 0 ) {
+        buf[len++] = '.';
+        do {
+            digits = ( precision > 9 ) ? 9 : precision;
+            value *= p10(digits);
+            int_part = (uint32_t)value;
+            value -= int_part;
+            len += snprint_uint_dec_helper(buf+len, size-len, int_part, digits);
+            precision -= digits;
+        } while ( precision > 0 );
+    }
+    // terminate the string
+    buf[len] = '\0';
+    return len;
+}
+
+int snprint_double_old(char *buf, int size, double value, int precision)
 {
     int len;
     uint32_t int_part;

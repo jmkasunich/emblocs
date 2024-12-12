@@ -227,6 +227,8 @@ int main (void) {
     DBL_SCI_TEST(1234567890.0987654321, 3);
     DBL_SCI_TEST(1234567890.0987654321, 0);
     DBL_SCI_TEST(1234567890.0987654321, 16);
+
+    pow_test();
    
 /*    
     for ( d1 = start*1000.0; d1 > 1e-8 ; d1 /= 10.0 ) {
