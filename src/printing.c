@@ -30,6 +30,43 @@ int snprint_string(char *buf, int size, const char *string)
     return n;
 }
 
+/* private helper for printing decimal numbers
+   prints unsigned number, padding with leading zeros if less than 'digits'
+   assumes that caller has validated 'size'
+ */
+static int snprint_uint_dec_helper(char *buf, int size, uint32_t value, int digits)
+{
+    int digit, len;
+    char *start, *end, tmp;
+
+    if ( digits > 10 ) digits = 10;
+    // calculate digits in reverse order, then reverse them
+    // init start and end pointers
+    start = end = buf;
+    // final digit must be printed even if value = 0
+    do {
+        digit = value % 10;
+        value = value / 10;
+        *(end++) = (char)('0' + digit);
+        digits--;
+        // loop till no more digits
+    } while ( value > 0 );
+    // pad if needed
+    while ( digits-- > 0 ) {
+        *(end++) = '0';
+    }
+    len = end - start;
+    // terminate the string and point at last non-terminator character
+    *(end--) = '\0';
+    // reverse the string
+    while ( end > start ) {
+        tmp = *end;
+        *(end--) = *start;
+        *(start++) = tmp;
+    }
+    return len;
+}
+
 int snprint_int_dec(char *buf, int size, int32_t value, char sign)
 {
     int len = 0;
@@ -41,36 +78,14 @@ int snprint_int_dec(char *buf, int size, int32_t value, char sign)
     } else if ( ( sign == ' ' ) || ( sign == '+' ) ) {
         buf[len++] = sign;
     }
-    len += snprint_uint_dec(buf+len, size-len, value);
+    len += snprint_uint_dec_helper(buf+len, size-len, value, 0);
     return len;
 }
 
 int snprint_uint_dec(char *buf, int size, uint32_t value)
 {
-    int digit, len;
-    char *start, *end, tmp;
-
     assert(size >= 11);
-    // calculate digits in reverse order, then reverse them
-    // init start and end pointers
-    start = end = buf;
-    // final digit must be printed even if value = 0
-    do {
-        digit = value % 10;
-        value = value / 10;
-        *(end++) = (char)('0' + digit);
-        // loop till no more digits
-    } while ( value > 0 );
-    len = end - start;
-    // terminate the string and point at last non-terminator character
-    *(end--) = '\0';
-    // reverse the string
-    while ( end > start ) {
-        tmp = *end;
-        *(end--) = *start;
-        *(start++) = tmp;
-    }
-    return len;
+    return snprint_uint_dec_helper(buf, size, value, 0);
 }
 
 // private common code for binary, hex, and pointer printing
