@@ -171,16 +171,12 @@ typedef union {
 } ieee_double_t;
 #define IEEE754_DOUBLE_BIAS        0x3ff /* Added to exponent.  */
 
-/* private function to return 10^pow for integer 'pow' */
+/* private function to return 10^pow for positive integer 'pow' */
 static double p10(int pow)
 {
     double result;
     int32_t iresult, ifactor;
 
-    if ( pow < 0 ) {
-        result = 1.0 / p10(-pow);
-        return result;
-    }
     assert(pow < 308);
     result = 1.0;
     while ( pow >= 8 ) {
@@ -200,46 +196,6 @@ static double p10(int pow)
     return result;
 }
 
-static double p10_new(int pow)
-{
-    double dresult, dfactor;
-    float fresult, ffactor;
-//    int32_t iresult, ifactor;
-
-    if ( pow < 0 ) {
-        pow = -pow;
-        dfactor = 0.1;
-    } else if ( pow > 0 ) {
-        dfactor = 10.0;
-    } else { 
-        return 1.0;
-    }
-    assert(pow < 308);
-    if ( pow < 32 ) {
-        // can use single precision for speed
-        fresult = 1.0f;
-        ffactor = dfactor;
-        while ( pow > 0 ) {
-            if ( pow & 1 ) {
-                fresult = fresult * ffactor;
-            }
-            ffactor = ffactor * ffactor;
-            pow >>= 1;
-        }
-        return fresult;
-    } else {
-        dresult = 1.0;
-        while ( pow > 0 ) {
-            if ( pow & 1 ) {
-                dresult = dresult * dfactor;
-            }
-            dfactor = dfactor * dfactor;
-            pow >>= 1;
-        }
-        return dresult;
-    }
-}
-
 #define abs(x)  ((x < 0 ) ? (-(x)) : (x))
 
 void pow_test(void)
@@ -251,7 +207,7 @@ void pow_test(void)
     n = -300;
     while ( n <= 300 ) {
         start = tsc_read();
-        result = p10_new(n);
+        result = p10_old(n);
         end = tsc_read();
         print_string("p10(");
         print_int_dec(n,'+');
@@ -313,6 +269,19 @@ static int snprint_double_handle_special_cases(char *buf, double *value, int pre
     return len;
 }
 
+/* private lookup table for rounding - I want to add 0.5 * 10^-precision,
+ * where legal values of 'precision' are 0 to 17.  Single precision is
+ * good enough, so just make a 17-entry lookup table.
+ */
+static float round_factor[] = {
+    0.5e00f,  0.5e-1f,  0.5e-2f,  0.5e-3f,
+    0.5e-4f,  0.5e-5f,  0.5e-6f,  0.5e-7f,
+    0.5e-8f,  0.5e-9f,  0.5e-10f, 0.5e-11f,
+    0.5e-12f, 0.5e-13f, 0.5e-14f, 0.5e-15f,
+    0.5e-16f
+};
+
+
 int snprint_double(char *buf, int size, double value, int precision)
 {
     int len;
@@ -339,7 +308,7 @@ int snprint_double(char *buf, int size, double value, int precision)
         return snprint_double_sci(buf+len, size-len, value, precision);
     }
     // perform rounding to specified precision
-    value = value + 0.5 * p10(-precision);
+    value = value + round_factor[precision];
     // split into integer and fractional parts
     int_part = (uint32_t)value;
     value -= int_part;
@@ -454,7 +423,7 @@ int snprint_double_sci(char *buf, int size, double value, int precision)
         }
     }
     // perform rounding to specified precision
-    value = value + 0.5 * p10(-precision);
+    value = value + round_factor[precision];
     // there is a small chance that rounding pushed it over 10.0
     if ( value >= 10.0 ) {
         value *= 0.1;
