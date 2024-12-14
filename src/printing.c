@@ -270,11 +270,11 @@ static int snprint_double_handle_special_cases(char *buf, double *value, int pre
 }
 
 /* private lookup table for rounding - I want to add 0.5 * 10^-precision,
- * where legal values of 'precision' are 0 to 17.  Single precision is
+ * where legal values of 'precision' are 0 to 16.  Single precision is
  * good enough, so just make a 17-entry lookup table.
  */
 static float round_factor[] = {
-    0.5e00f,  0.5e-1f,  0.5e-2f,  0.5e-3f,
+    0.5e0f,   0.5e-1f,  0.5e-2f,  0.5e-3f,
     0.5e-4f,  0.5e-5f,  0.5e-6f,  0.5e-7f,
     0.5e-8f,  0.5e-9f,  0.5e-10f, 0.5e-11f,
     0.5e-12f, 0.5e-13f, 0.5e-14f, 0.5e-15f,
