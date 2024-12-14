@@ -149,84 +149,32 @@ int snprint_ptr(char *buf, int size, void *ptr)
     return snprint_uint_bin_hex(buf, size, (uint32_t)ptr, 16, 8, 0, 1);
 }
 
-/* private typedefs and functions for dealing with floating point */
-typedef union {
-    float f;
-    struct {
-        unsigned int mantissa:23;
-        unsigned int exponent:8;
-        unsigned int negative:1;
-    } ieee;
-} ieee_float_t;
-#define IEEE754_FLOAT_BIAS        0x7f /* Added to exponent.  */
 
-typedef union {
-    double d;
-    struct {
-        unsigned int mantissa1:32;
-        unsigned int mantissa0:20;
-        unsigned int exponent:11;
-        unsigned int negative:1;
-    } ieee;
-} ieee_double_t;
-#define IEEE754_DOUBLE_BIAS        0x3ff /* Added to exponent.  */
+#define NEW_FRAC_PART
 
-/* private function to return 10^pow for positive integer 'pow' */
-static double p10(int pow)
-{
-    double result;
-    int32_t iresult, ifactor;
 
-    assert(pow < 308);
-    result = 1.0;
-    while ( pow >= 8 ) {
-        result *= 1e8f;
-        pow -= 8;
-    }
-    ifactor = 10;
-    iresult = 1;
-    while ( pow > 0 ) {
-        if ( pow & 1 ) {
-            iresult = iresult * ifactor;
-        }
-        ifactor = ifactor * ifactor;
-        pow >>= 1;
-    }
-    result = result * (float)iresult;
-    return result;
-}
+/* private lookup table for rounding - I want to add 0.5 * 10^^(-precision),
+ * where legal values of 'precision' are 0 to 16.  Single precision is
+ * good enough, so just make a 17-entry float lookup table.
+ */
+static float round_factor[] = {
+    0.5e0f,   0.5e-1f,  0.5e-2f,  0.5e-3f,
+    0.5e-4f,  0.5e-5f,  0.5e-6f,  0.5e-7f,
+    0.5e-8f,  0.5e-9f,  0.5e-10f, 0.5e-11f,
+    0.5e-12f, 0.5e-13f, 0.5e-14f, 0.5e-15f,
+    0.5e-16f
+};
 
-#define abs(x)  ((x < 0 ) ? (-(x)) : (x))
-
-void pow_test(void)
-{
-    uint32_t start, end;
-    int n;
-    double result;
-
-    n = -300;
-    while ( n <= 300 ) {
-        start = tsc_read();
-        result = p10_old(n);
-        end = tsc_read();
-        print_string("p10(");
-        print_int_dec(n,'+');
-        print_string(") took ");
-        print_uint_dec(end-start);
-        print_string(" clocks, result = ");
-        print_double_sci(result, 16);
-        print_string("\n");
-        if ( abs(n) >= 100 ) {
-            n += 50;
-        } else if ( abs(n) >= 50 ) {
-            n += 10;
-        } else if ( abs(n) >= 20 ) {
-            n += 5;
-        } else {
-            n += 1;
-        }
-    }
-}
+#ifdef NEW_FRAC_PART
+/* private lookup table for printing 'chunks' of the fractional part
+ * I need to multiply by 10^^(digits), where 'digits' is 1 to 9
+ * C will promote integers as needed and these all fit in 32 bits so
+ * just make a 10-entry uint32_t lookup table
+ */
+static uint32_t pow10[] = {
+    1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000
+};
+#endif
 
 /* private function to deal with floating point special cases
  *   (nan, infinity, zero, negative)
@@ -236,7 +184,7 @@ void pow_test(void)
  * if > 1, value was zero, nan, or inf and the appropriate string is in the buffer
  * 'precision' and 'use_sci' describe the string to be output for zero
  * caller must ensure that the buffer can hold the specified representation
- * of zero, either '0.<precision>' or '0.<precision>e+00', as well as '-nan'
+ * of zero, either '0.<precision>' or '0.<precision>e+0', as well as '-nan'
  * or '-inf'; this function does not know the buffer size
  */
 static int snprint_double_handle_special_cases(char *buf, double *value, int precision, int use_sci)
@@ -262,79 +210,61 @@ static int snprint_double_handle_special_cases(char *buf, double *value, int pre
             }
         }
         if ( use_sci ) {
-            len += snprint_string(buf+len, 5, "e+00");
+            len += snprint_string(buf+len, 5, "e+0");
         }
     }
     buf[len] = '\0';
     return len;
 }
 
-/* private lookup table for rounding - I want to add 0.5 * 10^-precision,
- * where legal values of 'precision' are 0 to 16.  Single precision is
- * good enough, so just make a 17-entry lookup table.
+/* private helper function that prints a floating point number
+ * assumes that snprint_double_handle_special_cases() has been called
+ * assumes that buffer size has been checked
+ * assumes that value is greater than zero and less than +4.294967294e+9
+ * assumes that appropriate rounding has been done
  */
-static float round_factor[] = {
-    0.5e0f,   0.5e-1f,  0.5e-2f,  0.5e-3f,
-    0.5e-4f,  0.5e-5f,  0.5e-6f,  0.5e-7f,
-    0.5e-8f,  0.5e-9f,  0.5e-10f, 0.5e-11f,
-    0.5e-12f, 0.5e-13f, 0.5e-14f, 0.5e-15f,
-    0.5e-16f
-};
-
-
-int snprint_double(char *buf, int size, double value, int precision)
+static int snprint_double_helper(char *buf, int size, double value, int precision)
 {
     int len;
     uint32_t int_part;
-    double frac_part;
+#ifdef NEW_FRAC_PART
     int digits;
+#else
+    char digit;
+#endif
 
-    if ( precision > 16 ) {
-        precision = 16;
-    } else if ( precision < 0 ) {
-        precision = 0;
-    }
-    /* check buffer size - worst case is '-' plus 10-digit integer
-       plus '.' plus 'precision' trailing digits plus terminator */
-    assert(size > (precision + 13));
-    len = snprint_double_handle_special_cases(buf, &value, precision, 0);
-    if ( len > 1 ) return len;
-    if ( value > 4294967295.0 ) {
-        // too large for regular printing
-        return len + snprint_double_sci(buf+len, size-len, value, precision);
-    }
-    if ( value < 1e-6 ) {
-        // too small for regular printing
-        return snprint_double_sci(buf+len, size-len, value, precision);
-    }
-    // perform rounding to specified precision
-    value = value + round_factor[precision];
-    // split into integer and fractional parts
+   // split into integer and fractional parts
     int_part = (uint32_t)value;
     value -= int_part;
-    len += snprint_uint_dec_helper(buf+len, size-len, int_part, 0);
+    len = snprint_uint_dec_helper(buf, size, int_part, 0);
     if ( precision > 0 ) {
         buf[len++] = '.';
+#ifdef NEW_FRAC_PART
         do {
             digits = ( precision > 9 ) ? 9 : precision;
-            value *= p10(digits);
+            value *= pow10[digits];
             int_part = (uint32_t)value;
             value -= int_part;
             len += snprint_uint_dec_helper(buf+len, size-len, int_part, digits);
             precision -= digits;
         } while ( precision > 0 );
+#else
+        do {
+            value = value * 10.0;
+            digit = (char)value;
+            value -= digit;
+            buf[len++] = '0' + digit;
+        } while ( --precision > 0 );
+#endif // NEW_FRAC_PART
     }
     // terminate the string
     buf[len] = '\0';
     return len;
 }
 
-int snprint_double_old(char *buf, int size, double value, int precision)
+int snprint_double(char *buf, int size, double value, int precision)
 {
     int len;
-    uint32_t int_part;
-    double frac_part;
-    char digit;
 
     if ( precision > 16 ) {
         precision = 16;
@@ -346,41 +276,24 @@ int snprint_double_old(char *buf, int size, double value, int precision)
     assert(size > (precision + 13));
     len = snprint_double_handle_special_cases(buf, &value, precision, 0);
     if ( len > 1 ) return len;
-    if ( value > 4294967295.0 ) {
+    if ( value > 4294967294.0 ) {
         // too large for regular printing
         return len + snprint_double_sci(buf+len, size-len, value, precision);
     }
     if ( value < 1e-6 ) {
         // too small for regular printing
-        return snprint_double_sci(buf+len, size-len, value, precision);
+        return len + snprint_double_sci(buf+len, size-len, value, precision);
     }
     // perform rounding to specified precision
-    value = value + 0.5 * p10(-precision);
-    // split into integer and fractional parts
-    int_part = (uint32_t)value;
-    frac_part = value - int_part;
-    len += snprint_uint_dec(buf+len, size-len, int_part);
-    if ( precision > 0 ) {
-        *(buf+len) = '.';
-        len++;
-        do {
-            frac_part = frac_part * 10.0;
-            digit = (char)frac_part;
-            frac_part -= digit;
-            *(buf+len) = '0' + digit;
-            len++;
-        } while ( --precision > 0 );
-    }
-    // terminate the string
-    *(buf+len) = '\0';
-    return len;
+    value = value + round_factor[precision];
+    // print it
+    return len + snprint_double_helper(buf+len, size-len, value, precision);
 }
 
 int snprint_double_sci(char *buf, int size, double value, int precision)
 {
     int len;
     int exponent;
-    char digit;
 
     if ( precision > 16 ) {
         precision = 16;
@@ -392,35 +305,15 @@ int snprint_double_sci(char *buf, int size, double value, int precision)
     assert(size > (precision + 9));
     len = snprint_double_handle_special_cases(buf, &value, precision, 1);
     if ( len > 1 ) return len;
+    // determine the exponent
     exponent = 0;
-    if ( value < 1.0 ) {
-        // small number, make it bigger
-        while ( value < 1e-8 ) {
-            value *= 1e8;
-            exponent -= 8;
-        }
-        while ( value < 1e-3 ) {
-            value *= 1e3;
-            exponent -= 3;
-        }
-        while ( value < 1.0 ) {
-            value *= 10.0;
-            exponent -= 1;
-        }
-    } else {
-        // large number, make it smaller
-        while ( value >= 1e8 ) {
-            value *= 1e-8;
-            exponent += 8;
-        }
-        while ( value >= 1e3 ) {
-            value *= 1e-3;
-            exponent += 3;
-        }
-        while ( value >= 1e1 ) {
-            value *= 1e-1;
-            exponent += 1;
-        }
+    while ( value < 1.0 ) {
+        value *= 10.0;
+        exponent -= 1;
+    }
+    while ( value >= 10.0 ) {
+        value *= 0.1;
+        exponent += 1;
     }
     // perform rounding to specified precision
     value = value + round_factor[precision];
@@ -429,43 +322,11 @@ int snprint_double_sci(char *buf, int size, double value, int precision)
         value *= 0.1;
         exponent += 1;
     }
-    // print the first digit
-    digit = (char)value;
-    *(buf+len) = '0' + digit;
-    len++;
-    if ( precision > 0 ) {
-        *(buf+len) = '.';
-        len++;
-        do {
-            value = value - digit;
-            value = value * 10.0;
-            digit = (char)value;
-            *(buf+len) = '0' + digit;
-            len++;
-        } while ( --precision > 0 );
-    }
-    *(buf+len) = 'e';
-    len++;
-    if ( exponent < 0 ) {
-        *(buf+len) = '-';
-        exponent = -exponent;
-    } else {
-        *(buf+len) = '+';
-    }
-    len++;
-    if ( exponent > 99 ) {
-        digit = (char)(exponent/100);
-        *(buf+len) = '0' + digit;
-        len++;
-        exponent -= digit * 100;
-    }
-    digit = (char)(exponent/10);
-    *(buf+len) = '0' + digit;
-    len++;
-    digit = (char)(exponent%10);
-    *(buf+len) = '0' + digit;
-    len++;
-    *(buf+len) = '\0';
+    // print the mantissa
+    len += snprint_double_helper(buf+len, size-len, value, precision);
+    // and the exponent
+    buf[len++] = 'e';
+    len += snprint_int_dec(buf+len, size-len, exponent, '+');
     return len;
 }
 
