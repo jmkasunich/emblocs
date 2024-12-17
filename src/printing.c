@@ -286,9 +286,14 @@ static int snprint_double_helper(char *buf, int size, double value, int precisio
     return len;
 }
 
+#define NEW_RANGE_LIMIT
+
 int snprint_double(char *buf, int size, double value, int precision)
 {
     int len;
+#ifdef NEW_RANGE_LIMIT
+    ieee754_double_union_t tmp;
+#endif
 
     if ( precision > 16 ) {
         precision = 16;
@@ -300,12 +305,13 @@ int snprint_double(char *buf, int size, double value, int precision)
     assert(size > (precision + 13));
     len = snprint_double_handle_special_cases(buf, &value, precision, 0);
     if ( len > 1 ) return len;
-    if ( value > 4294967294.0 ) {
-        // too large for regular printing
-        return len + snprint_double_sci(buf+len, size-len, value, precision);
-    }
-    if ( value < 1e-6 ) {
-        // too small for regular printing
+#ifdef NEW_RANGE_LIMIT
+    tmp.d = value;
+    if ( ( tmp.raw.exponent > 1054 ) || ( tmp.raw.exponent < 1003 ) ) {
+#else
+    if ( ( value > 4294967294.0 ) || ( value < 1e-6 ) ) {
+#endif
+        // too large or too small for regular printing
         return len + snprint_double_sci(buf+len, size-len, value, precision);
     }
     // perform rounding to specified precision
