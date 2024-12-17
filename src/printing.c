@@ -176,6 +176,16 @@ static uint32_t pow10[] = {
 };
 #endif
 
+
+typedef union {
+    struct {
+        uint64_t mantissa : 52;
+        unsigned int exponent : 11;
+        unsigned int sign : 1;
+    } raw;
+    double d;
+} ieee754_double_union_t;
+
 /* private function to deal with floating point special cases
  *   (nan, infinity, zero, negative)
  * returns number of chars written into buffer
@@ -187,30 +197,44 @@ static uint32_t pow10[] = {
  * of zero, either '0.<precision>' or '0.<precision>e+0', as well as '-nan'
  * or '-inf'; this function does not know the buffer size
  */
+
+//#define HANDLE_DENORM
+
 static int snprint_double_handle_special_cases(char *buf, double *value, int precision, int use_sci)
 {
     int len = 0;
-    int fpclass;
+    ieee754_double_union_t tmp;
 
-    if ( signbit(*value) ) {
-        *value = -(*value);
+    tmp.d = *value;
+    if ( tmp.raw.sign ) {
+        tmp.raw.sign = 0;
+        *value = tmp.d;
         buf[len++] = '-';
     }
-    fpclass = fpclassify(*value);
-    if ( fpclass == FP_NAN ) {
-        len += snprint_string(buf+len, 4, "nan");
-    } else if ( fpclass == FP_INFINITE ) {
-        len += snprint_string(buf+len, 4, "inf");
-    } else if ( fpclass == FP_ZERO ) {
-        buf[len++] = '0';
-        if ( precision > 0 ) {
-            buf[len++] = '.';
-            while ( precision-- > 0 ) {
-                buf[len++] = '0';
+    if ( tmp.raw.exponent == 0 ) {
+#ifdef HANDLE_DENORM
+        if ( tmp.raw.mantissa != 0 ) {
+            len += snprint_string(buf+len, 7, "denorm");
+        } else {
+#endif
+            buf[len++] = '0';
+            if ( precision > 0 ) {
+                buf[len++] = '.';
+                while ( precision-- > 0 ) {
+                    buf[len++] = '0';
+                }
             }
+            if ( use_sci ) {
+                len += snprint_string(buf+len, 5, "e+0");
+            }
+#ifdef HANDLE_DENORM
         }
-        if ( use_sci ) {
-            len += snprint_string(buf+len, 5, "e+0");
+#endif
+    } else if ( tmp.raw.exponent == 0x7FF ) {
+        if ( tmp.raw.mantissa != 0 ) {
+            len += snprint_string(buf+len, 4, "nan");
+        } else {
+            len += snprint_string(buf+len, 4, "inf");
         }
     }
     buf[len] = '\0';
