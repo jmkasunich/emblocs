@@ -154,15 +154,14 @@ int snprint_ptr(char *buf, int size, void *ptr)
 
 
 /* private lookup table for rounding - I want to add 0.5 * 10^^(-precision),
- * where legal values of 'precision' are 0 to 16.  Single precision is
- * good enough, so just make a 17-entry float lookup table.
+ * where legal values of 'precision' are 0 to 15.  Single precision is
+ * good enough, so just make a 16-entry float lookup table.
  */
 static float round_factor[] = {
     0.5e0f,   0.5e-1f,  0.5e-2f,  0.5e-3f,
     0.5e-4f,  0.5e-5f,  0.5e-6f,  0.5e-7f,
     0.5e-8f,  0.5e-9f,  0.5e-10f, 0.5e-11f,
-    0.5e-12f, 0.5e-13f, 0.5e-14f, 0.5e-15f,
-    0.5e-16f
+    0.5e-12f, 0.5e-13f, 0.5e-14f, 0.5e-15f
 };
 
 #ifdef NEW_FRAC_PART
@@ -295,8 +294,8 @@ int snprint_double(char *buf, int size, double value, int precision)
     ieee754_double_union_t tmp;
 #endif
 
-    if ( precision > 16 ) {
-        precision = 16;
+    if ( precision > 15 ) {
+        precision = 15;
     } else if ( precision < 0 ) {
         precision = 0;
     }
@@ -325,8 +324,8 @@ int snprint_double_sci(char *buf, int size, double value, int precision)
     int len;
     int exponent;
 
-    if ( precision > 16 ) {
-        precision = 16;
+    if ( precision > 15 ) {
+        precision = 15;
     } else if ( precision < 0 ) {
         precision = 0;
     }
