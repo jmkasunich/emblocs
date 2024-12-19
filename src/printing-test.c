@@ -8,8 +8,8 @@
 #define HEX_UINT_TEST(value, digits, group, uc)  hex_uint_test(value, digits, group, uc, #value "," #digits "," #group "," #uc)
 #define BIN_UINT_TEST(value, digits, group)  bin_uint_test(value, digits, group, #value "," #digits "," #group)
 #define HEX_PTR_TEST(value)  hex_ptr_test(value, #value)
-#define DBL_TEST(value, precision)  dbl_test(value, precision, #value "," #precision)
-#define DBL_SCI_TEST(value, precision)  dbl_sci_test(value, precision, #value "," #precision)
+#define DBL_TEST(value, precision, sign)  dbl_test(value, precision, sign, #value "," #precision "," #sign)
+#define DBL_SCI_TEST(value, precision, sign)  dbl_sci_test(value, precision, sign, #value "," #precision "," #sign)
 
 
 void __assert_func (const char * file, int line, const char * funct, const char *expr)
@@ -27,16 +27,10 @@ void __assert_func (const char * file, int line, const char * funct, const char 
     do {} while (1);
 }
 
-// Quick and dirty delay
-static void delay (unsigned int time) {
-    for (unsigned int i = 0; i < time; i++)
-        for (volatile unsigned int j = 0; j < 20000; j++);
-}
-
 int length(char *s)
 {
     int len = 0;
-    while ( *(s++) != '\0' ) len++;
+    while ( s[len] != '\0' ) len++;
     return len;
 }
 
@@ -124,27 +118,27 @@ void hex_ptr_test(void * value, char *val_string)
 }
 
 
-void dbl_test(double value, int precision, char *val_string)
+void dbl_test(double value, int precision, char sign, char *val_string)
 {
     uint32_t start, end;
     char buffer[100];
     int len;
 
     start = tsc_read();
-    len = snprint_double(buffer, 100, value, precision);
+    len = snprint_double(buffer, 100, value, precision, sign);
     end = tsc_read();
     print_test_result("snprint_double", val_string, buffer, end-start, len);
 }
 
 
-void dbl_sci_test(double value, int precision, char *val_string)
+void dbl_sci_test(double value, int precision, char sign, char *val_string)
 {
     uint32_t start, end;
     char buffer[100];
     int len;
 
     start = tsc_read();
-    len = snprint_double_sci(buffer, 100, value, precision);
+    len = snprint_double_sci(buffer, 100, value, precision, sign);
     end = tsc_read();
     print_test_result("snprint_double_sci", val_string, buffer, end-start, len);
 }
@@ -197,81 +191,81 @@ int main (void) {
     HEX_PTR_TEST((void *)0x13579BDF);
     HEX_PTR_TEST(NULL);
 */
-    DBL_TEST(-1.0/0.0, 16);
-    DBL_TEST(-0.0/0.0, 16);
-    DBL_TEST(-0.0, 7);
-    DBL_TEST(0.0, 16);
-    DBL_TEST(1.0/0.0, 0);
-    DBL_TEST(FLT_MAX, 6);
-    DBL_TEST(FLT_MIN, 15);
-    DBL_TEST(DBL_MAX, 15);
-    DBL_TEST(DBL_MIN, 6);
-    DBL_TEST(DBL_MAX*10.0, 15);
-    DBL_TEST(DBL_MIN/10.0, 6);
-    DBL_TEST(3.14159276543210123456789, 0);
-    DBL_TEST(3.14159276543210123456789, 3);
-    DBL_TEST(-3.14159276543210123456789, 6);
-    DBL_TEST(-3.14159276543210123456789, 9);
-    DBL_TEST(3.14159276543210123456789, 16);
-    DBL_TEST(0.00000012345678900987654321, 14);
-    DBL_TEST(0.000012345678900987654321, 12);
-    DBL_TEST(0.0012345678900987654321, 10);
-    DBL_TEST(0.12345678900987654321, 8);
-    DBL_TEST(12.345678900987654321, 8);
-    DBL_TEST(1234.5678900987654321, 8);
-    DBL_TEST(123456.78900987654321, 6);
-    DBL_TEST(12345678.900987654321, 4);
-    DBL_TEST(1234567890.0987654321, 2);
-    DBL_TEST(123456789009.87654321, 2);
-    DBL_TEST(12345678900987.654321, 4);
-    DBL_TEST(1234567890098765.4321, 6);
-    DBL_TEST(123456789009876543.21, 8);
-    DBL_TEST(12345678900987654321.0, 10);
-    DBL_TEST(4294967293.0, 14);
-    DBL_TEST(4294967294.0, 14);
-    DBL_TEST(4294967295.0, 14);
-    DBL_TEST(4294967296.0, 14);
-    DBL_TEST(4294967297.0, 14);
-    DBL_TEST(0.5e-6, 10);
-    DBL_TEST(0.6e-6, 10);
-    DBL_TEST(0.7e-6, 10);
-    DBL_TEST(0.8e-6, 10);
-    DBL_TEST(0.9e-6, 10);
-    DBL_TEST(1.0e-6, 10);
-    DBL_TEST(1.1e-6, 10);
-    DBL_TEST(1.2e-6, 10);
-    DBL_TEST(1.3e-6, 10);
-    DBL_TEST(1.4e-6, 10);
-    DBL_TEST(1.5e-6, 10);
+    DBL_TEST(-1.0/0.0, 16, '+');
+    DBL_TEST(-0.0/0.0, 16, '\0');
+    DBL_TEST(-0.0, 7, ' ');
+    DBL_TEST(0.0, 16, '+');
+    DBL_TEST(1.0/0.0, 0, '+');
+    DBL_TEST(FLT_MAX, 6, '\0');
+    DBL_TEST(FLT_MIN, 15, ' ');
+    DBL_TEST(DBL_MAX, 15, '+');
+    DBL_TEST(DBL_MIN, 6, '+');
+    DBL_TEST(DBL_MAX*10.0, 15, '\0');
+    DBL_TEST(DBL_MIN/10.0, 6, '+');
+    DBL_TEST(3.14159276543210123456789, 0, '+');
+    DBL_TEST(3.14159276543210123456789, 3, '+');
+    DBL_TEST(-3.14159276543210123456789, 6, '+');
+    DBL_TEST(-3.14159276543210123456789, 9, '+');
+    DBL_TEST(3.14159276543210123456789, 16, '+');
+    DBL_TEST(0.00000012345678900987654321, 14, '+');
+    DBL_TEST(0.000012345678900987654321, 12, '+');
+    DBL_TEST(0.0012345678900987654321, 10, '+');
+    DBL_TEST(0.12345678900987654321, 8, '+');
+    DBL_TEST(12.345678900987654321, 8, '+');
+    DBL_TEST(1234.5678900987654321, 8, '+');
+    DBL_TEST(123456.78900987654321, 6, '+');
+    DBL_TEST(12345678.900987654321, 4, '+');
+    DBL_TEST(1234567890.0987654321, 2, '+');
+    DBL_TEST(123456789009.87654321, 2, '+');
+    DBL_TEST(12345678900987.654321, 4, '+');
+    DBL_TEST(1234567890098765.4321, 6, '+');
+    DBL_TEST(123456789009876543.21, 8, '+');
+    DBL_TEST(12345678900987654321.0, 10, '+');
+    DBL_TEST(4294967293.0, 14, '+');
+    DBL_TEST(4294967294.0, 14, '+');
+    DBL_TEST(4294967295.0, 14, '+');
+    DBL_TEST(4294967296.0, 14, '+');
+    DBL_TEST(4294967297.0, 14, '+');
+    DBL_TEST(0.5e-6, 10, '+');
+    DBL_TEST(0.6e-6, 10, '+');
+    DBL_TEST(0.7e-6, 10, '+');
+    DBL_TEST(0.8e-6, 10, '+');
+    DBL_TEST(0.9e-6, 10, '+');
+    DBL_TEST(1.0e-6, 10, '+');
+    DBL_TEST(1.1e-6, 10, '+');
+    DBL_TEST(1.2e-6, 10, '+');
+    DBL_TEST(1.3e-6, 10, '+');
+    DBL_TEST(1.4e-6, 10, '+');
+    DBL_TEST(1.5e-6, 10, '+');
    
-    DBL_SCI_TEST(-1.0/0.0, 16);
-    DBL_SCI_TEST(-0.0/0.0, 16);
-    DBL_SCI_TEST(-0.0, 7);
-    DBL_SCI_TEST(0.0, 16);
-    DBL_SCI_TEST(1.0/0.0, 0);
-    DBL_SCI_TEST(FLT_MAX, 6);
-    DBL_SCI_TEST(FLT_MIN, 15);
-    DBL_SCI_TEST(DBL_MAX, 15);
-    DBL_SCI_TEST(DBL_MIN, 6);
-    DBL_SCI_TEST(3.14159276543210123456789, 0);
-    DBL_SCI_TEST(3.14159276543210123456789, 3);
-    DBL_SCI_TEST(-3.14159276543210123456789, 6);
-    DBL_SCI_TEST(-3.14159276543210123456789, 9);
-    DBL_SCI_TEST(3.14159276543210123456789, 16);
-    DBL_SCI_TEST(0.00000012345678900987654321, 14);
-    DBL_SCI_TEST(0.000012345678900987654321, 12);
-    DBL_SCI_TEST(0.0012345678900987654321, 10);
-    DBL_SCI_TEST(0.12345678900987654321, 8);
-    DBL_SCI_TEST(12.345678900987654321, 8);
-    DBL_SCI_TEST(1234.5678900987654321, 8);
-    DBL_SCI_TEST(123456.78900987654321, 6);
-    DBL_SCI_TEST(12345678.900987654321, 4);
-    DBL_SCI_TEST(1234567890.0987654321, 2);
-    DBL_SCI_TEST(123456789009.87654321, 5);
-    DBL_SCI_TEST(12345678900987.654321, 10);
-    DBL_SCI_TEST(1234567890098765.4321, 13);
-    DBL_SCI_TEST(123456789009876543.21, 15);
-    DBL_SCI_TEST(12345678900987654321.0, 0);
+    DBL_SCI_TEST(-1.0/0.0, 16, '+');
+    DBL_SCI_TEST(-0.0/0.0, 16, '+');
+    DBL_SCI_TEST(-0.0, 7, '+');
+    DBL_SCI_TEST(0.0, 16, '+');
+    DBL_SCI_TEST(1.0/0.0, 0, '+');
+    DBL_SCI_TEST(FLT_MAX, 6, '+');
+    DBL_SCI_TEST(FLT_MIN, 15, '+');
+    DBL_SCI_TEST(DBL_MAX, 15, '+');
+    DBL_SCI_TEST(DBL_MIN, 6, '+');
+    DBL_SCI_TEST(3.14159276543210123456789, 0, '+');
+    DBL_SCI_TEST(3.14159276543210123456789, 3, '+');
+    DBL_SCI_TEST(-3.14159276543210123456789, 6, '+');
+    DBL_SCI_TEST(-3.14159276543210123456789, 9, '+');
+    DBL_SCI_TEST(3.14159276543210123456789, 16, '+');
+    DBL_SCI_TEST(0.00000012345678900987654321, 14, '+');
+    DBL_SCI_TEST(0.000012345678900987654321, 12, '+');
+    DBL_SCI_TEST(0.0012345678900987654321, 10, '+');
+    DBL_SCI_TEST(0.12345678900987654321, 8, '+');
+    DBL_SCI_TEST(12.345678900987654321, 8, '+');
+    DBL_SCI_TEST(1234.5678900987654321, 8, '+');
+    DBL_SCI_TEST(123456.78900987654321, 6, '+');
+    DBL_SCI_TEST(12345678.900987654321, 4, '+');
+    DBL_SCI_TEST(1234567890.0987654321, 2, '+');
+    DBL_SCI_TEST(123456789009.87654321, 5, '+');
+    DBL_SCI_TEST(12345678900987.654321, 10, '+');
+    DBL_SCI_TEST(1234567890098765.4321, 13, '+');
+    DBL_SCI_TEST(123456789009876543.21, 15, '+');
+    DBL_SCI_TEST(12345678900987654321.0, 0, '+');
 
  
 /*    

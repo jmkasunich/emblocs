@@ -71,7 +71,7 @@ int snprint_int_dec(char *buf, int size, int32_t value, char sign)
 {
     int len = 0;
 
-    assert(size >= 12);
+    assert(size >= PRINT_INT_DEC_MAXLEN);
     if ( value < 0 ) {
         buf[len++] = '-';
         value = -value;
@@ -84,7 +84,7 @@ int snprint_int_dec(char *buf, int size, int32_t value, char sign)
 
 int snprint_uint_dec(char *buf, int size, uint32_t value)
 {
-    assert(size >= 11);
+    assert(size >= PRINT_UINT_DEC_MAXLEN);
     return snprint_uint_dec_helper(buf, size, value, 0);
 }
 
@@ -104,7 +104,7 @@ static int snprint_uint_bin_hex(char *buf, int size, uint32_t value, int base, i
         shift = 4;
         maxdigits = 8;
     } else {
-        assert(1);
+        assert(0);
         return 0;  // make compiler happy
     }
     if ( ( digits < 1 ) || ( digits > maxdigits ) ) digits = maxdigits;
@@ -188,9 +188,12 @@ typedef union {
 /* private function to deal with floating point special cases
  *   (nan, infinity, zero, negative)
  * returns number of chars written into buffer
- * if 0, *value is positive and non-zero
- * if 1, *value was negative and non-zero, is now positive , '-' is in buffer
- * if > 1, value was zero, nan, or inf and the appropriate string is in the buffer
+ * if 'sign' is '+' or ' ', positive numbers are prefixed with 'sign'
+ * negative numbers are always prefixed with '-'
+ * if return value is 0 or 1, *value is positive and non-zero and the appropriate
+ * prefix is in the buffer
+ * if return value is greater than 1, value was zero, nan, or inf and the 
+ * appropriate string is in the buffer
  * 'precision' and 'use_sci' describe the string to be output for zero
  * caller must ensure that the buffer can hold the specified representation
  * of zero, either '0.<precision>' or '0.<precision>e+0', as well as '-nan'
@@ -199,16 +202,21 @@ typedef union {
 
 //#define HANDLE_DENORM
 
-static int snprint_double_handle_special_cases(char *buf, double *value, int precision, int use_sci)
+static int snprint_double_handle_special_cases(char *buf, double *value, int precision, int use_sci, char sign)
 {
     int len = 0;
     ieee754_double_union_t tmp;
 
     tmp.d = *value;
     if ( tmp.raw.sign ) {
+        // negative
         tmp.raw.sign = 0;
         *value = tmp.d;
         buf[len++] = '-';
+    } else {
+        if ( ( sign == '+' ) || ( sign == ' ' ) ) {
+            buf[len++] = sign;
+        }
     }
     if ( tmp.raw.exponent == 0 ) {
 #ifdef HANDLE_DENORM
@@ -285,14 +293,11 @@ static int snprint_double_helper(char *buf, int size, double value, int precisio
     return len;
 }
 
-#define NEW_RANGE_LIMIT
 
-int snprint_double(char *buf, int size, double value, int precision)
+int snprint_double(char *buf, int size, double value, int precision, char sign)
 {
     int len;
-#ifdef NEW_RANGE_LIMIT
     ieee754_double_union_t tmp;
-#endif
 
     if ( precision > 15 ) {
         precision = 15;
@@ -302,16 +307,12 @@ int snprint_double(char *buf, int size, double value, int precision)
     /* check buffer size - worst case is '-' plus 10-digit integer
        plus '.' plus 'precision' trailing digits plus terminator */
     assert(size > (precision + 13));
-    len = snprint_double_handle_special_cases(buf, &value, precision, 0);
+    len = snprint_double_handle_special_cases(buf, &value, precision, 0, sign);
     if ( len > 1 ) return len;
-#ifdef NEW_RANGE_LIMIT
     tmp.d = value;
     if ( ( tmp.raw.exponent > 1054 ) || ( tmp.raw.exponent < 1003 ) ) {
-#else
-    if ( ( value > 4294967294.0 ) || ( value < 1e-6 ) ) {
-#endif
         // too large or too small for regular printing
-        return len + snprint_double_sci(buf+len, size-len, value, precision);
+        return len + snprint_double_sci(buf+len, size-len, value, precision, '\0');
     }
     // perform rounding to specified precision
     value = value + round_factor[precision];
@@ -319,7 +320,7 @@ int snprint_double(char *buf, int size, double value, int precision)
     return len + snprint_double_helper(buf+len, size-len, value, precision);
 }
 
-int snprint_double_sci(char *buf, int size, double value, int precision)
+int snprint_double_sci(char *buf, int size, double value, int precision, char sign)
 {
     int len;
     int exponent;
@@ -332,7 +333,7 @@ int snprint_double_sci(char *buf, int size, double value, int precision)
     /* check buffer size - worst case is '-' plus 1 digit plus '.' plus
        'precision' trailing digits plus 'e+123' plus terminator */
     assert(size > (precision + 9));
-    len = snprint_double_handle_special_cases(buf, &value, precision, 1);
+    len = snprint_double_handle_special_cases(buf, &value, precision, 1, sign);
     if ( len > 1 ) return len;
     // determine the exponent
     exponent = 0;
@@ -380,70 +381,94 @@ void print_string(const char *string)
     }
 }
 
+// private helper for printing repeated characters
+// prints 'n' copies of 'c'
+static void print_padding(int n, char c)
+{
+    while ( n > 0 ) {
+        print_char(c);
+        n--;
+    }
+}
+
+void print_string_width(char const *string, int width, int maxlen, char align)
+{
+    int len;
+
+    if ( string == NULL ) return;
+    if ( maxlen <= 0 ) maxlen = 0x7FFFFFFF;
+    if ( width < 0 ) width = 0;
+    len = 0;
+    while ( string[len] != '\0' ) {
+        len++;
+    }
+    if ( len > maxlen ) {
+        len = maxlen;
+    }
+    if ( align == 'R' ) {
+        print_padding(width-len, ' ');
+    }
+    for ( int n = 0 ; n < len ; n++ ) {
+        print_char(string[n]);
+    }
+    if ( align == 'L' ) {
+        print_padding(width-len, ' ');
+    }
+}
+
 void print_int_dec(int32_t value, char sign)
 {
-    char buffer[16];
+    char buffer[PRINT_INT_DEC_MAXLEN];
     snprint_int_dec(buffer, 16, value, sign);
     print_string(buffer);
 }
 
 void print_uint_dec(uint32_t value)
 {
-    char buffer[16];
+    char buffer[PRINT_UINT_DEC_MAXLEN];
     snprint_uint_dec(buffer, 16, value);
     print_string(buffer);
 }
 
 void print_uint_hex(uint32_t value, int digits, int group, int uc)
 {
-    char buffer[20];
+    char buffer[PRINT_UINT_HEX_MAXLEN];
     snprint_uint_bin_hex(buffer, 20, value, 16, digits, group, uc);
     print_string(buffer);
 }
 
 void print_uint_bin(uint32_t value, int digits, int group)
 {
-    char buffer[68];
+    char buffer[PRINT_UINT_BIN_MAXLEN];
     snprint_uint_bin_hex(buffer, 68, value, 2, digits, group, 0);
     print_string(buffer);
 }
 
-// print a pointer
 void print_ptr(void const * ptr)
 {
     print_uint_hex((uint32_t)ptr, 8, 0, 1);
 }
 
-void print_double(double value, int precision)
+void print_double(double value, int precision, char sign)
 {
-    char buffer[32];
-    snprint_double(buffer, 32, value, precision);
+    char buffer[PRINT_DOUBLE_MAXLEN];
+    snprint_double(buffer, 32, value, precision, sign);
     print_string(buffer);
 }
 
-void print_double_sci(double value, int precision)
+void print_double_sci(double value, int precision, char sign)
 {
-    char buffer[28];
-    snprint_double_sci(buffer, 32, value, precision);
+    char buffer[PRINT_DOUBLE_SCI_MAXLEN];
+    snprint_double_sci(buffer, 32, value, precision, sign);
     print_string(buffer);
 }
 
 
-
-
-
-#if 0
-
-// private helpers for printf
-static inline int _is_digit(char ch)
-{
-  return (ch >= '0') && (ch <= '9');
-}
-
-static unsigned int _atoi(char const ** str)
+// private helper for printf
+static unsigned int parse_int(char const ** str)
 {
   unsigned int i = 0U;
-  while (_is_digit(**str)) {
+  while ( (**str >= '0') && (**str <= '9') ) {
     i = i * 10U + (unsigned int)(*((*str)++) - '0');
   }
   return i;
@@ -454,8 +479,10 @@ static unsigned int _atoi(char const ** str)
 void printf_(char const *fmt, ...)
 {
     va_list ap;
-    int width, prec;
-    char sign;
+    int loop, width, prec;
+    char align, sign, pad;
+    char buf[PRINT_UINT_BIN_MAXLEN];
+    int len;
 
     va_start(ap, fmt);
     while ( *fmt != '\0' ) {
@@ -464,63 +491,107 @@ void printf_(char const *fmt, ...)
             print_char(*(fmt++));
             continue;
         }
-        // look at next char
-        fmt++;
-        if ( ( *fmt == '+' ) || ( *fmt == ' ') ) {
-            sign = *(fmt++);
-        } else {
-            sign = '\0';
-        }
+        // '%' found
+        // loop till all flags parsed
+        loop = 1;
+        align = 'R';
+        sign = '\0';
+        pad = ' ';
+        do {
+            // look at next char
+            switch (*(fmt++)) {
+            case '-':
+                align = 'L';
+                break;
+            case '+':
+                sign = '+';
+                break;
+            case ' ':
+                if ( sign != '+' ) {
+                    sign = ' ';
+                }
+                break;
+            case '0':
+                pad = '0';
+                break;
+            case '#':
+            case '\'':
+                break;
+            default:
+                loop = 0;
+                break;
+            }
+        } while ( loop );
         width = 0;
-        if ( _is_digit(*fmt) ) {
-            width = _atoi(&fmt);
-        }
         prec = -1;
+        width = parse_int(&fmt);
         if ( *fmt == '.' ) {
             fmt++;
-            if ( _is_digit(*fmt) ) {
-                prec = _atoi(&fmt);
-            }
+            prec = parse_int(&fmt);
         }
+        len = 0;
         switch (*fmt) {
-        case 'd':
-            print_int_dec((int32_t)va_arg(ap, int32_t), sign);
-            break;
-        case 'u':
-            print_uint_dec((uint32_t)va_arg(ap, uint32_t));
-            break;
-        case 'x':
-            print_uint_hex((uint32_t)va_arg(ap, uint32_t), prec, 0, 0);
-            break;
-        case 'X':
-            print_uint_hex((uint32_t)va_arg(ap, uint32_t), prec, 1, 0);
-            break;
-        case 's':
-            print_string_width((char *)va_arg(ap, char *), width, prec);
-            break;
         case 'c':
             print_char((char)va_arg(ap, int));
             break;
-        case 'p':
-            print_ptr((void *)va_arg(ap, void *));
+        case 's':
+            print_string_width((char *)va_arg(ap, char *), width, prec, align);
+            break;
+        case 'd':
+            len = snprint_int_dec(buf, sizeof(buf), (int32_t)va_arg(ap, int32_t), sign);
+            break;
+        case 'u':
+            len = snprint_uint_dec(buf, sizeof(buf), (uint32_t)va_arg(ap, uint32_t));
+            break;
+        case 'x':
+            len = snprint_uint_hex(buf, sizeof(buf), (uint32_t)va_arg(ap, uint32_t), width, prec, 0);
+            break;
+        case 'X':
+            len = snprint_uint_hex(buf, sizeof(buf), (uint32_t)va_arg(ap, uint32_t), width, prec, 1);
             break;
         case 'b':
-            print_uint_bin((uint32_t)va_arg(ap, uint32_t), prec, 0);
+            len = snprint_uint_bin(buf, sizeof(buf), (uint32_t)va_arg(ap, uint32_t), width, prec);
             break;
-        case 'B':
-            print_uint_bin((uint32_t)va_arg(ap, uint32_t), prec, 8);
+        case 'p':
+            len = snprint_ptr(buf, sizeof(buf), (void *)va_arg(ap, void *));
+            break;
+        case 'f':
+            len = snprint_double(buf, sizeof(buf), (double)va_arg(ap, double), prec, sign);
+            break;
+        case 'e':
+            len = snprint_double_sci(buf, sizeof(buf), (double)va_arg(ap, double), prec, sign);
             break;
         default:
             print_char(*fmt);
             break;
         }
+        if ( len > 0 ) {
+            // there is something in the buffer to be printed
+            if ( align == 'L' ) {
+                // left align is simple, print buffer then pad with spaces
+                print_string(buf);
+                print_padding(width-len, ' ');
+            } else {
+                // right align, a bit more complex
+                char *cp = buf;
+                if ( pad == '0' ) {
+                    // pad with leading zeros, need to print sign (if any) first,
+                    // then the zeros, and finally the rest of the string
+                    char c = *buf;
+                    if ( ( c == '-' ) || ( c == '+' ) || ( c == ' ' ) ) {
+                        // print sign, point to rest of string
+                        print_char(c);
+                        cp++;
+                    }
+                }
+                print_padding(width-len, pad);
+                print_string(cp);
+            }
+        }
         fmt++;
     }
     va_end(ap);
 }   
-
-
-
 
 
 
@@ -567,40 +638,4 @@ void print_memory(void const *mem, uint32_t len)
     print_char('\n');
 }
 
-
-
-// private helper function for padding with spaces
-static void pad(int spaces)
-{
-    while ( spaces > 0 ) {
-        print_char(' ');
-        spaces--;
-    }
-}
-
-// print a string with padding and/or truncation
-void print_string_width(char const *string, int width, int maxlen)
-{
-    if ( string == NULL ) return;
-    if ( maxlen <= 0 ) maxlen = 0x7FFFFFFF;
-    if ( width < 0 ) width = 0;
-    if ( width > maxlen ) width = maxlen;
-    if ( width > 0 ) {
-        // need to see how long the string is
-        char const* cp = string;
-        while ( ( *cp != '\0' ) && ( width > 0 ) ) {
-            cp++;
-            width--;
-        }
-        // print the leading spaces
-        pad(width);
-    }
-    while ( ( *string != '\0' ) && ( maxlen > 0 ) ) {
-        print_char(*string);
-        string++;
-        maxlen--;
-    }
-}
-
-#endif // 0
 

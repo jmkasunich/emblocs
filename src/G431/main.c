@@ -73,7 +73,6 @@ int main (void) {
     char *hello = "\nHello, world!\n";
     double d1, d2, d3;
     float f1, f2, f3;
-    int prec;
     uint32_t start, end;
 
     platform_init();
@@ -116,39 +115,39 @@ int main (void) {
     }
 */
     d1 = 0.0;
-    print_double(d1, 6);
+    print_double(d1, 6, '+');
     print_char('\n');
-    print_double_sci(d1, 6);
+    print_double_sci(d1, 6, '+');
     print_char('\n');
 
     d1 = -0.0;
-    print_double(d1, 6);
+    print_double(d1, 6, '+');
     print_char('\n');
-    print_double_sci(d1, 6);
+    print_double_sci(d1, 6, '+');
     print_char('\n');
 
     d1 = 0.0;
-    print_double(d1, 0);
+    print_double(d1, 0, '+');
     print_char('\n');
-    print_double_sci(d1, 0);
+    print_double_sci(d1, 0, '+');
     print_char('\n');
 
     d1 = -0.0/0.0;
-    print_double(d1, 0);
+    print_double(d1, 0, '+');
     print_char('\n');
-    print_double_sci(d1, 0);
+    print_double_sci(d1, 0, '+');
     print_char('\n');
 
     d1 = 1.0/0.0;
-    print_double(d1, 0);
+    print_double(d1, 0, '+');
     print_char('\n');
-    print_double_sci(d1, 0);
+    print_double_sci(d1, 0, '+');
     print_char('\n');
 
     d1 = -1.0/0.0;
-    print_double(d1, 0);
+    print_double(d1, 0, '+');
     print_char('\n');
-    print_double_sci(d1, 0);
+    print_double_sci(d1, 0, '+');
     print_char('\n');
 
 
@@ -161,11 +160,11 @@ int main (void) {
     print_string("float: ");
     print_int_dec(end-start, ' ');
     print_string(" clocks to get answer ");
-    print_double_sci(f1, 10);
+    print_double_sci(f1, 10, '+');
     print_string(" - ");
-    print_double_sci(f2, 10);
+    print_double_sci(f2, 10, '+');
     print_string(" = ");
-    print_double_sci(f3, 10);
+    print_double_sci(f3, 10, '+');
     print_string("\n");
     d1 = tsc_read();
     d2 = tsc_read();
@@ -175,11 +174,11 @@ int main (void) {
     print_string("double: ");
     print_int_dec(end-start, ' ');
     print_string(" clocks to get answer ");
-    print_double_sci(d1, 10);
+    print_double_sci(d1, 10, '+');
     print_string(" - ");
-    print_double_sci(d2, 10);
+    print_double_sci(d2, 10, '+');
     print_string(" = ");
-    print_double_sci(d3, 10);
+    print_double_sci(d3, 10, '+');
     print_string("\n");
 
     while(1) {}

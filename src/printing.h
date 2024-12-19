@@ -41,6 +41,7 @@ int snprint_string(char *buf, int size, const char *string);
  * returns number of characters written, not including terminating '\0'
  */
 int snprint_int_dec(char *buf, int size, int32_t value, char sign);
+#define PRINT_INT_DEC_MAXLEN    (12)
 
 /***************************************************************
  * writes 'value' to 'buf' in decimal
@@ -48,11 +49,12 @@ int snprint_int_dec(char *buf, int size, int32_t value, char sign);
  * returns number of characters written, not including terminating '\0'
  */
 int snprint_uint_dec(char *buf, int size, uint32_t value);
+#define PRINT_UINT_DEC_MAXLEN    (11)
 
 /***************************************************************
  * writes least significant 'digits' of 'value' to 'buf' in hex
  * 'size' must be big enough to hold digits and group separators;
- * 17 bytes is always big enough
+ * 16 bytes is always big enough (8 digits, 7 separators, terminator)
  * 'digits' can be 1-8, other values become 8; always shows the
  * requested number of digits (leading zeros are always displayed)
  * if 'group' is non-zero, inserts a '-' between each 'group' digits
@@ -60,47 +62,61 @@ int snprint_uint_dec(char *buf, int size, uint32_t value);
  * returns number of characters written, not including terminating '\0'
  */
 int snprint_uint_hex(char *buf, int size, uint32_t value, int digits, int group, int uc);
+#define PRINT_UINT_HEX_MAXLEN    (16)
 
 /***************************************************************
  * writes least significant 'digits' of 'value' to 'buf' in binary
  * 'size' must be big enough to hold digits and group separators;
- * 65 bytes is always big enough, or 34 if 'group' = 0
+ * 64 bytes is always big enough, (32 bits, 31 separators, terminator)
+ * or 33 if 'group' = 0 (32 bits plus terminator)
  * 'digits' can be 1-32, other values become 32; always shows the
  * requested number of digits (leading zeros are always displayed)
  * if 'group' is non-zero, inserts a '-' between each 'group' digits
  * returns number of characters written, not including terminating '\0'
  */
 int snprint_uint_bin(char *buf, int size, uint32_t value, int digits, int group);
+#define PRINT_UINT_BIN_MAXLEN    (64)
 
 /***************************************************************
  * writes 'ptr' to 'buf' in hex
- * 'size' must be at least 9 characters
+ * 'size' must be at least 9 characters (8 digits + terminator)
  * returns number of characters written, not including terminating '\0'
  */
 int snprint_ptr(char *buf, int size, void *ptr);
+#define PRINT_PTR_MAXLEN    (9)
 
 /***************************************************************
  * writes 'value' to 'buf' as a floating point number
  * 'size' must be big enough to hold the converted number
- * 30 bytes is always big enough
+ * 28 bytes is always big enough (sign + 10 digits + '.' +
+ * 'precision' fractional digits + terminator)
  * 'precision' digits are printed after the decimal point;
  * 'precision' can be 0-15, other values become 15
  * values larger than 2^32 or smaller than 1e-6 are printed
  * in scientific notation using snprint_double_sci()
+ * negative numbers always start with '-'; if 'sign' is '+' or
+ * ' ', positive numbers start with 'sign', otherwise positive
+ * numbers have no prefix.  
  * returns number of characters written, not including terminating '\0'
  */
-int snprint_double(char *buf, int size, double value, int precision);
+int snprint_double(char *buf, int size, double value, int precision, char sign);
+#define PRINT_DOUBLE_MAXLEN    (28)
 
 /***************************************************************
  * writes 'value' to 'buf' in scientific notation
  * 'size' must be big enough to hold the converted number
- * 25 bytes is always big enough
+ * 24 bytes is always big enough (sign + 1 digit + '.' +
+ * 'precision' fractional digits + 'e' + sign + 3 digit 
+ * exponent + terminator)
  * 'precision' digits are printed after the decimal point;
  * 'precision' can be 0-15, other values become 15
+ * negative numbers always start with '-'; if 'sign' is '+' or
+ * ' ', positive numbers start with 'sign', otherwise positive
+ * numbers have no prefix.  
  * returns number of characters written, not including terminating '\0'
  */
-int snprint_double_sci(char *buf, int size, double value, int precision);
-
+int snprint_double_sci(char *buf, int size, double value, int precision, char sign);
+#define PRINT_DOUBLE_SCI_MAXLEN    (24)
 
 
 
@@ -116,6 +132,15 @@ void print_char(char c);
  * no truncation or padding
  */
 void print_string(const char *string);
+
+/***************************************************************
+ * print a string with padding and/or truncation
+ *   truncates at maxlen unless maxlen = 0
+ *   pads to at least 'width' using spaces
+ *   if 'align' is 'R', prints padding, then string
+ *   if 'align' is 'L', prints string, then padding
+ */
+void print_string_width(const char *string, int width, int maxlen, char align);
 
 /***************************************************************
  * sends 'value' to the console as a decimal integer
@@ -159,36 +184,42 @@ void print_ptr(void const * ptr);
  * values larger than 2^32 or smaller than 1e-6 are printed
  * in scientific notation using print_double_sci()
  */
-void print_double(double value, int precision);
+void print_double(double value, int precision, char sign);
 
 /***************************************************************
  * sends 'value' to the console in scientific notation
  * 'precision' digits are printed after the decimal point;
  * 'precision' can be 0-15, other values become 15
  */
-void print_double_sci(double value, int precision);
+void print_double_sci(double value, int precision, char sign);
 
 
-// formatted printing
-//   this is trimmed down printf, supports only the following:
-//     %c, %s, %d, %x, %X, %p, %P
-//     (eventually %f, %e, %g, but not yet)
-//     adds %b (binary) which is not part of normal printf
-//   does NOT return the number of characters or any error code
+/***************************************************************
+ * fprmatted printing
+ *   this is a scaled down printf(), suppports only:
+ *     %c, %s, %d, %u, %x, %X, %b, %p, %f, %e
+ *   it does not support '*' for width or precision
+ *   it parses but ignores the '#' alternate format flag
+ *   it parses but ingores the "'" separator flag
+ *   it neither parses nor supports the 'length' field
+ *   toe followng formats vary from the standard:
+ *     %x, %X  Ignores all flags.  Always prints leading zeros.
+ *             Always prints 'width' digits; 'width' defaults 
+ *             to 8 if not specified.  Prints in groups of  
+ *             'precision' digits if 'precision' is specified.
+ *     %b      Ignores all flags.  Always prints leading zeros.
+ *             Always prints 'width' bits; 'width' defaults to
+ *             32 if not specified.  Prints in groups of  
+ *             'precision' bits if 'precision' is specified.
+ *     %f      Uses scientific notation for numbers bigger than
+ *             2^32 or smaller than approximately 1e-6
+ * it does NOT return the number of characters or any error code
+ */
 #define printf printf_
 void printf_(char const *fmt, ...);
-
-// print a string with padding and/or truncation
-//   pads to at least 'width' using spaces
-//   truncates at maxlen unless maxlen = 0
-void print_string_width(const char *string, int width, int maxlen);
 
 // memory dump
 // prints 16 bytes per line, hex and ASCII
 void print_memory(void const *mem, uint32_t len);
-
-
-void pow_test(void);
-
 
 #endif // PRINTING_H
