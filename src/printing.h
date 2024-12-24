@@ -125,7 +125,7 @@ int snprint_double_sci(char *buf, int size, double value, int precision, char si
  * all of the console printing functions in this header
  * eventually use print_char() to send their output
  */
-void print_char(char c);
+extern void (* print_char)(char c);
 
 /***************************************************************
  * sends 'string' to the console

@@ -2,6 +2,7 @@
 
 #include "printing.h"
 #include <float.h>
+#include <assert.h>
 
 #define DEC_INT_TEST(value, sign)  dec_int_test(value, sign, #value "," #sign)
 #define DEC_UINT_TEST(value)  dec_uint_test(value, #value)
@@ -10,6 +11,90 @@
 #define HEX_PTR_TEST(value)  hex_ptr_test(value, #value)
 #define DBL_TEST(value, precision, sign)  dbl_test(value, precision, sign, #value "," #precision "," #sign)
 #define DBL_SCI_TEST(value, precision, sign)  dbl_sci_test(value, precision, sign, #value "," #precision "," #sign)
+
+#define PRINTF_TEST0(format, expect)  do {\
+                                        capture_buffer_start();\
+                                        uint32_t start = tsc_read();\
+                                        printf_(format);\
+                                        uint32_t end = tsc_read();\
+                                        capture_buffer_end();\
+                                        printf_results(#format, expect, end-start);\
+                                      } while (0)
+#define PRINTF_TEST1(format, value1, expect)  do {\
+                                        capture_buffer_start();\
+                                        uint32_t start = tsc_read();\
+                                        printf_(format, value1);\
+                                        uint32_t end = tsc_read();\
+                                        capture_buffer_end();\
+                                        printf_results(#format "," #value1, expect, end-start);\
+                                      } while (0)
+#define PRINTF_TEST2(format, value1, value2, expect)  do {\
+                                        capture_buffer_start();\
+                                        uint32_t start = tsc_read();\
+                                        printf_(format, value1, value2);\
+                                        uint32_t end = tsc_read();\
+                                        capture_buffer_end();\
+                                        printf_results(#format "," #value1 "," #value2, expect, end-start);\
+                                      } while (0)
+
+
+/* buffer used to capture console output for checking */
+#define CAPTURE_BUFFER_SIZE 1000
+char capture_buffer[CAPTURE_BUFFER_SIZE];
+int capture_buffer_len;
+
+void print_to_buffer(char c)
+{
+    capture_buffer[capture_buffer_len++] = c;
+    capture_buffer[capture_buffer_len] = '\0';
+    assert(capture_buffer_len < (CAPTURE_BUFFER_SIZE-2));
+}
+
+void capture_buffer_start(void)
+{
+    capture_buffer_len = 0;
+    capture_buffer[capture_buffer_len] = '\0';
+    print_char = print_to_buffer;
+}
+
+void capture_buffer_end(void)
+{
+    print_char = cons_tx_wait;
+}
+
+void capture_buffer_print(void)
+{
+    char *cp = capture_buffer;
+
+    while ( *cp != '\0' ) {
+        cons_tx_wait(*cp++);
+    }
+}
+
+void printf_results(char *args, char *expect, uint32_t clocks)
+{
+    char *r, *e;
+
+    r = capture_buffer;
+    e = expect;
+    while ( ( *r == *e ) && ( *e != '\0' ) ) { r++; e++; };
+    if ( *r != *e ) {
+        print_string("FAIL: ");
+    } else {
+        print_string("pass: ");
+    }
+    print_string("in ");
+    print_uint_dec(clocks);
+    print_string(" clocks, printf(");
+    print_string(args);
+    print_string(") produced '");
+    capture_buffer_print();
+    if ( *r != *e ) {
+        print_string("', expected '");
+        print_string(expect);
+    }
+    print_string("'\n");
+}
 
 
 void __assert_func (const char * file, int line, const char * funct, const char *expr)
@@ -190,7 +275,7 @@ int main (void) {
     HEX_PTR_TEST((void *)0xDEADBEEF);
     HEX_PTR_TEST((void *)0x13579BDF);
     HEX_PTR_TEST(NULL);
-*/
+
     DBL_TEST(-1.0/0.0, 16, '+');
     DBL_TEST(-0.0/0.0, 16, '\0');
     DBL_TEST(-0.0, 7, ' ');
@@ -266,6 +351,35 @@ int main (void) {
     DBL_SCI_TEST(1234567890098765.4321, 13, '+');
     DBL_SCI_TEST(123456789009876543.21, 15, '+');
     DBL_SCI_TEST(12345678900987654321.0, 0, '+');
+*/
+    PRINTF_TEST0("Hello, world", "Hello, world");
+    PRINTF_TEST1("this is a character: '%c'", 'X', "this is a character: 'X'");
+    PRINTF_TEST1("this is a string: '%s'", "testing", "this is a string: 'testing'");
+    PRINTF_TEST1("left aligned: '%-9s'", "string", "left aligned: 'string   '");
+    PRINTF_TEST1("right aligned: '%9s'", "string", "right aligned: '   string'");
+    PRINTF_TEST1("left aligned and truncated: '%-7.3s'", "string", "left aligned and truncated: 'str    '");
+    PRINTF_TEST1("long: '%6s'", "long-string", "long: 'long-string'");
+    PRINTF_TEST1("integer: '%d'", 12345, "integer: '12345'");
+    PRINTF_TEST1("integer: '%d'", -12345, "integer: '-12345'");
+    PRINTF_TEST2("'%8d', '%8d'", 12345, -12345, "'   12345', '  -12345'");
+    PRINTF_TEST2("'%-8d', '%-8d'", 12345, -12345, "'12345   ', '-12345  '");
+    PRINTF_TEST2("'% d', '% d'", 12345, -12345, "' 12345', '-12345'");
+    PRINTF_TEST2("'%+d', '%+d'", 12345, -12345, "'+12345', '-12345'");
+    PRINTF_TEST2("'%+8d', '%+-8d'", 12345, 12345, "'  +12345', '+12345  '");
+    PRINTF_TEST2("'%+08d', '%08d'", 12345, 12345, "'+0012345', '00012345'");
+    PRINTF_TEST2("'%08d', '%-08d'", -12345, -12345, "'-0012345', '-12345  '");
+    PRINTF_TEST2("%d, %d", 0, 0xFFFFFFFF, "0, -1");
+    PRINTF_TEST2("%d, %d", 0x80000000, 0x7FFFFFFF, "-2147483648, 2147483647");
+    PRINTF_TEST1("unsigned: '%u'", 12345, "unsigned: '12345'");
+    PRINTF_TEST2("%u, %u", 0, 0xFFFFFFFF, "0, 4294967295");
+    PRINTF_TEST2("%u, %u", 0x80000000, 0x7FFFFFFF, "2147483648, 2147483647");
+    PRINTF_TEST2("'%+8u', '%-8d'", 12345, 12345, "'   12345', '12345   '");
+    PRINTF_TEST2("'%08u', '%-08u'", 12345, 12345, "'00012345', '12345   '");
+    PRINTF_TEST2("'%x', '%X'", 0x2468ACE0, 0x0ECA8642, "'2468ace0', '0ECA8642'");
+    PRINTF_TEST2("'%.4x', '%4X'", 0x2468ACE0, 0x0ECA8642, "'2468-ace0', '8642'");
+    PRINTF_TEST2("'%b', '%12.5b'", 0x2468ACE0, 0x0ECA8642, "'00100100011010001010110011100000', '01-10010-00010'");
+    PRINTF_TEST2("'%.8b', '%8b'", 0x2468ACE0, 0x0ECA8642, "'00100100-01101000-10101100-11100000', '01000010'");
+    PRINTF_TEST1("ptr: %p", (void *)(0x00aa1234), "ptr: 00AA1234");
 
  
 /*    

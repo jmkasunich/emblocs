@@ -364,13 +364,15 @@ int snprint_double_sci(char *buf, int size, double value, int precision, char si
 
 
 
-
-
-
+#if 1 
+void (* print_char)(char c) = cons_tx_wait;
+#else
 void print_char(char c)
 {
     cons_tx_wait(c);
 }
+#endif
+
 
 void print_string(const char *string)
 {
@@ -499,7 +501,7 @@ void printf_(char const *fmt, ...)
         pad = ' ';
         do {
             // look at next char
-            switch (*(fmt++)) {
+            switch (*(++fmt)) {
             case '-':
                 align = 'L';
                 break;
@@ -556,9 +558,11 @@ void printf_(char const *fmt, ...)
             len = snprint_ptr(buf, sizeof(buf), (void *)va_arg(ap, void *));
             break;
         case 'f':
+            if ( prec < 0 ) prec = 8;
             len = snprint_double(buf, sizeof(buf), (double)va_arg(ap, double), prec, sign);
             break;
         case 'e':
+            if ( prec < 0 ) prec = 8;
             len = snprint_double_sci(buf, sizeof(buf), (double)va_arg(ap, double), prec, sign);
             break;
         default:
