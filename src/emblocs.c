@@ -251,7 +251,7 @@ void list_all_signals(void)
             }
             case BL_TYPE_FLOAT: {
                 bl_float_t *p = GET_DPTR(sig->dpwt);
-                printf ( "float represented by 0x%8x", (uint32_t)*p );
+                printf ( "%f", *p );
                 break;
             }
             case BL_TYPE_S32: {
@@ -422,7 +422,7 @@ void list_all_pins_in_instance(bl_inst_meta_t *inst)
             }
             case BL_TYPE_FLOAT: {
                 bl_pin_float_t *p = (bl_pin_float_t *)pin_addr;
-                printf ( "float represented by 0x%8x", (uint32_t)*p->pin );
+                printf ( "%f", *p->pin );
                 if ( p->pin != &p->dummy ) {
                     sig_addr = p->pin;
                 }
