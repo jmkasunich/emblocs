@@ -11,7 +11,7 @@ void __assert_func (const char * file, int line, const char * funct, const char 
     print_string(") at ");
     print_string(file);
     print_string(":");
-    print_uint_dec(line, 0);
+    print_uint_dec(line);
     print_string(" in function ");
     print_string(funct);
     print_string("()\n");
@@ -42,11 +42,13 @@ int main (void) {
     reg |= 0x01 << GPIO_MODER_MODE6_Pos;
     LED_PORT->MODER = reg;
     
-    printf(hello);
+    print_string(hello);
+    delay(500);
     printf("sum2_def is at %p, has %d pins at %p\n", 
         &bl_sum2_def, bl_sum2_def.pin_count, bl_sum2_def.pin_defs);
     printf("and a function at %p\n", bl_sum2_def.funct_defs[0].fp);
     printf("sum2_def is at %p, has %d pins\n", &bl_sum2_def, bl_sum2_def.pin_count);
+
 
     print_memory((void *)hello, 512);
     bl_newinst(&bl_sum2_def, "comp1");

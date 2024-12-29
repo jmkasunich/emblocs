@@ -20,14 +20,38 @@ include local.mk
 # build mode
 BUILD_TYPE ?= debug
 
+BUILD_DIR 				:= ../build
+OBJ_DIR 				:= $(BUILD_DIR)/obj
+DEPS_DIR 				:= $(BUILD_DIR)/deps
+TEMP_DIR 				:= $(BUILD_DIR)/temp
+
 ALL_SRCS := 
 ALL_TARGETS :=
 
 # target definitions
+PRINT_TEST_TARGET := printing-test.hex
+PRINT_TEST_SRCS := printing-test.c G431/startup_stm32g431kbtx.s G431/system_stm32g4xx.c G431/platform_g431.c printing.c
+PRINT_TEST_LIBS :=
+PRINT_TEST_C_SRC := $(filter %.c, $(PRINT_TEST_SRCS))
+PRINT_TEST_ASM_SRC := $(filter %.s, $(PRINT_TEST_SRCS))
+PRINT_TEST_OBJECTS := $(addprefix $(OBJ_DIR)/, $(notdir $(PRINT_TEST_C_SRC:.c=.o) $(PRINT_TEST_ASM_SRC:.s=.o)))
+
+ALL_SRCS += $(PRINT_TEST_SRCS)
+ALL_TARGETS += $(PRINT_TEST_TARGET)
+
+
+
+
 FOO_TARGET := main.hex
 FOO_SRCS := G431/main.c G431/startup_stm32g431kbtx.s G431/system_stm32g4xx.c G431/platform_g431.c printing.c emblocs.c
 FOO_SRCS += tmp_mux2.c tmp_sum2.c tmp_perftimer.c
 FOO_LIBS :=
+FOO_C_SRC := $(filter %.c, $(FOO_SRCS))
+FOO_ASM_SRC := $(filter %.s, $(FOO_SRCS))
+FOO_OBJECTS := $(addprefix $(OBJ_DIR)/, $(notdir $(FOO_C_SRC:.c=.o) $(FOO_ASM_SRC:.s=.o)))
+
+
+
 FOO_PKG := $(PACKAGE_ROOT)/STM32Cube_FW_G4_V1.6.0
 SRC_DIRS := . G431
 
@@ -137,10 +161,6 @@ endif
 C_SRC					:= $(filter %.c, $(ALL_SRCS))
 ASM_SRC					:= $(filter %.s, $(ALL_SRCS))
 
-BUILD_DIR 				:= ../build
-OBJ_DIR 				:= $(BUILD_DIR)/obj
-DEPS_DIR 				:= $(BUILD_DIR)/deps
-TEMP_DIR 				:= $(BUILD_DIR)/temp
 #INC_DIRS 				:= $(call find_includes_in_dir, $(SRC_DIRS))
 INC_DIRS 				:= $(SRC_DIRS)
 INC_DIRS				+= $(FOO_PKG)/Drivers/CMSIS/Include
@@ -194,16 +214,29 @@ $(OBJ_DIR)/%.o : G431/%.s
 
 # linker rule
 
-$(BUILD_DIR)/main.elf : $(OBJECTS) | $(DIRS)
+$(BUILD_DIR)/main.elf : $(FOO_OBJECTS) | $(DIRS)
 	@echo ' '
 	@echo 'Building $(@)'
-	@echo 'from $(OBJECTS)'
+	@echo 'from $(FOO_OBJECTS)'
 	@echo 'Invoking: Cross ARM C Linker'
 	$(CC) \
 		-Xlinker -Map=$(patsubst %.elf,%.map,$(@)) \
 		$(LDFLAGS) \
 		$(LDSCRIPTS) \
-		-o $(@) $(OBJECTS)
+		-o $(@) $(FOO_OBJECTS)
+	@echo 'Finished building: $@'
+	@echo ' '
+
+$(BUILD_DIR)/printing-test.elf : $(PRINT_TEST_OBJECTS) | $(DIRS)
+	@echo ' '
+	@echo 'Building $(@)'
+	@echo 'from $(PRINT_TEST_OBJECTS)'
+	@echo 'Invoking: Cross ARM C Linker'
+	$(CC) \
+		-Xlinker -Map=$(patsubst %.elf,%.map,$(@)) \
+		$(LDFLAGS) \
+		$(LDSCRIPTS) \
+		-o $(@) $(PRINT_TEST_OBJECTS)
 	@echo 'Finished building: $@'
 	@echo ' '
 
@@ -239,6 +272,7 @@ list :
 	@echo 'ASM_SRC = $(ASM_SRC)'
 	@echo 'C_SRC = $(C_SRC)'
 	@echo 'OBJECTS = $(OBJECTS)'
+	@echo 'PRINT_TEST_OBJECTS = $(PRINT_TEST_OBJECTS)'
 	@echo 'LDSCRIPTS = $(LDSCRIPTS)'
 	@echo 'DIRS = $(DIRS)'
 	@echo 'AUTODEPS = $(AUTODEPS)'

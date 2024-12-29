@@ -2,23 +2,376 @@
  * 
  * printing.c - lightweight console printing functions
  * 
- * These functions are optimized to use minimum RAM; things are
- * sent to the console as early as possible instead of building
- * the complete string in a buffer.
- *
+ * see printing.h for API details
+ * 
  * *************************************************************/
 
 #include "printing.h"
 #include "platform.h"
 #include <stdarg.h>
+#include <assert.h>
+#include <math.h>
 
-// print a character
+//#define HANDLE_DENORM
+#define NEW_FRAC_PART
+
+
+
+
+
+int snprint_string(char *buf, int size, const char *string)
+{
+    char c;
+    int n = 0;
+
+    if ( string == NULL ) return 0;
+    // make sure there will be room for the terminating '\0'
+    size--;
+    // copy characters to buffer
+    while ( ( n < size ) && ( (c = string[n]) != '\0' ) ) {
+        buf[n++] = c;
+    }
+    // terminate the string
+    buf[n] = '\0';
+    return n;
+}
+
+/* private helper for printing decimal numbers
+   prints unsigned number, padding with leading zeros if less than 'digits'
+   assumes that caller has validated 'size'
+ */
+static int snprint_uint_dec_helper(char *buf, int size, uint32_t value, int digits)
+{
+    int digit, len;
+    char *start, *end, tmp;
+
+    if ( digits > 10 ) digits = 10;
+    // calculate digits in reverse order, then reverse them
+    // init start and end pointers
+    start = end = buf;
+    // final digit must be printed even if value = 0
+    do {
+        digit = value % 10;
+        value = value / 10;
+        *(end++) = (char)('0' + digit);
+        digits--;
+        // loop till no more digits
+    } while ( value > 0 );
+    // pad if needed
+    while ( digits-- > 0 ) {
+        *(end++) = '0';
+    }
+    len = end - start;
+    // terminate the string and point at last non-terminator character
+    *(end--) = '\0';
+    // reverse the string
+    while ( end > start ) {
+        tmp = *end;
+        *(end--) = *start;
+        *(start++) = tmp;
+    }
+    return len;
+}
+
+int snprint_int_dec(char *buf, int size, int32_t value, char sign)
+{
+    int len = 0;
+
+    assert(size >= PRINT_INT_DEC_MAXLEN);
+    if ( value < 0 ) {
+        buf[len++] = '-';
+        value = -value;
+    } else if ( ( sign == ' ' ) || ( sign == '+' ) ) {
+        buf[len++] = sign;
+    }
+    len += snprint_uint_dec_helper(buf+len, size-len, value, 0);
+    return len;
+}
+
+int snprint_uint_dec(char *buf, int size, uint32_t value)
+{
+    assert(size >= PRINT_UINT_DEC_MAXLEN);
+    return snprint_uint_dec_helper(buf, size, value, 0);
+}
+
+// private common code for binary, hex, and pointer printing
+static int snprint_uint_bin_hex(char *buf, int size, uint32_t value, int base, int digits, int group, int uc)
+{
+    char *cp, alpha;
+    int digit, dividers, group_cnt;
+    int mask, shift, maxdigits;
+
+    if ( base == 2 ) {
+        mask = 0x01;
+        shift = 1;
+        maxdigits = 32;
+    } else if ( base == 16 ) {
+        mask = 0x0F;
+        shift = 4;
+        maxdigits = 8;
+    } else {
+        assert(0);
+        return 0;  // make compiler happy
+    }
+    if ( ( digits < 1 ) || ( digits > maxdigits ) ) digits = maxdigits;
+    if ( ( group < 1 ) || ( group > maxdigits ) ) group = maxdigits;
+    if ( group < digits ) {
+        dividers = (digits - 1) / group;
+    } else {
+        dividers = 0;
+    }
+    alpha = uc ? 'A' : 'a';
+    assert(size > (digits + dividers + 1));
+    // start at the end and work backwards
+    cp = buf + digits + dividers;
+    *(cp--) = '\0';
+    group_cnt = group;
+    // build the number
+    for ( int n = digits ; n > 0 ; n-- ) {
+        if ( group_cnt <= 0 ) {
+            *(cp--) = '-';
+            group_cnt = group;
+        }
+        group_cnt--;
+        digit = value & mask;
+        *(cp--) = (char)(( digit > 9 ) ? ( alpha + digit - 10 ) : ( '0' + digit ) );
+        value >>= shift;
+    }
+    return digits + dividers;
+}
+
+int snprint_uint_hex(char *buf, int size, uint32_t value, int digits, int group, int uc)
+{
+    return snprint_uint_bin_hex(buf, size, value, 16, digits, group, uc);
+}
+
+int snprint_uint_bin(char *buf, int size, uint32_t value, int digits, int group)
+{
+    return snprint_uint_bin_hex(buf, size, value, 2, digits, group, 0);
+}
+
+int snprint_ptr(char *buf, int size, void *ptr)
+{
+    return snprint_uint_bin_hex(buf, size, (uint32_t)ptr, 16, 8, 0, 1);
+}
+
+
+/* private lookup table for rounding - I want to add 0.5 * 10^^(-precision),
+ * where legal values of 'precision' are 0 to 15.  Single precision is
+ * good enough, so just make a 16-entry float lookup table.
+ */
+static float round_factor[] = {
+    0.5e0f,   0.5e-1f,  0.5e-2f,  0.5e-3f,
+    0.5e-4f,  0.5e-5f,  0.5e-6f,  0.5e-7f,
+    0.5e-8f,  0.5e-9f,  0.5e-10f, 0.5e-11f,
+    0.5e-12f, 0.5e-13f, 0.5e-14f, 0.5e-15f
+};
+
+#ifdef NEW_FRAC_PART
+/* private lookup table for printing 'chunks' of the fractional part
+ * I need to multiply by 10^^(digits), where 'digits' is 1 to 9
+ * C will promote integers as needed and these all fit in 32 bits so
+ * just make a 10-entry uint32_t lookup table
+ */
+static uint32_t pow10[] = {
+    1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000
+};
+#endif
+
+
+typedef union {
+    struct {
+        uint64_t mantissa : 52;
+        unsigned int exponent : 11;
+        unsigned int sign : 1;
+    } raw;
+    double d;
+} ieee754_double_union_t;
+
+/* private function to deal with floating point special cases
+ *   (nan, infinity, zero, negative)
+ * returns number of chars written into buffer
+ * if 'sign' is '+' or ' ', positive numbers are prefixed with 'sign'
+ * negative numbers are always prefixed with '-'
+ * if return value is 0 or 1, *value is positive and non-zero and the appropriate
+ * prefix is in the buffer
+ * if return value is greater than 1, value was zero, nan, or inf and the 
+ * appropriate string is in the buffer
+ * 'precision' and 'use_sci' describe the string to be output for zero
+ * caller must ensure that the buffer can hold the specified representation
+ * of zero, either '0.<precision>' or '0.<precision>e+0', as well as '-nan'
+ * or '-inf'; this function does not know the buffer size
+ */
+
+static int snprint_double_handle_special_cases(char *buf, double *value, int precision, int use_sci, char sign)
+{
+    int len = 0;
+    ieee754_double_union_t tmp;
+
+    tmp.d = *value;
+    if ( tmp.raw.sign ) {
+        // negative
+        tmp.raw.sign = 0;
+        *value = tmp.d;
+        buf[len++] = '-';
+    } else {
+        if ( ( sign == '+' ) || ( sign == ' ' ) ) {
+            buf[len++] = sign;
+        }
+    }
+    if ( tmp.raw.exponent == 0 ) {
+#ifdef HANDLE_DENORM
+        if ( tmp.raw.mantissa != 0 ) {
+            len += snprint_string(buf+len, 7, "denorm");
+        } else {
+#endif
+            buf[len++] = '0';
+            if ( precision > 0 ) {
+                buf[len++] = '.';
+                while ( precision-- > 0 ) {
+                    buf[len++] = '0';
+                }
+            }
+            if ( use_sci ) {
+                len += snprint_string(buf+len, 5, "e+0");
+            }
+#ifdef HANDLE_DENORM
+        }
+#endif
+    } else if ( tmp.raw.exponent == 0x7FF ) {
+        if ( tmp.raw.mantissa != 0 ) {
+            len += snprint_string(buf+len, 4, "nan");
+        } else {
+            len += snprint_string(buf+len, 4, "inf");
+        }
+    }
+    buf[len] = '\0';
+    return len;
+}
+
+/* private helper function that prints a floating point number
+ * assumes that snprint_double_handle_special_cases() has been called
+ * assumes that buffer size has been checked
+ * assumes that value is greater than zero and less than +4.294967294e+9
+ * assumes that appropriate rounding has been done
+ */
+static int snprint_double_helper(char *buf, int size, double value, int precision)
+{
+    int len;
+    uint32_t int_part;
+#ifdef NEW_FRAC_PART
+    int digits;
+#else
+    char digit;
+#endif
+
+   // split into integer and fractional parts
+    int_part = (uint32_t)value;
+    value -= int_part;
+    len = snprint_uint_dec_helper(buf, size, int_part, 0);
+    if ( precision > 0 ) {
+        buf[len++] = '.';
+#ifdef NEW_FRAC_PART
+        do {
+            digits = ( precision > 9 ) ? 9 : precision;
+            value *= pow10[digits];
+            int_part = (uint32_t)value;
+            value -= int_part;
+            len += snprint_uint_dec_helper(buf+len, size-len, int_part, digits);
+            precision -= digits;
+        } while ( precision > 0 );
+#else
+        do {
+            value = value * 10.0;
+            digit = (char)value;
+            value -= digit;
+            buf[len++] = '0' + digit;
+        } while ( --precision > 0 );
+#endif // NEW_FRAC_PART
+    }
+    // terminate the string
+    buf[len] = '\0';
+    return len;
+}
+
+
+int snprint_double(char *buf, int size, double value, int precision, char sign)
+{
+    int len;
+    ieee754_double_union_t tmp;
+
+    if ( precision > 15 ) {
+        precision = 15;
+    } else if ( precision < 0 ) {
+        precision = 0;
+    }
+    /* check buffer size - worst case is '-' plus 10-digit integer
+       plus '.' plus 'precision' trailing digits plus terminator */
+    assert(size > (precision + 13));
+    len = snprint_double_handle_special_cases(buf, &value, precision, 0, sign);
+    if ( len > 1 ) return len;
+    tmp.d = value;
+    if ( ( tmp.raw.exponent > 1054 ) || ( tmp.raw.exponent < 1003 ) ) {
+        // too large or too small for regular printing
+        return len + snprint_double_sci(buf+len, size-len, value, precision, '\0');
+    }
+    // perform rounding to specified precision
+    value = value + round_factor[precision];
+    // print it
+    return len + snprint_double_helper(buf+len, size-len, value, precision);
+}
+
+int snprint_double_sci(char *buf, int size, double value, int precision, char sign)
+{
+    int len;
+    int exponent;
+
+    if ( precision > 15 ) {
+        precision = 15;
+    } else if ( precision < 0 ) {
+        precision = 0;
+    }
+    /* check buffer size - worst case is '-' plus 1 digit plus '.' plus
+       'precision' trailing digits plus 'e+123' plus terminator */
+    assert(size > (precision + 9));
+    len = snprint_double_handle_special_cases(buf, &value, precision, 1, sign);
+    if ( len > 1 ) return len;
+    // determine the exponent
+    exponent = 0;
+    while ( value < 1.0 ) {
+        value *= 10.0;
+        exponent -= 1;
+    }
+    while ( value >= 10.0 ) {
+        value *= 0.1;
+        exponent += 1;
+    }
+    // perform rounding to specified precision
+    value = value + round_factor[precision];
+    // there is a small chance that rounding pushed it over 10.0
+    if ( value >= 10.0 ) {
+        value *= 0.1;
+        exponent += 1;
+    }
+    // print the mantissa
+    len += snprint_double_helper(buf+len, size-len, value, precision);
+    // and the exponent
+    buf[len++] = 'e';
+    len += snprint_int_dec(buf+len, size-len, exponent, '+');
+    return len;
+}
+
+
+#ifdef PRINTING_TEST 
+void (* print_char)(char c) = cons_tx_wait;
+#else
 void print_char(char c)
 {
     cons_tx_wait(c);
 }
+#endif
 
-// print a string, no truncation or padding
+
 void print_string(const char *string)
 {
     if ( string == NULL ) return;
@@ -28,190 +381,94 @@ void print_string(const char *string)
     }
 }
 
-// private helper function for padding with spaces
-static void pad(int spaces)
+// private helper for printing repeated characters
+// prints 'n' copies of 'c'
+static void print_padding(int n, char c)
 {
-    while ( spaces > 0 ) {
-        print_char(' ');
-        spaces--;
+    while ( n > 0 ) {
+        print_char(c);
+        n--;
     }
 }
 
-// print a string with padding and/or truncation
-void print_string_width(char const *string, int width, int maxlen)
+void print_string_width(char const *string, int width, int maxlen, char align)
 {
+    int len;
+
     if ( string == NULL ) return;
     if ( maxlen <= 0 ) maxlen = 0x7FFFFFFF;
     if ( width < 0 ) width = 0;
-    if ( width > maxlen ) width = maxlen;
-    if ( width > 0 ) {
-        // need to see how long the string is
-        char const* cp = string;
-        while ( ( *cp != '\0' ) && ( width > 0 ) ) {
-            cp++;
-            width--;
-        }
-        // print the leading spaces
-        pad(width);
+    len = 0;
+    while ( string[len] != '\0' ) {
+        len++;
     }
-    while ( ( *string != '\0' ) && ( maxlen > 0 ) ) {
-        print_char(*string);
-        string++;
-        maxlen--;
+    if ( len > maxlen ) {
+        len = maxlen;
     }
-}
-
-// private helper function for decimal numbers
-static void print_dec(uint32_t n, int width, char sign)
-{
-    char buffer[12], *cp;
-    int digit;
-
-    if ( width < 0 ) width = 0;
-    // point to end of buffer & terminate
-    cp = &buffer[11];
-    *cp = '\0';
-    // final digit must be printed even if n = 0
-    do {
-        digit = n % 10;
-        n = n / 10;
-        *(--cp) = (char)('0' + digit);
-        width--;
-        // loop till no more digits
-    } while ( n > 0 );
-    if ( sign != '\0' ) {
-        *(--cp) = sign;
-        width--;
+    if ( align == 'R' ) {
+        print_padding(width-len, ' ');
     }
-    // add padding if needed
-    pad(width);
-    // print the buffer
-    print_string(cp);
-}
-
-// print a signed decimal integer
-void print_int_dec(int32_t n, int width, char sign)
-{
-    if ( n < 0 ) {
-        // handle negative
-        print_dec(-n, width, '-');
-    } else {
-        if ( ( sign == ' ') || ( sign == '+') ) {
-            print_dec(n, width, sign);
-        } else {
-            print_dec(n, width, '\0');
-        }
+    for ( int n = 0 ; n < len ; n++ ) {
+        print_char(string[n]);
+    }
+    if ( align == 'L' ) {
+        print_padding(width-len, ' ');
     }
 }
 
-// print an unsigned decimal integer
-void print_uint_dec(uint32_t n, int width)
+void print_int_dec(int32_t value, char sign)
 {
-    print_dec(n, width, '\0');
+    char buffer[PRINT_INT_DEC_MAXLEN];
+    snprint_int_dec(buffer, 16, value, sign);
+    print_string(buffer);
+}
+
+void print_uint_dec(uint32_t value)
+{
+    char buffer[PRINT_UINT_DEC_MAXLEN];
+    snprint_uint_dec(buffer, 16, value);
+    print_string(buffer);
+}
+
+void print_uint_hex(uint32_t value, int digits, int group, int uc)
+{
+    char buffer[PRINT_UINT_HEX_MAXLEN];
+    snprint_uint_bin_hex(buffer, 20, value, 16, digits, group, uc);
+    print_string(buffer);
+}
+
+void print_uint_bin(uint32_t value, int digits, int group)
+{
+    char buffer[PRINT_UINT_BIN_MAXLEN];
+    snprint_uint_bin_hex(buffer, 68, value, 2, digits, group, 0);
+    print_string(buffer);
+}
+
+void print_ptr(void const * ptr)
+{
+    print_uint_hex((uint32_t)ptr, 8, 0, 1);
+}
+
+void print_double(double value, int precision, char sign)
+{
+    char buffer[PRINT_DOUBLE_MAXLEN];
+    snprint_double(buffer, 32, value, precision, sign);
+    print_string(buffer);
+}
+
+void print_double_sci(double value, int precision, char sign)
+{
+    char buffer[PRINT_DOUBLE_SCI_MAXLEN];
+    snprint_double_sci(buffer, 32, value, precision, sign);
+    print_string(buffer);
 }
 
 
-// translation tables for hex printing
-static char const itox[] = {
-    '0', '1', '2', '3', '4', '5', '6', '7',
-    '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'
-};
-
-static char const itoX[] = {
-    '0', '1', '2', '3', '4', '5', '6', '7',
-    '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'
-};
-
-// print a hex integer
-void print_int_hex(int32_t n, int width, int digits, int uc)
-{
-    print_uint_hex((uint32_t) n, width, digits, uc);
-}
-
-void print_uint_hex(uint32_t n, int width, int digits, int uc)
-{
-    char buffer[12], *cp;
-    char const *xlate;
-    int digit;
-
-    if ( width < 0 ) width = 0;
-    if ( ( digits <= 0 ) || ( digits > 8 ) ) digits = 8;
-    width -= digits;
-    // send padding if needed
-    pad(width);
-    // select translation table
-    xlate = uc ? itoX : itox;
-    // point to end of buffer and terminate it
-    cp = &buffer[11];
-    *cp = '\0';
-    // build the number
-    while ( digits > 0 ) {
-        digit = n & 0x0000000F;
-        *(--cp) = xlate[digit];
-        digits--;
-        n >>= 4;
-    }
-    print_string(cp);
-}
-
-// print a pointer
-void print_ptr(void const * ptr, int width)
-{
-    print_uint_hex((uint32_t)(ptr), width, 8, 1);
-}
-
-// print a binary integer
-//   both versions work the same; the int version avoids a warning
-//   displays low 'digits', left padded with space to 'width'
-void print_int_bin(int32_t n, int width, int digits, int group)
-{
-    print_uint_bin((uint32_t) n, width, digits, group);
-}
-
-void print_uint_bin(uint32_t n, int width, int digits, int group)
-{
-    uint32_t mask;
-    int next_sep = 0;
-
-    if ( width < 0 ) width = 0;
-    if ( ( digits <= 0 ) || ( digits > 32 ) ) digits = 32;
-    if ( ( group <= 0 ) || ( group >= digits ) ) group = 0;
-    width -= digits;
-     if ( group > 0 ) {
-        int num_sep = (digits-1) / group;
-        width -= num_sep;
-        next_sep = num_sep * group;        
-    }
-    // send padding if needed
-    pad(width);
-    // output the number
-    mask = 1 << ( digits - 1 );
-    while ( digits > 0 ) {
-        // send group separator if needed
-        if ( digits == next_sep ) {
-            print_char('.');
-            next_sep -= group;
-        }
-        if ( n & mask ) {
-            print_char('1');
-        } else {
-            print_char('0');
-        }
-        mask >>= 1;
-        digits--;
-    }
-}
-
-// private helpers for printf
-static inline int _is_digit(char ch)
-{
-  return (ch >= '0') && (ch <= '9');
-}
-
-static unsigned int _atoi(char const ** str)
+// private helper for printf
+static unsigned int parse_int(char const ** str)
 {
   unsigned int i = 0U;
-  while (_is_digit(**str)) {
+  while ( (**str >= '0') && (**str <= '9') ) {
     i = i * 10U + (unsigned int)(*((*str)++) - '0');
   }
   return i;
@@ -222,8 +479,10 @@ static unsigned int _atoi(char const ** str)
 void printf_(char const *fmt, ...)
 {
     va_list ap;
-    int width, prec;
-    char sign;
+    int loop, width, prec;
+    char align, sign, pad;
+    char buf[PRINT_UINT_BIN_MAXLEN];
+    int len;
 
     va_start(ap, fmt);
     while ( *fmt != '\0' ) {
@@ -232,60 +491,111 @@ void printf_(char const *fmt, ...)
             print_char(*(fmt++));
             continue;
         }
-        // look at next char
-        fmt++;
-        if ( ( *fmt == '+' ) || ( *fmt == ' ') ) {
-            sign = *(fmt++);
-        } else {
-            sign = '\0';
-        }
+        // '%' found
+        // loop till all flags parsed
+        loop = 1;
+        align = 'R';
+        sign = '\0';
+        pad = ' ';
+        do {
+            // look at next char
+            switch (*(++fmt)) {
+            case '-':
+                align = 'L';
+                break;
+            case '+':
+                sign = '+';
+                break;
+            case ' ':
+                if ( sign != '+' ) {
+                    sign = ' ';
+                }
+                break;
+            case '0':
+                pad = '0';
+                break;
+            case '#':
+            case '\'':
+                break;
+            default:
+                loop = 0;
+                break;
+            }
+        } while ( loop );
         width = 0;
-        if ( _is_digit(*fmt) ) {
-            width = _atoi(&fmt);
-        }
         prec = -1;
+        width = parse_int(&fmt);
         if ( *fmt == '.' ) {
             fmt++;
-            if ( _is_digit(*fmt) ) {
-                prec = _atoi(&fmt);
-            }
+            prec = parse_int(&fmt);
         }
+        len = 0;
         switch (*fmt) {
-        case 'd':
-            print_int_dec((int32_t)va_arg(ap, int32_t), width, sign);
-            break;
-        case 'u':
-            print_uint_dec((uint32_t)va_arg(ap, uint32_t), width);
-            break;
-        case 'x':
-            print_uint_hex((uint32_t)va_arg(ap, uint32_t), width, prec, 0);
-            break;
-        case 'X':
-            print_uint_hex((uint32_t)va_arg(ap, uint32_t), width, prec, 1);
-            break;
-        case 's':
-            print_string_width((char *)va_arg(ap, char *), width, prec);
-            break;
         case 'c':
             print_char((char)va_arg(ap, int));
             break;
-        case 'p':
-            print_ptr((void *)va_arg(ap, void *), width);
+        case 's':
+            print_string_width((char *)va_arg(ap, char *), width, prec, align);
+            break;
+        case 'd':
+            len = snprint_int_dec(buf, sizeof(buf), (int32_t)va_arg(ap, int32_t), sign);
+            break;
+        case 'u':
+            len = snprint_uint_dec(buf, sizeof(buf), (uint32_t)va_arg(ap, uint32_t));
+            break;
+        case 'x':
+            len = snprint_uint_hex(buf, sizeof(buf), (uint32_t)va_arg(ap, uint32_t), width, prec, 0);
+            break;
+        case 'X':
+            len = snprint_uint_hex(buf, sizeof(buf), (uint32_t)va_arg(ap, uint32_t), width, prec, 1);
             break;
         case 'b':
-            print_uint_bin((uint32_t)va_arg(ap, uint32_t), width, prec, 0);
+            len = snprint_uint_bin(buf, sizeof(buf), (uint32_t)va_arg(ap, uint32_t), width, prec);
             break;
-        case 'B':
-            print_uint_bin((uint32_t)va_arg(ap, uint32_t), width, prec, 8);
+        case 'p':
+            len = snprint_ptr(buf, sizeof(buf), (void *)va_arg(ap, void *));
+            break;
+        case 'f':
+            if ( prec < 0 ) prec = 8;
+            len = snprint_double(buf, sizeof(buf), (double)va_arg(ap, double), prec, sign);
+            break;
+        case 'e':
+            if ( prec < 0 ) prec = 8;
+            len = snprint_double_sci(buf, sizeof(buf), (double)va_arg(ap, double), prec, sign);
             break;
         default:
             print_char(*fmt);
             break;
         }
+        if ( len > 0 ) {
+            // there is something in the buffer to be printed
+            if ( align == 'L' ) {
+                // left align is simple, print buffer then pad with spaces
+                print_string(buf);
+                print_padding(width-len, ' ');
+            } else {
+                // right align, a bit more complex
+                char *cp = buf;
+                if ( pad == '0' ) {
+                    // pad with leading zeros, need to print sign (if any) first,
+                    // then the zeros, and finally the rest of the string
+                    char c = *buf;
+                    if ( ( c == '-' ) || ( c == '+' ) || ( c == ' ' ) ) {
+                        // print sign, point to rest of string
+                        print_char(c);
+                        cp++;
+                    }
+                }
+                print_padding(width-len, pad);
+                print_string(cp);
+            }
+        }
         fmt++;
     }
     va_end(ap);
 }   
+
+
 
 void print_memory(void const *mem, uint32_t len)
 {
@@ -298,12 +608,13 @@ void print_memory(void const *mem, uint32_t len)
     row = (void *)((uint32_t)(start) & 0xFFFFFFF0);
     while ( row <= end ) {
         print_char('\n');
-        print_uint_hex((uint32_t)row, 8, 8, 1);
+        print_uint_hex((uint32_t)row, 8, 1, 0);
         print_string(" :");
         addr = row;
         for ( n = 0 ; n < 16 ; n++ ) {
             if ( ( addr >= start ) && ( addr <= end ) ) {
-                print_uint_hex(*(addr++), 3, 2, 0);
+                print_char(' ');
+                print_uint_hex(*(addr++), 2, 0, 0);
             } else {
                 print_string("   ");
                 addr++;
@@ -328,8 +639,5 @@ void print_memory(void const *mem, uint32_t len)
     }
     print_char('\n');
 }
-
-
-
 
 
