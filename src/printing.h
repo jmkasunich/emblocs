@@ -26,6 +26,8 @@
 
 #include <stdint.h>
 
+#define PRINTING_TEST
+
 /***************************************************************
  * writes 'string' to 'buf', truncating if needed to fit in 'size'
  * returns number of characters written, not including terminating '\0'
@@ -119,13 +121,17 @@ int snprint_double_sci(char *buf, int size, double value, int precision, char si
 #define PRINT_DOUBLE_SCI_MAXLEN    (24)
 
 
-
 /***************************************************************
  * sends 'c' to the console
  * all of the console printing functions in this header
  * eventually use print_char() to send their output
  */
+#ifdef PRINTING_TEST 
 extern void (* print_char)(char c);
+#else
+void print_char(char c);
+#endif
+
 
 /***************************************************************
  * sends 'string' to the console

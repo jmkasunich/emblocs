@@ -12,6 +12,12 @@
 #include <assert.h>
 #include <math.h>
 
+//#define HANDLE_DENORM
+#define NEW_FRAC_PART
+
+
+
+
 
 int snprint_string(char *buf, int size, const char *string)
 {
@@ -150,9 +156,6 @@ int snprint_ptr(char *buf, int size, void *ptr)
 }
 
 
-#define NEW_FRAC_PART
-
-
 /* private lookup table for rounding - I want to add 0.5 * 10^^(-precision),
  * where legal values of 'precision' are 0 to 15.  Single precision is
  * good enough, so just make a 16-entry float lookup table.
@@ -199,8 +202,6 @@ typedef union {
  * of zero, either '0.<precision>' or '0.<precision>e+0', as well as '-nan'
  * or '-inf'; this function does not know the buffer size
  */
-
-//#define HANDLE_DENORM
 
 static int snprint_double_handle_special_cases(char *buf, double *value, int precision, int use_sci, char sign)
 {
@@ -361,10 +362,7 @@ int snprint_double_sci(char *buf, int size, double value, int precision, char si
 }
 
 
-
-
-
-#if 1 
+#ifdef PRINTING_TEST 
 void (* print_char)(char c) = cons_tx_wait;
 #else
 void print_char(char c)
