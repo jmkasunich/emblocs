@@ -59,7 +59,7 @@ static void *alloc_from_meta_pool(int32_t size)
  * list management
  */
 
-static int name_comp(char const *name1, char const *name2)
+static int name_cmp(char const *name1, char const *name2)
 {
     unsigned char const *s1 = (unsigned char const *) name1;
     unsigned char const *s2 = (unsigned char const *) name2;
@@ -87,7 +87,7 @@ bl_list_entry_t *find_name_in_list(char const *name, bl_list_entry_t *list)
 
     p = list;
     while ( p != NULL ) {
-        if ( name_comp(p->name, name) == 0 ) {
+        if ( name_cmp(p->name, name) == 0 ) {
             return p;
         }
         p = p->next;
@@ -106,7 +106,7 @@ bl_list_entry_t **find_insertion_point(char const *name, bl_list_entry_t **list)
             // reached end of list, insert here
             return pp;
         }
-        cmp = name_comp((*pp)->name, name);
+        cmp = name_cmp((*pp)->name, name);
         if ( cmp == 0 ) {
             // name is already present, can't insert
             return NULL;
@@ -180,7 +180,7 @@ bl_sig_meta_t *bl_newsig(bl_type_t type, char const * sig_name)
 static bl_pin_def_t const *find_pin_def_by_name(char const *pin_name, bl_comp_def_t *comp)
 {
     for ( int n = 0 ; n < comp->pin_count ; n++ ) {
-        if ( name_comp(pin_name, comp->pin_defs[n].name) == 0 ) {
+        if ( name_cmp(pin_name, comp->pin_defs[n].name) == 0 ) {
             return &(comp->pin_defs[n]);
         }
     }
