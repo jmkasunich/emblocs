@@ -30,6 +30,42 @@ extern bl_comp_def_t bl_mux2_def;
 extern bl_comp_def_t bl_sum2_def;
 extern bl_comp_def_t bl_perftimer_def;
 
+bl_inst_def_t bl_instances[] = {
+    { "comp1", &bl_sum2_def },
+    { "sum21", &bl_sum2_def },
+    { "timer", &bl_perftimer_def },
+    { "comp4", &bl_mux2_def },
+    { NULL, NULL }
+};
+
+char *bl_signals_float[] = {
+    "fp_sig",
+    "output",
+    NULL
+};
+
+char *bl_signals_bit[] = {
+    "sel_sig",
+    NULL
+};
+
+char *bl_signals_s32[] = {
+    NULL
+};
+
+char *bl_signals_u32[] = {
+    "clocks",
+    NULL
+};
+
+bl_link_def_t bl_links[] = {
+    { "clocks", "timer", "time" },
+    { "fp_sig", "comp1", "out" },
+    { "fp_sig", "comp4", "in1" },
+    { "sel_sig", "comp4", "sel" },
+    { NULL, NULL, NULL }
+};
+
 
 int main (void) {
     uint32_t reg;
@@ -51,22 +87,12 @@ int main (void) {
 
 
     print_memory((void *)hello, 512);
-    bl_newinst(&bl_sum2_def, "comp1");
-    bl_newinst(&bl_sum2_def, "sum21");
-    bl_newinst(&bl_perftimer_def, "timer");
-    bl_newinst(&bl_mux2_def, "comp4");
-    bl_newsig(BL_TYPE_BIT, "sel_sig");
-    bl_newsig(BL_TYPE_FLOAT, "fp_sig");
-    bl_newsig(BL_TYPE_FLOAT, "output");
-    bl_newsig(BL_TYPE_U32, "clocks");
     list_all_instances();
     list_all_signals();
-    bl_linksp("clocks", "timer", "time");
-    bl_linksp("fp_sig", "comp1", "out");
-    bl_linksp("fp_sig", "comp4", "in1");
-    bl_linksp("sel_sig", "comp4", "sel");
+    emblocs_init();
     list_all_instances();
     list_all_signals();
+
     
 
     while (1) {

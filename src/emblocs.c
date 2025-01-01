@@ -235,6 +235,46 @@ void bl_linksp(char const *sig_name, char const *inst_name, char const *pin_name
 }
 
 
+void emblocs_init(void)
+{
+    bl_inst_def_t *idp;  // instance definition pointer
+    char **snp;  // signal name pointer
+    bl_link_def_t *ldp;  // link defintion pointer
+
+    idp = bl_instances;
+    while ( idp->name != NULL ) {
+        bl_newinst(idp->comp_def, idp->name);
+        idp++;
+    }
+    snp = bl_signals_float;
+    while ( *snp != NULL ) {
+        bl_newsig(BL_TYPE_FLOAT, *snp);
+        snp++;
+    }
+    snp = bl_signals_bit;
+    while ( *snp != NULL ) {
+        bl_newsig(BL_TYPE_BIT, *snp);
+        snp++;
+    }
+    snp = bl_signals_s32;
+    while ( *snp != NULL ) {
+        bl_newsig(BL_TYPE_S32, *snp);
+        snp++;
+    }
+    snp = bl_signals_u32;
+    while ( *snp != NULL ) {
+        bl_newsig(BL_TYPE_U32, *snp);
+        snp++;
+    }
+    ldp = bl_links;
+    while ( ldp->sig_name != NULL ) {
+        bl_linksp(ldp->sig_name, ldp->inst_name, ldp->pin_name);
+        ldp++;
+    }
+}
+
+
+
 void list_all_signals(void)
 {
     bl_sig_meta_t *sig;

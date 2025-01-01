@@ -189,4 +189,31 @@ void list_all_pins_in_instance(bl_inst_meta_t *inst);
 void list_pin_signal(void *sig_addr);
 
 
+
+/* arrays that the application must supply to define the system */
+
+typedef struct inst_def_s {
+    char *name;
+    bl_comp_def_t *comp_def;
+} bl_inst_def_t;
+
+typedef struct link_def_s {
+    char *sig_name;
+    char *inst_name;
+    char *pin_name;
+} bl_link_def_t;
+
+extern bl_inst_def_t bl_instances[];
+
+extern char *bl_signals_float[];
+extern char *bl_signals_bit[];
+extern char *bl_signals_s32[];
+extern char *bl_signals_u32[];
+
+extern bl_link_def_t bl_links[];
+
+/* function that reads the above and builds the system */
+void emblocs_init(void);
+
+
 #endif // EMBLOCS_H
