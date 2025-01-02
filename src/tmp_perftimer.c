@@ -7,7 +7,7 @@
 #include "platform.h"
 
 // instance data structure - one copy per instance in RAM
-typedef struct bl_mux2_inst_s {
+typedef struct bl_perftimer_inst_s {
     bl_pin_u32_t time;
 	uint32_t tsc;
 } bl_perftimer_inst_t;
