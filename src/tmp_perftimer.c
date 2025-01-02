@@ -25,7 +25,7 @@ static void bl_perftimer_stop_funct(void *ptr);
 // array of function definitions - one copy in FLASH
 static bl_funct_def_t const bl_perftimer_functs[] = {
     { "start", &bl_perftimer_start_funct },
-    { "start", &bl_perftimer_stop_funct }
+    { "stop", &bl_perftimer_stop_funct }
 };
 
 // component definition - one copy in FLASH
