@@ -3,6 +3,7 @@
 #include "emblocs.h"
 #include "printing.h"
 #include "main.h"
+#include "linked_list.h"
 
 void __assert_func (const char * file, int line, const char * funct, const char *expr)
 {
@@ -77,7 +78,11 @@ int main (void) {
     reg &= ~GPIO_MODER_MODE6_Msk;
     reg |= 0x01 << GPIO_MODER_MODE6_Pos;
     LED_PORT->MODER = reg;
-    
+
+    print_string(hello);
+
+    linked_list_test();
+
     print_string(hello);
     delay(500);
     printf("sum2_def is at %p, has %d pins at %p\n", 
