@@ -28,6 +28,8 @@ typedef struct bl_list_entry_s {
 bl_list_entry_t *find_name_in_list(char const *name, bl_list_entry_t *list);
 bl_list_entry_t **find_insertion_point(char const *name, bl_list_entry_t **list);
 
+
+
 /****************************************************************
  * the four pin/signal types
  */
@@ -138,6 +140,20 @@ typedef struct bl_pin_u32_s {
     bl_u32_t *pin;
     bl_u32_t dummy;
 } bl_pin_u32_t;
+
+typedef union bl_pin_u {
+    bl_pin_bit_t b;
+    bl_pin_float_t f;
+    bl_pin_s32_t s;
+    bl_pin_u32_t u;
+} bl_pin_t;
+
+typedef struct bl_pin_meta_s {
+    bl_pin_t *pin;
+    char *pin_name;
+    char *inst_name;
+    struct bl_pin_meta_s *next;
+} bl_pin_meta_t;
 
 typedef struct bl_inst_meta_s {
     bl_list_entry_t header;
