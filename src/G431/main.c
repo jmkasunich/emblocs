@@ -27,6 +27,8 @@ static void delay (unsigned int time) {
         for (volatile unsigned int j = 0; j < 20000; j++);
 }
 
+#if 0
+
 extern bl_comp_def_t bl_mux2_def;
 extern bl_comp_def_t bl_sum2_def;
 extern bl_comp_def_t bl_perftimer_def;
@@ -67,6 +69,7 @@ bl_link_def_t bl_links[] = {
     { NULL, NULL, NULL }
 };
 
+#endif
 
 int main (void) {
     uint32_t reg;
@@ -85,16 +88,17 @@ int main (void) {
 
     print_string(hello);
     delay(500);
-    printf("sum2_def is at %p, has %d pins at %p\n", 
-        &bl_sum2_def, bl_sum2_def.pin_count, bl_sum2_def.pin_defs);
-    printf("and a function at %p\n", bl_sum2_def.funct_defs[0].fp);
-    printf("sum2_def is at %p, has %d pins\n", &bl_sum2_def, bl_sum2_def.pin_count);
+//    printf("sum2_def is at %p, has %d pins at %p\n", 
+//        &bl_sum2_def, bl_sum2_def.pin_count, bl_sum2_def.pin_defs);
+//    printf("and a function at %p\n", bl_sum2_def.funct_defs[0].fp);
+//    printf("sum2_def is at %p, has %d pins\n", &bl_sum2_def, bl_sum2_def.pin_count);
 
 
     print_memory((void *)hello, 512);
     list_all_instances();
     list_all_signals();
     emblocs_init();
+    printf("init complete\n");
     list_all_instances();
     list_all_signals();
 

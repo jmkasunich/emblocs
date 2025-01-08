@@ -1,21 +1,20 @@
 #include "emblocs.h"
+#include "linked_list.h"
 #include <assert.h>
+#include <string.h>
 #include "printing.h"
 
 /***********************************************
  * memory pools
  */
 
-#define BLOCS_RT_POOL_SIZE 1024
-#define BLOCS_META_POOL_SIZE 512
+static uint32_t bl_rt_pool[BL_RT_POOL_SIZE >> 2]  __attribute__ ((aligned(4)));
+static uint32_t *rt_pool_next = bl_rt_pool;
+static int32_t rt_pool_avail = sizeof(bl_rt_pool)/4;
 
-uint8_t blocs_rt_pool[BLOCS_RT_POOL_SIZE & ~3]  __attribute__ ((aligned(4)));
-static uint8_t *rt_pool_next = blocs_rt_pool;
-static int32_t rt_pool_avail = sizeof(blocs_rt_pool);
-
-uint8_t blocs_meta_pool[BLOCS_META_POOL_SIZE & ~3]  __attribute__ ((aligned(4)));
-static uint8_t *meta_pool_next = blocs_meta_pool;
-static int32_t meta_pool_avail = sizeof(blocs_meta_pool);
+static uint32_t bl_meta_pool[BL_META_POOL_SIZE >> 2]  __attribute__ ((aligned(4)));
+static uint32_t *meta_pool_next = bl_meta_pool;
+static int32_t meta_pool_avail = sizeof(bl_meta_pool)/4;
 
 static void *alloc_from_rt_pool(int32_t size)
 {
@@ -32,7 +31,7 @@ static void *alloc_from_rt_pool(int32_t size)
     retval = rt_pool_next;
     rt_pool_next += size;
     rt_pool_avail -= size;
-    printf(" %p, %d left\n", retval, rt_pool_avail);
+    printf(" @ %p, %d left\n", retval, rt_pool_avail);
     return retval;
 }
 
@@ -54,6 +53,145 @@ static void *alloc_from_meta_pool(int32_t size)
     printf(" %p, %d left\n", retval, meta_pool_avail);
     return retval;
 }
+
+
+/* linked list helpers for instance data */
+static int inst_meta_cmp_node_key(void *node, void *key)
+{
+    bl_inst_meta_t *np = node;
+    char *kp = key;
+    return strcmp(np->name, kp);
+}
+
+static int inst_meta_cmp_nodes(void *node1, void *node2)
+{
+    bl_inst_meta_t  *np1 = node1;
+    bl_inst_meta_t  *np2 = node2;
+    return strcmp(np1->name, np2->name);
+}
+
+static void inst_meta_print_node(void *node)
+{
+    bl_inst_meta_t *np = node;
+
+    printf("FIXME - bl_inst_meta_t\n",  np, np->next, np->name );
+}
+
+/* root of instance linked list */
+static bl_inst_meta_t *instance_root;
+
+/* returns the offset of 'addr' from the base of the respective pool,
+   masked so it can go into a bitfield without a conversion warning */
+#define TO_RT_OFFSET(addr) ((uint32_t)((uint32_t *)(addr)-bl_rt_pool) & BL_MAX_RT_OFFSET)
+#define TO_META_OFFSET(addr) ((uint32_t)((uint32_t *)(addr)-bl_meta_pool) & BL_MAX_META_OFFSET)
+/* masks 'size' so it can go into a bit field without a conversion warning */
+#define TO_INST_SIZE(size) ((size) & BL_INST_DATA_MAX_SIZE)
+
+
+bl_inst_meta_t *bl_inst_new(char const *name, uint32_t data_size)
+{
+    bl_inst_meta_t *meta;
+    void *data;
+    int ll_result;
+
+    assert(data_size < BL_INST_DATA_MAX_SIZE);
+    // allocate memory for metadata
+    meta = alloc_from_meta_pool(sizeof(bl_inst_meta_t));
+    // allocate memory for realtime data
+    data = alloc_from_rt_pool(data_size);
+    // initialise metadata fields
+    meta->data_offset = TO_RT_OFFSET(data);
+    meta->data_size = TO_INST_SIZE(data_size);
+    meta->name = name;
+    meta->pin_list = NULL;
+    // add metadata to master instance list
+    ll_result = ll_insert((void **)(&instance_root), (void *)meta, inst_meta_cmp_nodes);
+    assert(ll_result == 0);
+    return meta;
+}
+
+
+/* linked list helpers for pin data */
+static int pin_meta_cmp_node_key(void *node, void *key)
+{
+    bl_pin_meta_t *np = node;
+    char *kp = key;
+    return strcmp(np->name, kp);
+}
+
+static int pin_meta_cmp_nodes(void *node1, void *node2)
+{
+    bl_pin_meta_t  *np1 = node1;
+    bl_pin_meta_t  *np2 = node2;
+    return strcmp(np1->name, np2->name);
+}
+
+static void pin_meta_print_node(void *node)
+{
+    bl_inst_meta_t *np = node;
+
+    printf("FIXME - bl_pin_meta_t\n",  np, np->next, np->name );
+}
+
+
+bl_pin_meta_t *bl_pin_new(bl_inst_meta_t *inst, char const *name, bl_type_t type, bl_dir_t dir, bl_sig_data_t **ptr_addr)
+{
+    bl_pin_meta_t *meta;
+    bl_sig_data_t *data;
+    int ll_result;
+
+    // allocate memory for metadata
+    meta = alloc_from_meta_pool(sizeof(bl_pin_meta_t));
+    // allocate memory for dummy signal
+    data = alloc_from_rt_pool(sizeof(bl_sig_data_t));
+    // link pin to dummy signal
+    *ptr_addr = data;
+    // initialize dummy signal to zero
+    // FIXME - this is pedantic, I know that 0x00000000 is zero for all types
+    // so I could do 'data->u = 0;' without the switch
+    // but if I ever want non-zero default values I'll need the switch
+    switch ( type ) {
+        case BL_TYPE_BIT: {
+            data->b = 0;
+            break;
+        }
+        case BL_TYPE_FLOAT: {
+            data->b = 0.0;
+            break;
+        }
+        case BL_TYPE_S32: {
+            data->s = 0;
+            break;
+        }
+        case BL_TYPE_U32: {
+            data->u = 0U;
+            break;
+        }
+        default: {
+            assert(0);
+            break;
+        }
+    }
+    // initialise metadata fields
+    meta->ptr_offset = TO_RT_OFFSET(ptr_addr);
+    meta->dummy_offset = TO_RT_OFFSET(data);
+    meta->data_type = type;
+    meta->pin_dir = dir;
+    meta->name = name;
+    // add metadata to instances's pin list
+    ll_result = ll_insert((void **)(&(inst->pin_list)), (void *)meta, pin_meta_cmp_nodes);
+    assert(ll_result == 0);
+    return meta;
+}
+
+
+
+
+
+
+
+
+#if 0
 
 /***********************************************
  * list management
@@ -80,6 +218,7 @@ static int name_cmp(char const *name1, char const *name2)
     } while (c1 == c2);
     return c1 - c2;
 }
+
 
 bl_list_entry_t *find_name_in_list(char const *name, bl_list_entry_t *list)
 {
@@ -154,26 +293,63 @@ bl_inst_meta_t *inst_list = NULL;
  * named signal list functions
  */
 
+static int sig_meta_cmp_node_key(void *node, void *key)
+{
+    bl_sig_meta_t *np = node;
+    char *kp = key;
+    return strcmp(np->name, kp);
+}
+
+static int sig_meta_cmp_nodes(void *node1, void *node2)
+{
+    bl_sig_meta_t  *np1 = node1;
+    bl_sig_meta_t  *np2 = node2;
+    return strcmp(np1->name, np2->name);
+}
+
+static void sig_meta_print_node(void *node)
+{
+    bl_sig_meta_t *np = node;
+    printf("sig_meta_t node at %p; next at %p, type: %s, data at %p, name: '%s'\n",
+        np, np->next, types[GET_TYPE(np->dpwt)], GET_DPTR(np->dpwt), np->name );
+}
+
+static int sig_meta_insert(bl_sig_meta_t **root, bl_sig_meta_t *node)
+{
+    return ll_insert((void **)root, (void *)node, sig_meta_cmp_nodes);
+}
+
+static int sig_meta_print_list(bl_sig_meta_t **root)
+{
+    return ll_traverse((void **)root, sig_meta_print_node);
+}
+
+static bl_sig_meta_t *sig_meta_find(bl_sig_meta_t **root, char *key)
+{
+    return ll_find((void **)root, (void *)key, sig_meta_cmp_node_key);
+}
+
+static bl_sig_meta_t *sig_meta_delete(bl_sig_meta_t **root, char *key)
+{
+    return ll_delete((void **)root, (void *)key, sig_meta_cmp_node_key);
+}
+
 bl_sig_meta_t *bl_newsig(bl_type_t type, char const * sig_name)
 {
-    bl_list_entry_t **pp, *new;
     bl_sig_meta_t *sig_meta;
     bl_sig_data_t *sig_data;
+    int insert_result;
 
-    // find insertion point in list
-    pp = find_insertion_point(sig_name, (bl_list_entry_t **)&sig_list);
-    assert(pp != NULL);
     // allocate memory for metadata
     sig_meta = alloc_from_meta_pool(sizeof(bl_sig_meta_t));
     // allocate memory for realtime data
     sig_data = alloc_from_rt_pool(sizeof(bl_sig_data_t));
-    // insert metadata into list
-    new = (bl_list_entry_t *)sig_meta;
-    new->name = sig_name;
-    new->next = *pp;
-    *pp = new;
     // make metadata point at the realtime data
     sig_meta->dpwt = MAKE_DPWT(sig_data, type);
+    sig_meta->name = sig_name;
+    // insert metadata into list
+    insert_result = sig_meta_insert(&sig_list, sig_meta);
+    assert( (insert_result==0) );
     return sig_meta;
 }
 
@@ -266,6 +442,8 @@ void emblocs_init(void)
         bl_newsig(BL_TYPE_U32, *snp);
         snp++;
     }
+printf("signal_init_done\n");
+list_all_signals();
     ldp = bl_links;
     while ( ldp->sig_name != NULL ) {
         bl_linksp(ldp->sig_name, ldp->inst_name, ldp->pin_name);
@@ -273,16 +451,17 @@ void emblocs_init(void)
     }
 }
 
-
-
 void list_all_signals(void)
 {
     bl_sig_meta_t *sig;
 
+    printf("named signal linked list:\n");
+    sig_meta_print_list(&sig_list);
+    printf("old listing function:\n");
     sig = sig_list;
     while ( sig != NULL ) {
         printf ( "Sig %10s: %s, meta at %p, rt at %p, value = ", 
-            sig->header.name, types[GET_TYPE(sig->dpwt)], sig, GET_DPTR(sig->dpwt));
+            sig->name, types[GET_TYPE(sig->dpwt)], sig, GET_DPTR(sig->dpwt));
         switch ( GET_TYPE(sig->dpwt)) {
             case BL_TYPE_BIT: {
                 bl_bit_t *p = GET_DPTR(sig->dpwt);
@@ -311,7 +490,7 @@ void list_all_signals(void)
         }
         printf("\n");
         list_signal_pins(sig);
-        sig = (bl_sig_meta_t *)sig->header.next;
+        sig = (bl_sig_meta_t *)sig->next;
     }
 }
 
@@ -427,7 +606,7 @@ bl_inst_meta_t *bl_newinst(bl_comp_def_t *comp_def, char const *inst_name)
 void list_all_instances(void)
 {
     bl_inst_meta_t *inst;
-
+printf("list_all_instances\n");
     inst = inst_list;
     while ( inst != NULL ) {
         printf ( "Inst %10s: type %10s, meta at %p, rt at %p\n", inst->header.name, inst->comp_def->name, inst, inst->inst_data);
@@ -441,7 +620,7 @@ void list_all_pins_in_instance(bl_inst_meta_t *inst)
     bl_pin_def_t const *pindefs;
     int num_pins;
     void *inst_data, *pin_addr, *sig_addr;
-
+printf("list_all_pins_in_instance\n");
     pindefs = inst->comp_def->pin_defs;
     num_pins = inst->comp_def->pin_count;
     inst_data = inst->inst_data;
@@ -508,15 +687,17 @@ void list_all_pins_in_instance(bl_inst_meta_t *inst)
 void list_pin_signal(void *sig_addr)
 {
     bl_sig_meta_t *sig;
+printf("list_pin_signal\n");
 
     // need to scan the signal list to find the match
     sig = sig_list;
     while ( sig != NULL ) {
         if ( sig_addr == GET_DPTR(sig->dpwt) ) {
-            printf("%s", sig->header.name);
+            printf("%s", sig->name);
             return;
         }
-        sig = (bl_sig_meta_t *)sig->header.next;
+        sig = (bl_sig_meta_t *)sig->next;
     }
 }
 
+#endif // 0
