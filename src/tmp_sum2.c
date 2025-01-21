@@ -16,12 +16,12 @@ _Static_assert((sizeof(bl_sum2_inst_t) < 32767), "instance structure too large")
 
 // array of pin definitions - one copy in FLASH
 static bl_pin_def_t const bl_sum2_pins[] = {
-    { "in0", BL_TYPE_FLOAT, BL_DIR_IN, BL_OFFSET(bl_sum2_inst_t, in0)},
-    { "gain0", BL_TYPE_FLOAT, BL_DIR_IN, BL_OFFSET(bl_sum2_inst_t, gain0)},
-    { "in1", BL_TYPE_FLOAT, BL_DIR_IN, BL_OFFSET(bl_sum2_inst_t, in1)},
-    { "gain1", BL_TYPE_FLOAT, BL_DIR_IN, BL_OFFSET(bl_sum2_inst_t, gain1)},
-    { "offset", BL_TYPE_FLOAT, BL_DIR_IN, BL_OFFSET(bl_sum2_inst_t, offset)},
-    { "out", BL_TYPE_FLOAT, BL_DIR_OUT, BL_OFFSET(bl_sum2_inst_t, out)}
+    { "in0", BL_TYPE_FLOAT, BL_DIR_IN, offsetof(bl_sum2_inst_t, in0)},
+    { "gain0", BL_TYPE_FLOAT, BL_DIR_IN, offsetof(bl_sum2_inst_t, gain0)},
+    { "in1", BL_TYPE_FLOAT, BL_DIR_IN, offsetof(bl_sum2_inst_t, in1)},
+    { "gain1", BL_TYPE_FLOAT, BL_DIR_IN, offsetof(bl_sum2_inst_t, gain1)},
+    { "offset", BL_TYPE_FLOAT, BL_DIR_IN, offsetof(bl_sum2_inst_t, offset)},
+    { "out", BL_TYPE_FLOAT, BL_DIR_OUT, offsetof(bl_sum2_inst_t, out)}
 };
 
 static void bl_sum2_funct(void *ptr);
@@ -45,6 +45,6 @@ bl_comp_def_t const bl_sum2_def = {
 static void bl_sum2_funct(void *ptr)
 {
     bl_sum2_inst_t *p = (bl_sum2_inst_t *)ptr;
-    *(p->out.pin) = *(p->in0.pin) * *(p->gain0.pin) + *(p->in1.pin) * *(p->gain1.pin) + *(p->offset.pin);
+    *(p->out) = *(p->in0) * *(p->gain0) + *(p->in1) * *(p->gain1) + *(p->offset);
 }
 

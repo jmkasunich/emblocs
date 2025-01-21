@@ -95,12 +95,12 @@ int main (void) {
 
 
     print_memory((void *)hello, 512);
-    list_all_instances();
-    list_all_signals();
+    show_all_instances();
+    show_all_signals();
     emblocs_init();
     printf("init complete\n");
-    list_all_instances();
-    list_all_signals();
+    show_all_instances();
+    show_all_signals();
 
     
 

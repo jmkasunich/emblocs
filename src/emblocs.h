@@ -15,39 +15,72 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+/* some basic assumptions */
+_Static_assert(sizeof(int) == 4, "ints must be 32 bits");
+_Static_assert(sizeof(void *) == 4, "pointers must be 32 bits");
+
+
 /*************************************************************
- * Memory sizes
+ * Realtime data and object metadata are stored in separate
+ * memory pools, the RT pool and the META pool.  Each pool is
+ * an array of uint32_t, and in the metadata, pool addresses 
+ * are stored as array indexes in bitfields.  As an example,
+ * if a pool is 4K bytes, indexes range from 0 to 1023, and
+ * they can be stored in a 10 bit field.
  * 
+ * If a pool size is intended to be a power of two, simply 
+ * define the number of index bits, and the pool size will
+ * be computed at compile time.  If the pool size is not a
+ * power of two, define both the number of index bits and
+ * the pool size in bytes.
  */
 
-#ifndef BL_RT_OFFSET_BITS
-#define BL_RT_OFFSET_BITS  9
+/* default index sizes if not defined elsewhere */
+#ifndef BL_RT_INDEX_BITS
+#define BL_RT_INDEX_BITS  9
 #endif
 
-#ifndef BL_META_OFFSET_BITS
-#define BL_META_OFFSET_BITS  9
+#ifndef BL_META_INDEX_BITS
+#define BL_META_INDEX_BITS  9
 #endif
 
-
-
-
-/* the SIZE values are in bytes */
+/* default to power of two sizes if not defined elsewhere */
 #ifndef BL_RT_POOL_SIZE
-#define BL_RT_POOL_SIZE (4<<(BL_RT_OFFSET_BITS))
+#define BL_RT_POOL_SIZE (4<<(BL_RT_INDEX_BITS))
 #endif
 
 #ifndef BL_META_POOL_SIZE
-#define BL_META_POOL_SIZE  (4<<(BL_META_OFFSET_BITS))
+#define BL_META_POOL_SIZE  (4<<(BL_META_INDEX_BITS))
 #endif
 
-_Static_assert((4<<(BL_RT_OFFSET_BITS)) >= BL_RT_POOL_SIZE, "offset bits");
-_Static_assert((4<<(BL_META_OFFSET_BITS)) >= BL_META_POOL_SIZE, "offset bits");
+/* These asserts verify that the specified number of bits can 
+   be used to address the specified pool size. */
+_Static_assert((4<<(BL_RT_INDEX_BITS)) >= (BL_RT_POOL_SIZE), "not enough RT index bits");
+_Static_assert((4<<(BL_META_INDEX_BITS)) >= (BL_META_POOL_SIZE), "not enough meta index bits");
 
-#define BL_INST_DATA_SIZE_BITS (BL_RT_OFFSET_BITS)
+/* A couple of other constants based on pool size */
+#define BL_RT_INDEX_MASK ((1<<(BL_RT_INDEX_BITS))-1)
+#define BL_META_INDEX_MASK ((1<<(BL_META_INDEX_BITS))-1)
 
-#define BL_INST_DATA_MAX_SIZE ((1<<(BL_INST_DATA_SIZE_BITS))-1)
-#define BL_MAX_RT_OFFSET ((1<<BL_RT_OFFSET_BITS)-1)
-#define BL_MAX_META_OFFSET ((1<<BL_META_OFFSET_BITS)-1)
+
+/*************************************************************
+ * Each instance of a component has "instance data" which is
+ * in the RT memory pool.  The instance data size is specified
+ * in bytes, and the size is stored in a bitfield.
+ */
+
+#ifndef BL_INST_DATA_SIZE_BITS
+#define BL_INST_DATA_SIZE_BITS  10
+#endif
+
+#define BL_INST_DATA_MAX_SIZE (1<<(BL_INST_DATA_SIZE_BITS))
+#define BL_INST_DATA_SIZE_MASK ((BL_INST_DATA_MAX_SIZE)-1)
+
+
+/*************************************************************
+ * Data types for pins and signals.  Stored in bitfields, so
+ * we need to specify the bitfield length as well as the enum.
+ */
 
 typedef enum {
 	BL_TYPE_FLOAT    = 0,
@@ -58,38 +91,91 @@ typedef enum {
 
 #define BL_TYPE_BITS 2
 
+
+/*************************************************************
+ * Data directions for pins.  Stored in bitfields, so we need
+ * to specify the bitfield length as well as the enum.
+ */
+
 typedef enum {
-	BL_PIN_IN        = 1,
-	BL_PIN_OUT       = 2,
-	BL_PIN_IO        = 3,
+	BL_DIR_IN        = 1,
+	BL_DIR_OUT       = 2,
+	BL_DIR_IO        = 3,
 } bl_dir_t;
 
 #define BL_DIR_BITS  2
 
 
+/*************************************************************
+ * Data structure that describes a component instance.
+ * These structures live in the metadata pool, but point to
+ * instance data in the realtime pool.
+ */
+
 typedef struct bl_inst_meta_s {
     struct bl_inst_meta_s *next;
-    uint32_t data_offset : BL_RT_OFFSET_BITS;
+    uint32_t data_index  : BL_RT_INDEX_BITS;
     uint32_t data_size   : BL_INST_DATA_SIZE_BITS;
     char const *name;
     struct bl_pin_meta_s *pin_list;
 } bl_inst_meta_t;
 
+/* Verify that bitfields fit in one uint32_t */
+_Static_assert((BL_RT_INDEX_BITS+BL_INST_DATA_SIZE_BITS) <= 32, "instance bitfields too big");
+
+
+/*************************************************************
+ * Data structure that describes a pin.  Each instance has a
+ * list of pins.  These structures live in the metadata pool,
+ * but point to data in the realtime pool.
+ */
+
 typedef struct bl_pin_meta_s {
     struct bl_pin_meta_s *next;
-    uint32_t ptr_offset   : BL_RT_OFFSET_BITS;
-    uint32_t dummy_offset : BL_RT_OFFSET_BITS;
+    uint32_t ptr_index    : BL_RT_INDEX_BITS;
+    uint32_t dummy_index  : BL_RT_INDEX_BITS;
     uint32_t data_type    : BL_TYPE_BITS;
     uint32_t pin_dir      : BL_DIR_BITS;
     char const *name;
 } bl_pin_meta_t;
 
+/* Verify that bitfields fit in one uint32_t */
+_Static_assert((BL_RT_INDEX_BITS*2+BL_TYPE_BITS+BL_DIR_BITS) <= 32, "pin bitfields too big");
+
+
+/*************************************************************
+ * Data structure that defines a pin.  These are optional, but
+ * an array of them in flash can be used to drive creation of
+ * the actual bl_pin_meta_t structures in RAM.  The data offset
+ * is in bytes from the beginning of the instance data.
+ */
+
+typedef struct bl_pin_def_s {
+    char const *name;
+    uint32_t data_type    : BL_TYPE_BITS;
+    uint32_t pin_dir      : BL_DIR_BITS;
+    uint32_t data_offset  : BL_INST_DATA_SIZE_BITS;
+} bl_pin_def_t;
+
+/* Verify that bitfields fit in one uint32_t */
+_Static_assert((BL_INST_DATA_SIZE_BITS+BL_TYPE_BITS+BL_DIR_BITS) <= 32, "pin_def bitfields too big");
+
+
+/*************************************************************
+ * Data structure that describes a signal.  There is one list
+ * of signals which lives in the metadata pool, but point to
+ * data in the realtime pool.
+ */
+
 typedef struct bl_sig_meta_s {
     struct bl_sig_meta_s *next;
-    uint32_t data_offset  : BL_RT_OFFSET_BITS;
+    uint32_t data_index   : BL_RT_INDEX_BITS;
     uint32_t data_type    : BL_TYPE_BITS;
     char const *sig_name;
 } bl_sig_meta_t;
+
+/* Verify that bitfields fit in one uint32_t */
+_Static_assert((BL_RT_INDEX_BITS+BL_TYPE_BITS) <= 32, "sig bitfields too big");
 
 
 /****************************************************************
@@ -140,7 +226,12 @@ bl_inst_meta_t *bl_inst_new(char const *name, uint32_t data_size);
  * links the pin to the dummy signal
  * adds the meta struct to 'inst' pin list
  */
-bl_pin_meta_t *bl_pin_new(bl_inst_meta_t *inst, char const *name, bl_type_t type, bl_dir_t dir, bl_sig_data_t **ptr_addr);
+bl_pin_meta_t *bl_pin_new(bl_inst_meta_t *inst, char const *name, bl_type_t type, bl_dir_t dir, uint32_t data_offset);
+
+/**********************************************************************************
+ * calls bl_pin_new() using info from pin_def structure
+ */
+bl_pin_meta_t *bl_pin_new_from_def(bl_inst_meta_t *inst, bl_pin_def_t *def);
 
 /**********************************************************************************
  * allocates a new sig_meta_t struct in meta RAM
@@ -150,6 +241,9 @@ bl_pin_meta_t *bl_pin_new(bl_inst_meta_t *inst, char const *name, bl_type_t type
  */
 bl_sig_meta_t *bl_sig_new(char const *name, bl_type_t type);
 
+
+
+
 int bl_link_pin_sig(char const *inst_name, char const *pin_name, char const *sig_name );
 int bl_unlink_pin(char const *inst_name, char const *pin_name);
 
@@ -157,6 +251,28 @@ void show_all_instances(void);  // also shows pins and linkages
 void show_all_signals(void);
 
 //void bl_inst_new_from_comp_def(bl_comp_def_t *comp, char const *name);
+
+
+
+
+#if 0
+
+typedef struct bl_funct_def_s {
+    char const * const name;
+    void (*fp) (void *);
+} bl_funct_def_t;
+
+typedef struct bl_comp_def_s {
+    char const * const name;
+    uint8_t const pin_count;
+    uint8_t const funct_count;
+    uint16_t const inst_data_size;
+    bl_pin_def_t const *pin_defs;
+    bl_funct_def_t const *funct_defs;
+} bl_comp_def_t;
+
+#endif
+
 
 
 #if 0  // OLD STUFF

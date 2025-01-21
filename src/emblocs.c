@@ -10,11 +10,23 @@
 
 static uint32_t bl_rt_pool[BL_RT_POOL_SIZE >> 2]  __attribute__ ((aligned(4)));
 static uint32_t *rt_pool_next = bl_rt_pool;
-static int32_t rt_pool_avail = sizeof(bl_rt_pool)/4;
+static int32_t rt_pool_avail = sizeof(bl_rt_pool);
 
 static uint32_t bl_meta_pool[BL_META_POOL_SIZE >> 2]  __attribute__ ((aligned(4)));
 static uint32_t *meta_pool_next = bl_meta_pool;
-static int32_t meta_pool_avail = sizeof(bl_meta_pool)/4;
+static int32_t meta_pool_avail = sizeof(bl_meta_pool);
+
+/* returns the index of 'addr' in the respective pool, masked so it can
+ * go into a bitfield without a conversion warning */
+#define TO_RT_INDEX(addr) ((uint32_t)((uint32_t *)(addr)-bl_rt_pool) & BL_RT_INDEX_MASK)
+#define TO_META_INDEX(addr) ((uint32_t)((uint32_t *)(addr)-bl_meta_pool) & BL_META_INDEX_MASK)
+/* returns an address in the respective pool */
+#define TO_RT_ADDR(index) ((void *)(&bl_rt_pool[index]))
+#define TO_META_ADDR(index) ((void *)(&bl_meta_pool[index]))
+/* masks 'size' so it can go into a bit field without a conversion warning */
+#define TO_INST_SIZE(size) ((size) & BL_INST_DATA_SIZE_MASK)
+
+
 
 static void *alloc_from_rt_pool(int32_t size)
 {
@@ -29,7 +41,7 @@ static void *alloc_from_rt_pool(int32_t size)
     }
     assert( rt_pool_avail >= size);
     retval = rt_pool_next;
-    rt_pool_next += size;
+    rt_pool_next += size/4;
     rt_pool_avail -= size;
     printf(" @ %p, %d left\n", retval, rt_pool_avail);
     return retval;
@@ -48,7 +60,7 @@ static void *alloc_from_meta_pool(int32_t size)
     }
     assert( meta_pool_avail >= size);
     retval = meta_pool_next;
-    meta_pool_next += size;
+    meta_pool_next += size/4;
     meta_pool_avail -= size;
     printf(" %p, %d left\n", retval, meta_pool_avail);
     return retval;
@@ -80,14 +92,6 @@ static void inst_meta_print_node(void *node)
 /* root of instance linked list */
 static bl_inst_meta_t *instance_root;
 
-/* returns the offset of 'addr' from the base of the respective pool,
-   masked so it can go into a bitfield without a conversion warning */
-#define TO_RT_OFFSET(addr) ((uint32_t)((uint32_t *)(addr)-bl_rt_pool) & BL_MAX_RT_OFFSET)
-#define TO_META_OFFSET(addr) ((uint32_t)((uint32_t *)(addr)-bl_meta_pool) & BL_MAX_META_OFFSET)
-/* masks 'size' so it can go into a bit field without a conversion warning */
-#define TO_INST_SIZE(size) ((size) & BL_INST_DATA_MAX_SIZE)
-
-
 bl_inst_meta_t *bl_inst_new(char const *name, uint32_t data_size)
 {
     bl_inst_meta_t *meta;
@@ -100,7 +104,7 @@ bl_inst_meta_t *bl_inst_new(char const *name, uint32_t data_size)
     // allocate memory for realtime data
     data = alloc_from_rt_pool(data_size);
     // initialise metadata fields
-    meta->data_offset = TO_RT_OFFSET(data);
+    meta->data_index = TO_RT_INDEX(data);
     meta->data_size = TO_INST_SIZE(data_size);
     meta->name = name;
     meta->pin_list = NULL;
@@ -134,16 +138,19 @@ static void pin_meta_print_node(void *node)
 }
 
 
-bl_pin_meta_t *bl_pin_new(bl_inst_meta_t *inst, char const *name, bl_type_t type, bl_dir_t dir, bl_sig_data_t **ptr_addr)
+bl_pin_meta_t *bl_pin_new(bl_inst_meta_t *inst, char const *name, bl_type_t type, bl_dir_t dir, uint32_t data_offset)
 {
     bl_pin_meta_t *meta;
     bl_sig_data_t *data;
+    bl_sig_data_t **ptr_addr;
     int ll_result;
 
     // allocate memory for metadata
     meta = alloc_from_meta_pool(sizeof(bl_pin_meta_t));
     // allocate memory for dummy signal
     data = alloc_from_rt_pool(sizeof(bl_sig_data_t));
+    // determine address of pin pointer
+    ptr_addr = (bl_sig_data_t **)((char *)(TO_RT_ADDR(inst->data_index)) + data_offset);
     // link pin to dummy signal
     *ptr_addr = data;
     // initialize dummy signal to zero
@@ -173,8 +180,8 @@ bl_pin_meta_t *bl_pin_new(bl_inst_meta_t *inst, char const *name, bl_type_t type
         }
     }
     // initialise metadata fields
-    meta->ptr_offset = TO_RT_OFFSET(ptr_addr);
-    meta->dummy_offset = TO_RT_OFFSET(data);
+    meta->ptr_index = TO_RT_INDEX(ptr_addr);
+    meta->dummy_index = TO_RT_INDEX(data);
     meta->data_type = type;
     meta->pin_dir = dir;
     meta->name = name;
@@ -184,6 +191,10 @@ bl_pin_meta_t *bl_pin_new(bl_inst_meta_t *inst, char const *name, bl_type_t type
     return meta;
 }
 
+bl_pin_meta_t *bl_pin_new_from_def(bl_inst_meta_t *inst, bl_pin_def_t *def)
+{
+    return bl_pin_new(inst, def->name, def->data_type, def->pin_dir, def->data_offset);
+}
 
 
 

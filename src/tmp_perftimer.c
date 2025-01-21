@@ -16,7 +16,7 @@ _Static_assert((sizeof(bl_perftimer_inst_t) < 32767), "instance structure too la
 
 // array of pin definitions - one copy in FLASH
 static bl_pin_def_t const bl_perftimer_pins[] = {
-    { "time", BL_TYPE_U32, BL_DIR_OUT, BL_OFFSET(bl_perftimer_inst_t, time)}
+    { "time", BL_TYPE_U32, BL_DIR_OUT, offsetof(bl_perftimer_inst_t, time)}
 };
 
 static void bl_perftimer_start_funct(void *ptr);
@@ -50,6 +50,6 @@ static void bl_perftimer_stop_funct(void *ptr)
 {
     bl_perftimer_inst_t *p = (bl_perftimer_inst_t *)ptr;
 
-    *(p->time.pin) = tsc_read() - p->tsc;
+    *(p->time) = tsc_read() - p->tsc;
 }
 
