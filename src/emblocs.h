@@ -110,6 +110,13 @@ typedef enum {
  * Data structure that describes a component instance.
  * These structures live in the metadata pool, but point to
  * instance data in the realtime pool.
+ * 'data_index' and 'data_size' refer to the realtime instance
+ * data; size is in bytes, while index is a uint32_t offset from
+ * the base of the RT pool.  'pin_list' is a list of pins that
+ * belong to this specific instance; the full pin name must be
+ * created by concatenating the instance name and pin name.
+ * This structure is incomplete; it will eventually have function
+ * data in it as well.
  */
 
 typedef struct bl_inst_meta_s {
@@ -141,24 +148,6 @@ typedef struct bl_pin_meta_s {
 
 /* Verify that bitfields fit in one uint32_t */
 _Static_assert((BL_RT_INDEX_BITS*2+BL_TYPE_BITS+BL_DIR_BITS) <= 32, "pin bitfields too big");
-
-
-/*************************************************************
- * Data structure that defines a pin.  These are optional, but
- * an array of them in flash can be used to drive creation of
- * the actual bl_pin_meta_t structures in RAM.  The data offset
- * is in bytes from the beginning of the instance data.
- */
-
-typedef struct bl_pin_def_s {
-    char const *name;
-    uint32_t data_type    : BL_TYPE_BITS;
-    uint32_t pin_dir      : BL_DIR_BITS;
-    uint32_t data_offset  : BL_INST_DATA_SIZE_BITS;
-} bl_pin_def_t;
-
-/* Verify that bitfields fit in one uint32_t */
-_Static_assert((BL_INST_DATA_SIZE_BITS+BL_TYPE_BITS+BL_DIR_BITS) <= 32, "pin_def bitfields too big");
 
 
 /*************************************************************
@@ -212,6 +201,85 @@ typedef union bl_pin_u {
 
 
 /**********************************************************************************
+ * Structures used to define component characteristics at compile time.
+ *
+ */
+
+
+/*************************************************************
+ * Data structure that defines a component.  These typically
+ * exist in flash, but in theory could be built on-the-fly in
+ * RAM.  Component instances are created using the data in a
+ * component definition plus an optional personality that can
+ * customize the basic component.
+ */
+
+typedef struct bl_comp_def_s {
+    char const * const name;
+    uint8_t const pin_count;
+//    uint8_t const funct_count;
+    uint16_t const inst_data_size;
+    struct bl_pin_def_s const *pin_defs;
+//    struct bl_funct_def_s const *funct_defs;
+} bl_comp_def_t;
+
+
+/*************************************************************
+ * Data structure that defines a pin.  These can exist in flash
+ * or RAM.  For a component with a fixed pin list, an array
+ * of these structures in flash can be pointed at by the
+ * component definition.  For components with personality, the
+ * init() function can set the fields of one (or more) of these
+ * structs in RAM (probably local variable on stack) and then
+ * pass it/them to bl_pin_new() to drive the allocation of the
+ * actual bl_pin_meta_t structures in RAM.
+ * The data offset is in bytes from the beginning of the instance
+ * data, so the standard offsetof() can be used to set it.
+ */
+
+typedef struct bl_pin_def_s {
+    char const *name;
+    uint32_t data_type    : BL_TYPE_BITS;
+    uint32_t pin_dir      : BL_DIR_BITS;
+    uint32_t data_offset  : BL_INST_DATA_SIZE_BITS;
+} bl_pin_def_t;
+
+/* Verify that bitfields fit in one uint32_t */
+_Static_assert((BL_INST_DATA_SIZE_BITS+BL_TYPE_BITS+BL_DIR_BITS) <= 32, "pin_def bitfields too big");
+
+
+#if 0
+
+typedef struct bl_funct_def_s {
+    char const * const name;
+    void (*fp) (void *);
+} bl_funct_def_t;
+
+
+#endif
+
+/**********************************************************************************
+ * Top-level functions used to build a system
+ *
+ */
+
+
+
+/*************************************************************
+ * Creates an instance of a component, using a component 
+ * definition (typically in flash) and an optional personality.
+ * allocates a new bl_inst_meta_t struct in meta RAM
+ * allocates 'data_size' bytes in RT ram
+ * fills in all fields in the meta struct
+ * adds the meta struct to the global instance list
+ */
+bl_inst_meta_t *bl_inst_new(char const *name, bl_comp_def_t const *comp_def, void const *personality);
+
+
+
+
+#if 0
+/**********************************************************************************
  * allocates a new bl_inst_meta_t struct in meta RAM
  * allocates 'data_size' bytes in RT ram
  * fills in all fields in the meta struct
@@ -232,6 +300,8 @@ bl_pin_meta_t *bl_pin_new(bl_inst_meta_t *inst, char const *name, bl_type_t type
  * calls bl_pin_new() using info from pin_def structure
  */
 bl_pin_meta_t *bl_pin_new_from_def(bl_inst_meta_t *inst, bl_pin_def_t *def);
+#endif
+
 
 /**********************************************************************************
  * allocates a new sig_meta_t struct in meta RAM
@@ -255,23 +325,6 @@ void show_all_signals(void);
 
 
 
-#if 0
-
-typedef struct bl_funct_def_s {
-    char const * const name;
-    void (*fp) (void *);
-} bl_funct_def_t;
-
-typedef struct bl_comp_def_s {
-    char const * const name;
-    uint8_t const pin_count;
-    uint8_t const funct_count;
-    uint16_t const inst_data_size;
-    bl_pin_def_t const *pin_defs;
-    bl_funct_def_t const *funct_defs;
-} bl_comp_def_t;
-
-#endif
 
 
 
