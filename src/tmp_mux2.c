@@ -23,6 +23,7 @@ static bl_pin_def_t const bl_mux2_pins[] = {
 };
 
 static void bl_mux2_funct(void *ptr);
+
 /*
 // array of function definitions - one copy in FLASH
 static bl_funct_def_t const bl_mux2_functs[] = {
@@ -33,11 +34,12 @@ static bl_funct_def_t const bl_mux2_functs[] = {
 // component definition - one copy in FLASH
 bl_comp_def_t const bl_mux2_def = { 
     "mux2",
-    ARRAYCOUNT(bl_mux2_pins),
-    ARRAYCOUNT(bl_mux2_functs),
+    NULL,
     sizeof(bl_mux2_inst_t),
-    &(bl_mux2_pins[0]),
-    &(bl_mux2_functs[0])
+    _countof(bl_mux2_pins),
+//    ARRAYCOUNT(bl_mux2_functs),
+    &(bl_mux2_pins[0])
+//    &(bl_mux2_functs[0])
 };
 
 // realtime code - one copy in FLASH

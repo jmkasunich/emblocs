@@ -66,6 +66,30 @@ static void *alloc_from_meta_pool(int32_t size)
     return retval;
 }
 
+bl_inst_meta_t *bl_instance_new(char const *name, bl_comp_def_t const *comp_def, void const *personality)
+{
+    if ( comp_def->setup == NULL ) {
+        // no setup function, cannot support personality
+        assert(personality == NULL);
+        // call default setup function
+        return bl_default_setup(name, comp_def);
+    } else {
+        // call component-specific setup function
+        return comp_def->setup(name, comp_def, personality);
+    }
+}
+
+bl_inst_meta_t *bl_default_setup(char const *name, bl_comp_def_t const *comp_def)
+{
+    bl_inst_meta_t *meta;
+
+    meta = bl_inst_create(name, comp_def->data_size);
+    for ( int i = 0 ; i < comp_def->pin_count ; i++ ) {
+        bl_inst_add_pin(meta, &(comp_def->pin_defs[i]));
+    }
+    return meta;
+}
+
 
 /* linked list helpers for instance data */
 static int inst_meta_cmp_node_key(void *node, void *key)
@@ -92,7 +116,7 @@ static void inst_meta_print_node(void *node)
 /* root of instance linked list */
 static bl_inst_meta_t *instance_root;
 
-bl_inst_meta_t *bl_inst_new(char const *name, uint32_t data_size)
+bl_inst_meta_t *bl_inst_create(char const *name, uint32_t data_size)
 {
     bl_inst_meta_t *meta;
     void *data;
@@ -138,7 +162,7 @@ static void pin_meta_print_node(void *node)
 }
 
 
-bl_pin_meta_t *bl_pin_new(bl_inst_meta_t *inst, char const *name, bl_type_t type, bl_dir_t dir, uint32_t data_offset)
+bl_pin_meta_t *bl_inst_add_pin(bl_inst_meta_t *inst, bl_pin_def_t const *def)
 {
     bl_pin_meta_t *meta;
     bl_sig_data_t *data;
@@ -150,14 +174,14 @@ bl_pin_meta_t *bl_pin_new(bl_inst_meta_t *inst, char const *name, bl_type_t type
     // allocate memory for dummy signal
     data = alloc_from_rt_pool(sizeof(bl_sig_data_t));
     // determine address of pin pointer
-    ptr_addr = (bl_sig_data_t **)((char *)(TO_RT_ADDR(inst->data_index)) + data_offset);
+    ptr_addr = (bl_sig_data_t **)((char *)(TO_RT_ADDR(inst->data_index)) + def->data_offset);
     // link pin to dummy signal
     *ptr_addr = data;
     // initialize dummy signal to zero
     // FIXME - this is pedantic, I know that 0x00000000 is zero for all types
     // so I could do 'data->u = 0;' without the switch
     // but if I ever want non-zero default values I'll need the switch
-    switch ( type ) {
+    switch ( def->data_type ) {
         case BL_TYPE_BIT: {
             data->b = 0;
             break;
@@ -182,24 +206,14 @@ bl_pin_meta_t *bl_pin_new(bl_inst_meta_t *inst, char const *name, bl_type_t type
     // initialise metadata fields
     meta->ptr_index = TO_RT_INDEX(ptr_addr);
     meta->dummy_index = TO_RT_INDEX(data);
-    meta->data_type = type;
-    meta->pin_dir = dir;
-    meta->name = name;
+    meta->data_type = def->data_type;
+    meta->pin_dir = def->pin_dir;
+    meta->name = def->name;
     // add metadata to instances's pin list
     ll_result = ll_insert((void **)(&(inst->pin_list)), (void *)meta, pin_meta_cmp_nodes);
     assert(ll_result == 0);
     return meta;
 }
-
-bl_pin_meta_t *bl_pin_new_from_def(bl_inst_meta_t *inst, bl_pin_def_t *def)
-{
-    return bl_pin_new(inst, def->name, def->data_type, def->pin_dir, def->data_offset);
-}
-
-
-
-
-
 
 
 #if 0

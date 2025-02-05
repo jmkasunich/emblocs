@@ -22,20 +22,23 @@ static bl_pin_def_t const bl_perftimer_pins[] = {
 static void bl_perftimer_start_funct(void *ptr);
 static void bl_perftimer_stop_funct(void *ptr);
 
+/*
 // array of function definitions - one copy in FLASH
 static bl_funct_def_t const bl_perftimer_functs[] = {
     { "start", &bl_perftimer_start_funct },
     { "stop", &bl_perftimer_stop_funct }
 };
+*/
 
 // component definition - one copy in FLASH
 bl_comp_def_t const bl_perftimer_def = { 
     "perftimer",
-    ARRAYCOUNT(bl_perftimer_pins),
-    ARRAYCOUNT(bl_perftimer_functs),
+    NULL,
     sizeof(bl_perftimer_inst_t),
-    &(bl_perftimer_pins[0]),
-    &(bl_perftimer_functs[0])
+    _countof(bl_perftimer_pins),
+//    ARRAYCOUNT(bl_perftimer_functs),
+    &(bl_perftimer_pins[0])
+//    &(bl_perftimer_functs[0])
 };
 
 // realtime code - one copy in FLASH

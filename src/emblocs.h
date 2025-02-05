@@ -19,6 +19,9 @@
 _Static_assert(sizeof(int) == 4, "ints must be 32 bits");
 _Static_assert(sizeof(void *) == 4, "pointers must be 32 bits");
 
+#ifndef _countof
+#define _countof(array) (sizeof(array)/sizeof(array[0]))
+#endif
 
 /*************************************************************
  * Realtime data and object metadata are stored in separate
@@ -76,6 +79,10 @@ _Static_assert((4<<(BL_META_INDEX_BITS)) >= (BL_META_POOL_SIZE), "not enough met
 #define BL_INST_DATA_MAX_SIZE (1<<(BL_INST_DATA_SIZE_BITS))
 #define BL_INST_DATA_SIZE_MASK ((BL_INST_DATA_MAX_SIZE)-1)
 
+/* pin counts are stored in bitfields, need to specify the size */
+#ifndef BL_PIN_COUNT_BITS
+#define BL_PIN_COUNT_BITS 8
+#endif
 
 /*************************************************************
  * Data types for pins and signals.  Stored in bitfields, so
@@ -212,16 +219,29 @@ typedef union bl_pin_u {
  * RAM.  Component instances are created using the data in a
  * component definition plus an optional personality that can
  * customize the basic component.
+ * If 'setup' is NULL, then bl_instance_new() will call
+ * 'bl_default_setup()' to create an instance of the component
+ * using only the data in the component definition.
+ * Otherwise, bl_instance_new() will call setup(), which
+ * should parse 'personality' as needed and create the instance
+ * by calling the helper functions defined later.
+ * 
  */
 
 typedef struct bl_comp_def_s {
     char const * const name;
-    uint8_t const pin_count;
+    bl_inst_meta_t * (*setup) (char const *inst_name, struct bl_comp_def_s const *comp_def, void const *personality);
+    uint32_t data_size   : BL_INST_DATA_SIZE_BITS;
+    uint32_t pin_count   : BL_PIN_COUNT_BITS;
+
 //    uint8_t const funct_count;
-    uint16_t const inst_data_size;
     struct bl_pin_def_s const *pin_defs;
 //    struct bl_funct_def_s const *funct_defs;
 } bl_comp_def_t;
+
+
+/* Verify that bitfields fit in one uint32_t */
+_Static_assert((BL_INST_DATA_SIZE_BITS+BL_PIN_COUNT_BITS) <= 32, "comp_def bitfields too big");
 
 
 /*************************************************************
@@ -264,136 +284,76 @@ typedef struct bl_funct_def_s {
  */
 
 
-
 /*************************************************************
  * Creates an instance of a component, using a component 
  * definition (typically in flash) and an optional personality.
- * allocates a new bl_inst_meta_t struct in meta RAM
- * allocates 'data_size' bytes in RT ram
- * fills in all fields in the meta struct
- * adds the meta struct to the global instance list
  */
-bl_inst_meta_t *bl_inst_new(char const *name, bl_comp_def_t const *comp_def, void const *personality);
+bl_inst_meta_t *bl_instance_new(char const *name, bl_comp_def_t const *comp_def, void const *personality);
 
 
-
-
-#if 0
-/**********************************************************************************
- * allocates a new bl_inst_meta_t struct in meta RAM
- * allocates 'data_size' bytes in RT ram
- * fills in all fields in the meta struct
- * adds the meta struct to the global instance list
+/*************************************************************
+ * Creates a signal of the specified type and name
  */
-bl_inst_meta_t *bl_inst_new(char const *name, uint32_t data_size);
+bl_sig_meta_t *bl_sig_new(char const *name, bl_type_t type);
 
-/**********************************************************************************
+/*************************************************************
+ * Links the specified instance/pin to the specified signal
+ */
+int bl_link_pin_sig(char const *inst_name, char const *pin_name, char const *sig_name );
+
+
+/*************************************************************
+ * Disconnects the specified instance/pin from any signal
+ */
+int bl_unlink_pin(char const *inst_name, char const *pin_name);
+
+
+
+/*************************************************************
+ * Helper function for bl_instance_new(); creates an instance
+ * of a component using only the component definition.
+ */
+bl_inst_meta_t *bl_default_setup(char const *name, bl_comp_def_t const *comp_def);
+
+
+/*************************************************************
+ * Helper function for bl_instance_new()
+ * The following functions are called from bl_default_setup()
+ * or from a component-specific setup() function to perform
+ * various steps in the process of creating a new component
+ * instance
+ */
+
+
+
+/*************************************************************
+ * Helper function to create a new instance and reserve RAM
+ * for its instance data.  If called from bl_default_setup(),
+ * 'data_size' comes from the component definition.  If called
+ * from a component-specific setup function, that function can
+ * set 'size' based on the instance personality.
+ */
+bl_inst_meta_t *bl_inst_create(char const *name, uint32_t data_size);
+
+
+/*************************************************************
+ * helper function for new instance:
+ * adds a pin as defined by 'def' to instance 'inst'
  * allocates a new bl_pin_meta_t struct in meta RAM 
  * allocates a dummy signal in RT ram
  * fills in all fields in the meta struct
  * links the pin to the dummy signal
  * adds the meta struct to 'inst' pin list
  */
-bl_pin_meta_t *bl_pin_new(bl_inst_meta_t *inst, char const *name, bl_type_t type, bl_dir_t dir, uint32_t data_offset);
+bl_pin_meta_t *bl_inst_add_pin(bl_inst_meta_t *inst, bl_pin_def_t const *def);
 
-/**********************************************************************************
- * calls bl_pin_new() using info from pin_def structure
- */
-bl_pin_meta_t *bl_pin_new_from_def(bl_inst_meta_t *inst, bl_pin_def_t *def);
-#endif
-
-
-/**********************************************************************************
- * allocates a new sig_meta_t struct in meta RAM
- * allocates signal data in RT ram
- * fills in all fields in the meta struct
- * adds the meta struct to the signal list
- */
-bl_sig_meta_t *bl_sig_new(char const *name, bl_type_t type);
-
-
-
-
-int bl_link_pin_sig(char const *inst_name, char const *pin_name, char const *sig_name );
-int bl_unlink_pin(char const *inst_name, char const *pin_name);
 
 void show_all_instances(void);  // also shows pins and linkages
 void show_all_signals(void);
 
-//void bl_inst_new_from_comp_def(bl_comp_def_t *comp, char const *name);
-
-
-
-
-
 
 
 #if 0  // OLD STUFF
-
-/****************************************************************
- * sorted list data structures & functions
- */
-
-typedef struct bl_list_entry_s {
-    char const * name;
-    struct bl_list_entry_s *next;
-} bl_list_entry_t;
-
-bl_list_entry_t *find_name_in_list(char const *name, bl_list_entry_t *list);
-bl_list_entry_t **find_insertion_point(char const *name, bl_list_entry_t **list);
-
-
-/****************************************************************
- * the four pin/signal types
- */
-
-typedef float bl_float_t;
-typedef bool bl_bit_t;
-typedef int32_t bl_s32_t;
-typedef uint32_t bl_u32_t;
-
-/* a union that can hold any of the four */
-typedef union bl_sig_data_u {
-    bl_bit_t b;
-    bl_float_t f;
-    bl_s32_t s;
-    bl_u32_t u;
-} bl_sig_data_t;
-
-typedef enum bl_type_e {
-	BL_TYPE_FLOAT    = 0x00,
-	BL_TYPE_BIT      = 0x01,
-	BL_TYPE_S32      = 0x02,
-	BL_TYPE_U32      = 0x03
-} bl_type_t;
-
-#define BL_TYPE_MASK (0x03)
-
-typedef enum bl_dir_e {
-	BL_DIR_IN        = 0x04,
-	BL_DIR_OUT       = 0x08,
-	BL_DIR_IO        = 0x0C,
-} bl_dir_t;
-
-#define BL_DIR_MASK (0x0C)
-
-/****************************************************************
- * named signal data structures & functions
- */
-
-/* dpwt = data pointer with type
- * type takes two bits, data pointers are always 4-byte aligned
- * so use the low 2 bits of the pointer to store the type and
- * the rest to store the pointer; with macros to manage the fields
- */
-
-_Static_assert(sizeof(uint32_t) == sizeof(void *));
-
-typedef uint32_t bl_dpwt_t;
-#define GET_TYPE(dpwt)          ((dpwt) & BL_TYPE_MASK)
-#define GET_DPTR(dpwt)          ((void *)((dpwt) & ~BL_TYPE_MASK))
-#define MAKE_DPWT(ptr,type)     ((uint32_t)(ptr) | ((type) & BL_TYPE_MASK))
-
 /* structure to hold signal metadata */
 typedef struct bl_sig_meta_s {
     struct bl_sig_meta_s *next;

@@ -26,19 +26,22 @@ static bl_pin_def_t const bl_sum2_pins[] = {
 
 static void bl_sum2_funct(void *ptr);
 
+/*
 // array of function definitions - one copy in FLASH
 static bl_funct_def_t const bl_sum2_functs[] = {
     { "funct", &bl_sum2_funct }
 };
+*/
 
 // component definition - one copy in FLASH
 bl_comp_def_t const bl_sum2_def = { 
     "sum2",
-    ARRAYCOUNT(bl_sum2_pins),
-    ARRAYCOUNT(bl_sum2_functs),
+    NULL,
     sizeof(bl_sum2_inst_t),
-    &(bl_sum2_pins[0]),
-    &(bl_sum2_functs[0])
+    _countof(bl_sum2_pins),
+//    ARRAYCOUNT(bl_sum2_functs),
+    &(bl_sum2_pins[0])
+//    &(bl_sum2_functs[0])
 };
 
 // realtime code - one copy in FLASH
