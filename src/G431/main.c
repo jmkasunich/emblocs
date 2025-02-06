@@ -27,19 +27,21 @@ static void delay (unsigned int time) {
         for (volatile unsigned int j = 0; j < 20000; j++);
 }
 
-#if 0
 
 extern bl_comp_def_t bl_mux2_def;
 extern bl_comp_def_t bl_sum2_def;
 extern bl_comp_def_t bl_perftimer_def;
 
-bl_inst_def_t bl_instances[] = {
-    { "comp1", &bl_sum2_def },
-    { "sum21", &bl_sum2_def },
-    { "timer", &bl_perftimer_def },
-    { "comp4", &bl_mux2_def },
-    { NULL, NULL }
+bl_inst_def_t const bl_instances[] = {
+    { "comp1", &bl_sum2_def, NULL },
+    { "sum21", &bl_sum2_def, NULL },
+    { "timer", &bl_perftimer_def, NULL },
+    { "comp4", &bl_mux2_def, NULL },
+    { NULL, NULL, NULL }
 };
+
+
+#if 0
 
 char *bl_signals_float[] = {
     "fp_sig",
@@ -82,25 +84,23 @@ int main (void) {
     reg |= 0x01 << GPIO_MODER_MODE6_Pos;
     LED_PORT->MODER = reg;
 
+    print_string("BOOT\n");
+
+//    linked_list_test();
+
     print_string(hello);
-
-    linked_list_test();
-
-    print_string(hello);
-    delay(500);
-//    printf("sum2_def is at %p, has %d pins at %p\n", 
-//        &bl_sum2_def, bl_sum2_def.pin_count, bl_sum2_def.pin_defs);
-//    printf("and a function at %p\n", bl_sum2_def.funct_defs[0].fp);
-//    printf("sum2_def is at %p, has %d pins\n", &bl_sum2_def, bl_sum2_def.pin_count);
-
 
     print_memory((void *)hello, 512);
-    show_all_instances();
-    show_all_signals();
+    print_string("\n\n");
+    bl_show_memory_status();
+    bl_show_all_instances();
+//    show_all_signals();
+    print_string("begin init\n");
     emblocs_init();
-    printf("init complete\n");
-    show_all_instances();
-    show_all_signals();
+    print_string("init complete\n");
+    bl_show_memory_status();
+    bl_show_all_instances();
+//    show_all_signals();
 
     
 

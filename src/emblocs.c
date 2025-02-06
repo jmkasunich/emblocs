@@ -68,6 +68,7 @@ static void *alloc_from_meta_pool(int32_t size)
 
 bl_inst_meta_t *bl_instance_new(char const *name, bl_comp_def_t const *comp_def, void const *personality)
 {
+    printf("%s: instance of %s, compdef @ %p, personality @ %p\n", name, comp_def->name, comp_def, personality);
     if ( comp_def->setup == NULL ) {
         // no setup function, cannot support personality
         assert(personality == NULL);
@@ -83,7 +84,7 @@ bl_inst_meta_t *bl_default_setup(char const *name, bl_comp_def_t const *comp_def
 {
     bl_inst_meta_t *meta;
 
-    meta = bl_inst_create(name, comp_def->data_size);
+    meta = bl_inst_create(name, comp_def, 0);
     for ( int i = 0 ; i < comp_def->pin_count ; i++ ) {
         bl_inst_add_pin(meta, &(comp_def->pin_defs[i]));
     }
@@ -108,26 +109,29 @@ static int inst_meta_cmp_nodes(void *node1, void *node2)
 
 static void inst_meta_print_node(void *node)
 {
-    bl_inst_meta_t *np = node;
-
-    printf("FIXME - bl_inst_meta_t\n",  np, np->next, np->name );
+    bl_show_instance((bl_inst_meta_t *)node);
 }
 
 /* root of instance linked list */
 static bl_inst_meta_t *instance_root;
 
-bl_inst_meta_t *bl_inst_create(char const *name, uint32_t data_size)
+
+bl_inst_meta_t *bl_inst_create(char const *name, bl_comp_def_t const *comp_def, uint32_t data_size)
 {
     bl_inst_meta_t *meta;
     void *data;
     int ll_result;
 
+    if ( data_size == 0 ) {
+        data_size = comp_def->data_size;
+    }
     assert(data_size < BL_INST_DATA_MAX_SIZE);
     // allocate memory for metadata
     meta = alloc_from_meta_pool(sizeof(bl_inst_meta_t));
     // allocate memory for realtime data
     data = alloc_from_rt_pool(data_size);
     // initialise metadata fields
+    meta->comp_def = comp_def;
     meta->data_index = TO_RT_INDEX(data);
     meta->data_size = TO_INST_SIZE(data_size);
     meta->name = name;
@@ -156,9 +160,7 @@ static int pin_meta_cmp_nodes(void *node1, void *node2)
 
 static void pin_meta_print_node(void *node)
 {
-    bl_inst_meta_t *np = node;
-
-    printf("FIXME - bl_pin_meta_t\n",  np, np->next, np->name );
+    bl_show_pin((bl_pin_meta_t *)node);
 }
 
 
@@ -215,6 +217,69 @@ bl_pin_meta_t *bl_inst_add_pin(bl_inst_meta_t *inst, bl_pin_def_t const *def)
     return meta;
 }
 
+
+void bl_show_memory_status(void)
+{
+    printf("RT pool:   %d/%d, %d free\n", sizeof(bl_rt_pool)-rt_pool_avail, sizeof(bl_rt_pool), rt_pool_avail);
+    printf("Meta pool: %d/%d, %d free\n", sizeof(bl_meta_pool)-meta_pool_avail, sizeof(bl_meta_pool), meta_pool_avail);
+}
+
+
+void bl_show_instance(bl_inst_meta_t *inst)
+{
+    printf("INST: %20s <= %20s @ %p, %d RT bytes @ [%3d]=%p\n", inst->name, inst->comp_def->name,
+                    inst, inst->data_size, inst->data_index, TO_RT_ADDR(inst->data_index) );
+    bl_show_all_pins_of_instance(inst);
+
+}
+
+void bl_show_all_instances(void)
+{
+    int ll_result;
+
+    printf("List of all instances:\n");
+    ll_result = ll_traverse((void **)(&instance_root), inst_meta_print_node);
+    printf("Total of %d instances\n", ll_result);
+}
+
+/***********************************************
+ * strings for printing type and direction
+ */
+
+static char const * const types[] = {
+    "float",
+    "bit  ",
+    "s32  ",
+    "u32  "
+};
+
+static char const * const dirs[] = {
+    "xxx",
+    "in ",
+    "out",
+    "i/o"
+};
+
+void bl_show_pin(bl_pin_meta_t *pin)
+{
+    bl_sig_data_t *dummy_addr, **ptr_addr, *ptr_val;
+
+    dummy_addr = (bl_sig_data_t *)TO_RT_ADDR(pin->dummy_index);
+    ptr_addr = (bl_sig_data_t **)TO_RT_ADDR(pin->ptr_index);
+    ptr_val = *ptr_addr;
+
+    printf(" PIN: %20s  %s, %s @ %p, dummy @ [%3d]=%p, ptr @ [%3d]=%p, points at %p\n",
+                            pin->name, types[pin->data_type], dirs[pin->pin_dir], pin,
+                            pin->dummy_index, dummy_addr, pin->ptr_index, ptr_addr, ptr_val );
+}
+
+void bl_show_all_pins_of_instance(bl_inst_meta_t *inst)
+{
+    int ll_result;
+
+    ll_result = ll_traverse((void **)(&inst->pin_list), pin_meta_print_node);
+    printf("Total of %d pins\n", ll_result);
+}
 
 #if 0
 
@@ -284,23 +349,6 @@ bl_list_entry_t **find_insertion_point(char const *name, bl_list_entry_t **list)
     }
 }
 
-/***********************************************
- * strings for printing type and direction
- */
-
-static char const * const types[] = {
-    "float",
-    "bit  ",
-    "s32  ",
-    "u32  "
-};
-
-static char const * const dirs[] = {
-    "xxx",
-    "in ",
-    "out",
-    "i/o"
-};
 
 /***********************************************
  * named signal list
@@ -434,19 +482,20 @@ void bl_linksp(char const *sig_name, char const *inst_name, char const *pin_name
         }
     }
 }
-
+#endif
 
 void emblocs_init(void)
 {
-    bl_inst_def_t *idp;  // instance definition pointer
-    char **snp;  // signal name pointer
-    bl_link_def_t *ldp;  // link defintion pointer
+    bl_inst_def_t const *idp;  // instance definition pointer
+//    char **snp;  // signal name pointer
+//    bl_link_def_t *ldp;  // link defintion pointer
 
     idp = bl_instances;
     while ( idp->name != NULL ) {
-        bl_newinst(idp->comp_def, idp->name);
+        bl_instance_new(idp->name, idp->comp_def, idp->personality);
         idp++;
     }
+/*
     snp = bl_signals_float;
     while ( *snp != NULL ) {
         bl_newsig(BL_TYPE_FLOAT, *snp);
@@ -474,8 +523,10 @@ list_all_signals();
         bl_linksp(ldp->sig_name, ldp->inst_name, ldp->pin_name);
         ldp++;
     }
+*/
 }
 
+#if 0
 void list_all_signals(void)
 {
     bl_sig_meta_t *sig;
@@ -552,81 +603,6 @@ void list_signal_pins(bl_sig_meta_t *sig)
     }
 }
 
-
-
-
-
-/***********************************************
- * component instance list functions
- */
-
-
-bl_inst_meta_t *bl_newinst(bl_comp_def_t *comp_def, char const *inst_name)
-{
-    bl_list_entry_t **pp, *new;
-    bl_inst_meta_t *inst_meta;
-    void *inst_data;
-    bl_pin_def_t const *pin_def;
-    void *pin_addr;
-
-    // find insertion point in list
-    pp = find_insertion_point(inst_name, (bl_list_entry_t **)&inst_list);
-    assert(pp != NULL);
-    // allocate memory for metadata
-    inst_meta = alloc_from_meta_pool(sizeof(bl_inst_meta_t));
-    // allocate memory for realtime data
-    inst_data = alloc_from_rt_pool(comp_def->inst_data_size);
-    // insert metadata into list
-    new = (bl_list_entry_t *)inst_meta;
-    new->name = inst_name;
-    new->next = *pp;
-    *pp = new;
-    // make metadata point at the component definition
-    inst_meta->comp_def = comp_def;
-    // and the realtime data
-    inst_meta->inst_data = inst_data;
-     // point each pin at its dummy signal and initialize the signal
-    pin_def = comp_def->pin_defs;
-    for ( int n = 0; n < comp_def->pin_count ; n++ ) {
-        // use char pointer arithmetic to determine where the pin is stored
-        pin_addr = (void *)((char *)(inst_data) + pin_def[n].offset);
-        // set up pin data; type specific, but the steps are:
-        //    make pointer to the pin struct
-        //    point the pin at its dummy
-        //    store an initial value in the dummy
-        switch ( pin_def[n].type ) {
-            case BL_TYPE_BIT: {
-                bl_pin_bit_t *p = (bl_pin_bit_t *)pin_addr;
-                p->pin = &p->dummy;
-                p->dummy = 0;
-                break;
-            }
-            case BL_TYPE_FLOAT: {
-                bl_pin_float_t *p = (bl_pin_float_t *)pin_addr;
-                p->pin = &p->dummy;
-                p->dummy = 0.0;
-                break;
-            }
-            case BL_TYPE_S32: {
-                bl_pin_s32_t *p = (bl_pin_s32_t *)pin_addr;
-                p->pin = &p->dummy;
-                p->dummy = 0;
-                break;
-            }
-            case BL_TYPE_U32: {
-                bl_pin_u32_t *p = (bl_pin_u32_t *)pin_addr;
-                p->pin = &p->dummy;
-                p->dummy = 0U;
-                break;
-            }
-            default: {
-                assert(0);
-                break;
-            }
-        }
-    }
-    return inst_meta;
-}
 
 void list_all_instances(void)
 {

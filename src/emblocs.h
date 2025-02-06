@@ -128,6 +128,7 @@ typedef enum {
 
 typedef struct bl_inst_meta_s {
     struct bl_inst_meta_s *next;
+    struct bl_comp_def_s const *comp_def;
     uint32_t data_index  : BL_RT_INDEX_BITS;
     uint32_t data_size   : BL_INST_DATA_SIZE_BITS;
     char const *name;
@@ -317,7 +318,7 @@ bl_inst_meta_t *bl_default_setup(char const *name, bl_comp_def_t const *comp_def
 
 
 /*************************************************************
- * Helper function for bl_instance_new()
+ * Helper functions for bl_instance_new()
  * The following functions are called from bl_default_setup()
  * or from a component-specific setup() function to perform
  * various steps in the process of creating a new component
@@ -328,12 +329,15 @@ bl_inst_meta_t *bl_default_setup(char const *name, bl_comp_def_t const *comp_def
 
 /*************************************************************
  * Helper function to create a new instance and reserve RAM
- * for its instance data.  If called from bl_default_setup(),
- * 'data_size' comes from the component definition.  If called
- * from a component-specific setup function, that function can
- * set 'size' based on the instance personality.
+ * for its instance data.  
+ * If 'data_size' is zero, the size of the instance data will
+ * be based on the component definition; this happens when
+ * called from bl_default_setup().  If 'data_size' is non-zero,
+ * it overrides the size in the component definition.  This
+ * allows a component-specific setup function to modify the
+ * size based on the instance personality.
  */
-bl_inst_meta_t *bl_inst_create(char const *name, uint32_t data_size);
+bl_inst_meta_t *bl_inst_create(char const *name, bl_comp_def_t const *comp_def, uint32_t data_size);
 
 
 /*************************************************************
@@ -348,8 +352,20 @@ bl_inst_meta_t *bl_inst_create(char const *name, uint32_t data_size);
 bl_pin_meta_t *bl_inst_add_pin(bl_inst_meta_t *inst, bl_pin_def_t const *def);
 
 
-void show_all_instances(void);  // also shows pins and linkages
-void show_all_signals(void);
+/**********************************************************************************
+ * Introspection functions
+ *
+ */
+
+void bl_show_memory_status(void);
+void bl_show_instance(bl_inst_meta_t *inst);
+void bl_show_all_instances(void);
+void bl_show_pin(bl_pin_meta_t *pin);
+void bl_show_all_pins_of_instance(bl_inst_meta_t *inst);
+
+
+
+//void show_all_signals(void);
 
 
 
@@ -381,144 +397,38 @@ void list_all_signals(void);
 /*   list pins connected to a signal */
 void list_signal_pins(bl_sig_meta_t *sig);
 
-/****************************************************************
- * pin data structures & functions
- */
-
-/*   create a pin */
-bl_pin_meta_t *bl_newpin(bl_type_t type, bl_dir_t dir, char const * inst_name, char const * pin_name);
-
-
-
-
-
-
-/****************************************************************
- * component and instance structures and functions
- */
-
-#define ARRAYCOUNT(foo)  (sizeof(foo)/sizeof((foo)[0]))
-#define BL_OFFSET(type, member)  ((bl_offset_t)(offsetof(type,member)))
-typedef uint16_t bl_offset_t;
-
-/***********************************************
- * pin data structures
- */
-
-typedef struct bl_pin_bit_s {
-    bl_bit_t *pin;
-    bl_bit_t dummy;
-} bl_pin_bit_t;
-
-typedef struct bl_pin_float_s {
-    bl_float_t *pin;
-    bl_float_t dummy;
-} bl_pin_float_t;
-
-typedef struct bl_pin_s32_s {
-    bl_s32_t *pin;
-    bl_s32_t dummy;
-} bl_pin_s32_t;
-
-typedef struct bl_pin_u32_s {
-    bl_u32_t *pin;
-    bl_u32_t dummy;
-} bl_pin_u32_t;
-
-typedef union bl_pin_u {
-    bl_pin_bit_t b;
-    bl_pin_float_t f;
-    bl_pin_s32_t s;
-    bl_pin_u32_t u;
-} bl_pin_t;
-
-typedef struct bl_pin_meta_s {
-    struct bl_pin_meta_s *next;
-    bl_pin_t *pin;
-    char *pin_name;
-    char *inst_name;
-} bl_pin_meta_t;
-
-
-
-
-typedef struct bl_inst_meta_s {
-    bl_list_entry_t header;
-    struct bl_comp_def_s *comp_def;
-    void *inst_data;
-} bl_inst_meta_t;
-
-typedef struct bl_pin_def_s {
-    char const * const name;
-    bl_type_t const type;
-    bl_dir_t const dir;
-    bl_offset_t const offset;
-} bl_pin_def_t;
-
-typedef struct bl_funct_def_s {
-    char const * const name;
-    void (*fp) (void *);
-} bl_funct_def_t;
-
-typedef struct bl_comp_def_s {
-    char const * const name;
-    uint8_t const pin_count;
-    uint8_t const funct_count;
-    uint16_t const inst_data_size;
-    bl_pin_def_t const *pin_defs;
-    bl_funct_def_t const *funct_defs;
-} bl_comp_def_t;
-
-/* system building functions */
-
-/*   create an instance of a component */
-bl_inst_meta_t *bl_newinst(bl_comp_def_t *comp_def, char const *inst_name);
-
-/* helpers for system building functions */
-
-/*   find an instance by name */
-
-/*   find a pin by name */
-
-/* listing/observation functions */
-
-/*   list all instances */
-void list_all_instances(void);
-
-/*   list all pins in an instance */
-void list_all_pins_in_instance(bl_inst_meta_t *inst);
-
-/*   list the signal connected to a pin */
-void list_pin_signal(void *sig_addr);
-
-
+#endif  // OLD STUFF
 
 /* arrays that the application must supply to define the system */
 
 typedef struct inst_def_s {
     char *name;
     bl_comp_def_t *comp_def;
+    void *personality;
 } bl_inst_def_t;
 
+/*
 typedef struct link_def_s {
     char *sig_name;
     char *inst_name;
     char *pin_name;
 } bl_link_def_t;
+*/
 
-extern bl_inst_def_t bl_instances[];
+extern bl_inst_def_t const bl_instances[];
 
+/*
 extern char *bl_signals_float[];
 extern char *bl_signals_bit[];
 extern char *bl_signals_s32[];
 extern char *bl_signals_u32[];
 
 extern bl_link_def_t bl_links[];
+*/
 
 /* function that reads the above and builds the system */
 void emblocs_init(void);
 
-#endif  // OLD STUFF
 
 
 #endif // EMBLOCS_H
