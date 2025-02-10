@@ -23,6 +23,14 @@ _Static_assert(sizeof(void *) == 4, "pointers must be 32 bits");
 #define _countof(array) (sizeof(array)/sizeof(array[0]))
 #endif
 
+typedef enum {
+    BL_SUCCESS = 0,
+    BL_NOMEM = -1,
+    BL_INST_NOT_FOUND = -2,
+    BL_PIN_NOT_FOUND = -3,
+    BL_SIG_NOT_FOUND = -4
+} bl_retval_t;
+
 /*************************************************************
  * Realtime data and object metadata are stored in separate
  * memory pools, the RT pool and the META pool.  Each pool is
@@ -293,20 +301,20 @@ bl_inst_meta_t *bl_instance_new(char const *name, bl_comp_def_t const *comp_def,
 
 
 /*************************************************************
- * Creates a signal of the specified type and name
+ * Creates a signal of the specified name and type
  */
-bl_sig_meta_t *bl_sig_new(char const *name, bl_type_t type);
+bl_sig_meta_t *bl_signal_new(char const *name, bl_type_t type);
 
 /*************************************************************
  * Links the specified instance/pin to the specified signal
  */
-int bl_link_pin_sig(char const *inst_name, char const *pin_name, char const *sig_name );
+bl_retval_t bl_link_pin_to_signal(char const *inst_name, char const *pin_name, char const *sig_name );
 
 
 /*************************************************************
  * Disconnects the specified instance/pin from any signal
  */
-int bl_unlink_pin(char const *inst_name, char const *pin_name);
+bl_retval_t bl_unlink_pin(char const *inst_name, char const *pin_name);
 
 
 
@@ -351,6 +359,17 @@ bl_inst_meta_t *bl_inst_create(char const *name, bl_comp_def_t const *comp_def, 
  */
 bl_pin_meta_t *bl_inst_add_pin(bl_inst_meta_t *inst, bl_pin_def_t const *def);
 
+/**********************************************************************************
+ * More helper functions
+ *
+ */
+
+bl_inst_meta_t *bl_find_instance_by_name(char const *name);
+bl_pin_meta_t *bl_find_pin_in_instance_by_name(char const *name, bl_inst_meta_t *inst);
+bl_sig_meta_t *bl_find_signal_by_name(char const *name);
+bl_sig_meta_t *bl_find_signal_by_index(uint32_t index);
+
+
 
 /**********************************************************************************
  * Introspection functions
@@ -362,11 +381,12 @@ void bl_show_instance(bl_inst_meta_t *inst);
 void bl_show_all_instances(void);
 void bl_show_pin(bl_pin_meta_t *pin);
 void bl_show_all_pins_of_instance(bl_inst_meta_t *inst);
-
-
-
-//void show_all_signals(void);
-
+void bl_show_pin_value(bl_pin_meta_t *pin);
+void bl_show_pin_linkage(bl_pin_meta_t *pin);
+void bl_show_signal(bl_sig_meta_t *sig);
+void bl_show_signal_value(bl_sig_meta_t *sig);
+void bl_show_sig_data_t_value(bl_sig_data_t *data, bl_type_t type);
+void bl_show_all_signals(void);
 
 
 #if 0  // OLD STUFF
@@ -407,24 +427,34 @@ typedef struct inst_def_s {
     void *personality;
 } bl_inst_def_t;
 
-/*
-typedef struct link_def_s {
-    char *sig_name;
-    char *inst_name;
-    char *pin_name;
-} bl_link_def_t;
-*/
-
+/* array listing all instances to be created */
 extern bl_inst_def_t const bl_instances[];
 
-/*
-extern char *bl_signals_float[];
-extern char *bl_signals_bit[];
-extern char *bl_signals_s32[];
-extern char *bl_signals_u32[];
+/* arrays listing all signals to be created */
+extern char const * const bl_signals_float[];
+extern char const * const bl_signals_bit[];
+extern char const * const bl_signals_s32[];
+extern char const * const bl_signals_u32[];
 
-extern bl_link_def_t bl_links[];
-*/
+typedef struct link_def_s {
+    char *inst_name;
+    char *pin_name;
+    char *sig_name;
+} bl_link_def_t;
+
+extern bl_link_def_t const bl_links[];
+
+
+/* nets array consists of a series of strings defining nets
+ * each net starts with the one of the type strings "FLOAT",
+ * "BIT", "S32" or "U32", then the net name, followed by an
+ * instance name and a pin name.  The pin name is followed 
+ * by either another instance and pin name, or by a type 
+ * string to start a new signal, or by NULL to end the list.
+ */
+
+extern char *bl_nets[];
+
 
 /* function that reads the above and builds the system */
 void emblocs_init(void);

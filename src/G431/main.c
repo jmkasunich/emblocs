@@ -40,38 +40,37 @@ bl_inst_def_t const bl_instances[] = {
     { NULL, NULL, NULL }
 };
 
-
-#if 0
-
-char *bl_signals_float[] = {
+char const * const bl_signals_float[] = {
     "fp_sig",
     "output",
     NULL
 };
 
-char *bl_signals_bit[] = {
+char const * const bl_signals_bit[] = {
     "sel_sig",
     NULL
 };
 
-char *bl_signals_s32[] = {
+char const * const bl_signals_s32[] = {
     NULL
 };
 
-char *bl_signals_u32[] = {
+char const * const bl_signals_u32[] = {
     "clocks",
     NULL
 };
 
-bl_link_def_t bl_links[] = {
-    { "clocks", "timer", "time" },
-    { "fp_sig", "comp1", "out" },
-    { "fp_sig", "comp4", "in1" },
-    { "sel_sig", "comp4", "sel" },
+bl_link_def_t const bl_links[] = {
+    { "timer", "time", "clocks" },
+    { "comp1", "out", "fp_sig" },
+    { "comp4", "in1", "fp_sig" },
+    { "comp4", "sel", "sel_sig" },
     { NULL, NULL, NULL }
 };
 
-#endif
+
+
+
 
 int main (void) {
     uint32_t reg;
@@ -94,13 +93,13 @@ int main (void) {
     print_string("\n\n");
     bl_show_memory_status();
     bl_show_all_instances();
-//    show_all_signals();
+    bl_show_all_signals();
     print_string("begin init\n");
     emblocs_init();
     print_string("init complete\n");
     bl_show_memory_status();
     bl_show_all_instances();
-//    show_all_signals();
+    bl_show_all_signals();
 
     
 

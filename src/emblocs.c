@@ -92,15 +92,15 @@ bl_inst_meta_t *bl_default_setup(char const *name, bl_comp_def_t const *comp_def
 }
 
 
-/* linked list helpers for instance data */
-static int inst_meta_cmp_node_key(void *node, void *key)
+/* linked list callback functions */
+static int inst_meta_cmp_name_key(void *node, void *key)
 {
     bl_inst_meta_t *np = node;
     char *kp = key;
     return strcmp(np->name, kp);
 }
 
-static int inst_meta_cmp_nodes(void *node1, void *node2)
+static int inst_meta_cmp_names(void *node1, void *node2)
 {
     bl_inst_meta_t  *np1 = node1;
     bl_inst_meta_t  *np2 = node2;
@@ -112,8 +112,57 @@ static void inst_meta_print_node(void *node)
     bl_show_instance((bl_inst_meta_t *)node);
 }
 
+static int pin_meta_cmp_name_key(void *node, void *key)
+{
+    bl_pin_meta_t *np = node;
+    char *kp = key;
+    return strcmp(np->name, kp);
+}
+
+static int pin_meta_cmp_names(void *node1, void *node2)
+{
+    bl_pin_meta_t  *np1 = node1;
+    bl_pin_meta_t  *np2 = node2;
+    return strcmp(np1->name, np2->name);
+}
+
+static void pin_meta_print_node(void *node)
+{
+    bl_show_pin((bl_pin_meta_t *)node);
+}
+
+static int sig_meta_cmp_name_key(void *node, void *key)
+{
+    bl_sig_meta_t *np = node;
+    char *kp = key;
+    return strcmp(np->sig_name, kp);
+}
+
+static int sig_meta_cmp_index_key(void *node, void *key)
+{
+    bl_sig_meta_t *np = node;
+    uint32_t *kp = key;
+    return np->data_index-*kp;
+}
+
+static int sig_meta_cmp_names(void *node1, void *node2)
+{
+    bl_sig_meta_t  *np1 = node1;
+    bl_sig_meta_t  *np2 = node2;
+    return strcmp(np1->sig_name, np2->sig_name);
+}
+
+static void sig_meta_print_node(void *node)
+{
+    bl_show_signal((bl_sig_meta_t *)node);
+}
+
+
 /* root of instance linked list */
 static bl_inst_meta_t *instance_root;
+
+/* root of signal linked list */
+static bl_sig_meta_t *signal_root;
 
 
 bl_inst_meta_t *bl_inst_create(char const *name, bl_comp_def_t const *comp_def, uint32_t data_size)
@@ -137,30 +186,9 @@ bl_inst_meta_t *bl_inst_create(char const *name, bl_comp_def_t const *comp_def, 
     meta->name = name;
     meta->pin_list = NULL;
     // add metadata to master instance list
-    ll_result = ll_insert((void **)(&instance_root), (void *)meta, inst_meta_cmp_nodes);
+    ll_result = ll_insert((void **)(&instance_root), (void *)meta, inst_meta_cmp_names);
     assert(ll_result == 0);
     return meta;
-}
-
-
-/* linked list helpers for pin data */
-static int pin_meta_cmp_node_key(void *node, void *key)
-{
-    bl_pin_meta_t *np = node;
-    char *kp = key;
-    return strcmp(np->name, kp);
-}
-
-static int pin_meta_cmp_nodes(void *node1, void *node2)
-{
-    bl_pin_meta_t  *np1 = node1;
-    bl_pin_meta_t  *np2 = node2;
-    return strcmp(np1->name, np2->name);
-}
-
-static void pin_meta_print_node(void *node)
-{
-    bl_show_pin((bl_pin_meta_t *)node);
 }
 
 
@@ -179,32 +207,8 @@ bl_pin_meta_t *bl_inst_add_pin(bl_inst_meta_t *inst, bl_pin_def_t const *def)
     ptr_addr = (bl_sig_data_t **)((char *)(TO_RT_ADDR(inst->data_index)) + def->data_offset);
     // link pin to dummy signal
     *ptr_addr = data;
-    // initialize dummy signal to zero
-    // FIXME - this is pedantic, I know that 0x00000000 is zero for all types
-    // so I could do 'data->u = 0;' without the switch
-    // but if I ever want non-zero default values I'll need the switch
-    switch ( def->data_type ) {
-        case BL_TYPE_BIT: {
-            data->b = 0;
-            break;
-        }
-        case BL_TYPE_FLOAT: {
-            data->b = 0.0;
-            break;
-        }
-        case BL_TYPE_S32: {
-            data->s = 0;
-            break;
-        }
-        case BL_TYPE_U32: {
-            data->u = 0U;
-            break;
-        }
-        default: {
-            assert(0);
-            break;
-        }
-    }
+    // initialize dummy signal to zero (independent of type)
+    data->u = 0;
     // initialise metadata fields
     meta->ptr_index = TO_RT_INDEX(ptr_addr);
     meta->dummy_index = TO_RT_INDEX(data);
@@ -212,10 +216,112 @@ bl_pin_meta_t *bl_inst_add_pin(bl_inst_meta_t *inst, bl_pin_def_t const *def)
     meta->pin_dir = def->pin_dir;
     meta->name = def->name;
     // add metadata to instances's pin list
-    ll_result = ll_insert((void **)(&(inst->pin_list)), (void *)meta, pin_meta_cmp_nodes);
+    ll_result = ll_insert((void **)(&(inst->pin_list)), (void *)meta, pin_meta_cmp_names);
     assert(ll_result == 0);
     return meta;
 }
+
+
+bl_sig_meta_t *bl_signal_new(char const *name, bl_type_t type)
+{
+    bl_sig_meta_t *meta;
+    bl_sig_data_t *data;
+    int ll_result;
+
+    // allocate memory for metadata
+    meta = alloc_from_meta_pool(sizeof(bl_sig_meta_t));
+    // allocate memory for signal data
+    data = alloc_from_rt_pool(sizeof(bl_sig_data_t));
+    // initialize signal to zero
+    data->u = 0;
+    // initialise metadata fields
+    meta->data_index = TO_RT_INDEX(data);
+    meta->data_type = type;
+    meta->sig_name = name;
+    // add metadata to master signal list
+    ll_result = ll_insert((void **)(&(signal_root)), (void *)meta, sig_meta_cmp_names);
+    assert(ll_result == 0);
+    return meta;
+}
+
+bl_retval_t  bl_link_pin_to_signal(char const *inst_name, char const *pin_name, char const *sig_name )
+{
+    bl_inst_meta_t *inst;
+    bl_pin_meta_t *pin;
+    bl_sig_meta_t *sig;
+    bl_sig_data_t *sig_data_addr, **pin_ptr_addr;
+
+    inst = bl_find_instance_by_name(inst_name);
+    if ( inst == NULL ) {
+        return BL_INST_NOT_FOUND;
+    }
+    pin = bl_find_pin_in_instance_by_name(pin_name, inst);
+    if ( pin == NULL ) {
+        return BL_PIN_NOT_FOUND;
+    }
+    sig = bl_find_signal_by_name(sig_name);
+    if ( sig == NULL ) {
+        return BL_SIG_NOT_FOUND;
+    }
+    // convert indexes to addresses
+    pin_ptr_addr = TO_RT_ADDR(pin->ptr_index);
+    sig_data_addr = TO_RT_ADDR(sig->data_index);
+    // make the link
+    *pin_ptr_addr = sig_data_addr;
+    return BL_SUCCESS;
+}
+
+
+bl_retval_t bl_unlink_pin(char const *inst_name, char const *pin_name)
+{
+    bl_inst_meta_t *inst;
+    bl_pin_meta_t *pin;
+    bl_sig_data_t *pin_dummy_addr, **pin_ptr_addr, *pin_ptr_value;
+
+    inst = bl_find_instance_by_name(inst_name);
+    if ( inst == NULL ) {
+        return BL_INST_NOT_FOUND;
+    }
+    pin = bl_find_pin_in_instance_by_name(pin_name, inst);
+    if ( pin == NULL ) {
+        return BL_PIN_NOT_FOUND;
+    }
+    // convert indexes to addresses
+    pin_ptr_addr = TO_RT_ADDR(pin->ptr_index);
+    pin_dummy_addr = TO_RT_ADDR(pin->dummy_index);
+    // copy current signal value to dummy
+    pin_ptr_value = *pin_ptr_addr;
+    *pin_dummy_addr = *pin_ptr_value;
+    // link pin to its dummy
+    *pin_ptr_addr = pin_dummy_addr;
+    return BL_SUCCESS;
+
+}
+
+
+bl_inst_meta_t *bl_find_instance_by_name(char const *name)
+{
+    return ll_find((void **)(&(instance_root)), (void *)(name), inst_meta_cmp_name_key);
+}
+
+bl_pin_meta_t *bl_find_pin_in_instance_by_name(char const *name, bl_inst_meta_t *inst)
+{
+    return ll_find((void **)(&(inst->pin_list)), (void *)(name), pin_meta_cmp_name_key);
+}
+
+bl_sig_meta_t *bl_find_signal_by_name(char const *name)
+{
+    return ll_find((void **)(&(signal_root)), (void *)(name), sig_meta_cmp_name_key);
+}
+
+bl_sig_meta_t *bl_find_signal_by_index(uint32_t index)
+{
+    return ll_find((void **)(&(signal_root)), (void *)(&index), sig_meta_cmp_index_key);
+}
+
+
+
+
 
 
 void bl_show_memory_status(void)
@@ -268,9 +374,13 @@ void bl_show_pin(bl_pin_meta_t *pin)
     ptr_addr = (bl_sig_data_t **)TO_RT_ADDR(pin->ptr_index);
     ptr_val = *ptr_addr;
 
-    printf(" PIN: %20s  %s, %s @ %p, dummy @ [%3d]=%p, ptr @ [%3d]=%p, points at %p\n",
+    printf(" PIN: %20s  %s, %s @ %p, dummy @ [%3d]=%p, ptr @ [%3d]=%p, points at %p ",
                             pin->name, types[pin->data_type], dirs[pin->pin_dir], pin,
                             pin->dummy_index, dummy_addr, pin->ptr_index, ptr_addr, ptr_val );
+    bl_show_pin_linkage(pin);
+    printf(" = ");
+    bl_show_pin_value(pin);
+    printf("\n");
 }
 
 void bl_show_all_pins_of_instance(bl_inst_meta_t *inst)
@@ -280,6 +390,106 @@ void bl_show_all_pins_of_instance(bl_inst_meta_t *inst)
     ll_result = ll_traverse((void **)(&inst->pin_list), pin_meta_print_node);
     printf("Total of %d pins\n", ll_result);
 }
+
+void bl_show_pin_value(bl_pin_meta_t *pin)
+{
+    bl_sig_data_t **pin_ptr_addr, *data;
+
+    pin_ptr_addr = (bl_sig_data_t **)TO_RT_ADDR(pin->ptr_index);
+    data = *pin_ptr_addr;
+    bl_show_sig_data_t_value(data, pin->data_type);
+}
+
+
+void bl_show_pin_linkage(bl_pin_meta_t *pin)
+{
+    bl_sig_data_t *dummy_addr, **ptr_addr, *ptr_val;
+    char *dir;
+    bl_sig_meta_t *sig;
+
+    dummy_addr = (bl_sig_data_t *)TO_RT_ADDR(pin->dummy_index);
+    ptr_addr = (bl_sig_data_t **)TO_RT_ADDR(pin->ptr_index);
+    ptr_val = *ptr_addr;
+    switch(pin->pin_dir) {
+    case BL_DIR_IN:
+        dir = "<==";
+        break;
+    case BL_DIR_OUT:
+        dir = "==>";
+        break;
+    case BL_DIR_IO:
+        dir = "<=>";
+        break;
+    default:
+        assert(0);
+    }
+    if ( ptr_val == dummy_addr ) {
+        printf("%s (dummy)", dir);
+    } else {
+        // find the matching signal
+        sig = bl_find_signal_by_index(TO_RT_INDEX(ptr_val));
+        assert(sig != NULL);
+        printf("%s %s", dir, sig->sig_name);
+    }
+}
+
+
+void bl_show_signal(bl_sig_meta_t *sig)
+{
+    bl_sig_data_t *data_addr;
+
+    data_addr = TO_RT_ADDR(sig->data_index);
+    printf("SIG: %20s  %s @ %p, data @ [%3d]=%p = ",
+                            sig->sig_name, types[sig->data_type], sig, sig->data_index, data_addr);
+    bl_show_signal_value(sig);
+    printf("\n");
+}
+
+
+void bl_show_signal_value(bl_sig_meta_t *sig)
+{
+    bl_sig_data_t *data;
+
+    data = (bl_sig_data_t *)TO_RT_ADDR(sig->data_index);
+    bl_show_sig_data_t_value(data, sig->data_type);
+}
+
+
+void bl_show_sig_data_t_value(bl_sig_data_t *data, bl_type_t type)
+{
+    switch(type) {
+    case BL_TYPE_BIT:
+        if ( data->b ) {
+            printf(" TRUE");
+        } else {
+            printf("FALSE");
+        }
+        break;
+    case BL_TYPE_FLOAT:
+        printf("%f", data->f);
+        break;
+    case BL_TYPE_S32:
+        printf("%d", data->s);
+        break;
+    case BL_TYPE_U32:
+        printf("%u", data->u);
+        break;
+    default:
+        assert(0);
+    }
+}
+
+
+void bl_show_all_signals(void)
+{
+    int ll_result;
+
+    printf("List of all signals:\n");
+    ll_result = ll_traverse((void **)(&signal_root), sig_meta_print_node);
+    printf("Total of %d signals\n", ll_result);
+}
+
+
 
 #if 0
 
@@ -487,43 +697,41 @@ void bl_linksp(char const *sig_name, char const *inst_name, char const *pin_name
 void emblocs_init(void)
 {
     bl_inst_def_t const *idp;  // instance definition pointer
-//    char **snp;  // signal name pointer
-//    bl_link_def_t *ldp;  // link defintion pointer
+    char const * const *snp;  // signal name pointer
+    bl_link_def_t const *ldp;  // link defintion pointer
+    bl_retval_t retval;
 
     idp = bl_instances;
     while ( idp->name != NULL ) {
         bl_instance_new(idp->name, idp->comp_def, idp->personality);
         idp++;
     }
-/*
     snp = bl_signals_float;
     while ( *snp != NULL ) {
-        bl_newsig(BL_TYPE_FLOAT, *snp);
+        bl_signal_new(*snp, BL_TYPE_FLOAT);
         snp++;
     }
     snp = bl_signals_bit;
     while ( *snp != NULL ) {
-        bl_newsig(BL_TYPE_BIT, *snp);
+        bl_signal_new(*snp, BL_TYPE_BIT);
         snp++;
     }
     snp = bl_signals_s32;
     while ( *snp != NULL ) {
-        bl_newsig(BL_TYPE_S32, *snp);
+        bl_signal_new(*snp, BL_TYPE_S32);
         snp++;
     }
     snp = bl_signals_u32;
     while ( *snp != NULL ) {
-        bl_newsig(BL_TYPE_U32, *snp);
+        bl_signal_new(*snp, BL_TYPE_U32);
         snp++;
     }
-printf("signal_init_done\n");
-list_all_signals();
     ldp = bl_links;
     while ( ldp->sig_name != NULL ) {
-        bl_linksp(ldp->sig_name, ldp->inst_name, ldp->pin_name);
+        retval = bl_link_pin_to_signal(ldp->inst_name, ldp->pin_name, ldp->sig_name);
+        assert(retval == BL_SUCCESS);
         ldp++;
     }
-*/
 }
 
 #if 0
