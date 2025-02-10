@@ -338,7 +338,27 @@ bl_sig_meta_t *bl_find_signal_by_index(uint32_t index)
     return ll_find((void **)(&(signal_root)), (void *)(&index), sig_meta_cmp_index_key);
 }
 
+void bl_find_pins_linked_to_signal(bl_sig_meta_t *sig, void (*callback)(bl_inst_meta_t *inst, bl_pin_meta_t *pin))
+{
+    bl_inst_meta_t *inst;
+    bl_pin_meta_t *pin;
+    bl_sig_data_t *sp, **pp;
 
+    sp = TO_RT_ADDR(sig->data_index);
+    inst = instance_root;
+    while ( inst != NULL ) {
+        pin = inst->pin_list;
+        while ( pin != NULL ) {
+            pp = TO_RT_ADDR(pin->ptr_index);
+            if ( *pp == sp ) {
+                callback(inst, pin);
+            }
+            pin = pin->next;
+        }
+        inst = inst->next;
+    }
+
+}
 
 
 
@@ -385,6 +405,20 @@ static char const * const dirs[] = {
     "i/o"
 };
 
+static char const * const dirs_ps[] = {
+    "xxx",
+    "<==",
+    "==>",
+    "<=>"
+};
+
+static char const * const dirs_sp[] = {
+    "xxx",
+    "==>",
+    "<==",
+    "<=>"
+};
+
 void bl_show_pin(bl_pin_meta_t *pin)
 {
     bl_sig_data_t *dummy_addr, **ptr_addr, *ptr_val;
@@ -423,25 +457,13 @@ void bl_show_pin_value(bl_pin_meta_t *pin)
 void bl_show_pin_linkage(bl_pin_meta_t *pin)
 {
     bl_sig_data_t *dummy_addr, **ptr_addr, *ptr_val;
-    char *dir;
+    char const *dir;
     bl_sig_meta_t *sig;
 
     dummy_addr = (bl_sig_data_t *)TO_RT_ADDR(pin->dummy_index);
     ptr_addr = (bl_sig_data_t **)TO_RT_ADDR(pin->ptr_index);
     ptr_val = *ptr_addr;
-    switch(pin->pin_dir) {
-    case BL_DIR_IN:
-        dir = "<==";
-        break;
-    case BL_DIR_OUT:
-        dir = "==>";
-        break;
-    case BL_DIR_IO:
-        dir = "<=>";
-        break;
-    default:
-        assert(0);
-    }
+    dir = dirs_ps[pin->pin_dir];
     if ( ptr_val == dummy_addr ) {
         printf("%s (dummy)", dir);
     } else {
@@ -462,6 +484,7 @@ void bl_show_signal(bl_sig_meta_t *sig)
                             sig->sig_name, types[sig->data_type], sig, sig->data_index, data_addr);
     bl_show_signal_value(sig);
     printf("\n");
+    bl_show_signal_linkage(sig);
 }
 
 
@@ -471,6 +494,21 @@ void bl_show_signal_value(bl_sig_meta_t *sig)
 
     data = (bl_sig_data_t *)TO_RT_ADDR(sig->data_index);
     bl_show_sig_data_t_value(data, sig->data_type);
+}
+
+
+static void signal_linkage_callback(bl_inst_meta_t *inst, bl_pin_meta_t *pin)
+{
+    char const *dir;
+
+    dir = dirs_sp[pin->pin_dir];
+    printf("    %s %s.%s\n", dir, inst->name, pin->name);
+}
+
+
+void bl_show_signal_linkage(bl_sig_meta_t *sig)
+{
+    bl_find_pins_linked_to_signal(sig, signal_linkage_callback);
 }
 
 

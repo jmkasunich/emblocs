@@ -372,6 +372,7 @@ bl_inst_meta_t *bl_find_instance_by_name(char const *name);
 bl_pin_meta_t *bl_find_pin_in_instance_by_name(char const *name, bl_inst_meta_t *inst);
 bl_sig_meta_t *bl_find_signal_by_name(char const *name);
 bl_sig_meta_t *bl_find_signal_by_index(uint32_t index);
+void bl_find_pins_linked_to_signal(bl_sig_meta_t *sig, void (*callback)(bl_inst_meta_t *inst, bl_pin_meta_t *pin));
 
 
 
@@ -389,6 +390,7 @@ void bl_show_pin_value(bl_pin_meta_t *pin);
 void bl_show_pin_linkage(bl_pin_meta_t *pin);
 void bl_show_signal(bl_sig_meta_t *sig);
 void bl_show_signal_value(bl_sig_meta_t *sig);
+void bl_show_signal_linkage(bl_sig_meta_t *sig);
 void bl_show_sig_data_t_value(bl_sig_data_t *data, bl_type_t type);
 void bl_show_all_signals(void);
 
