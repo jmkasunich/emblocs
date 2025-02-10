@@ -1,13 +1,10 @@
 #include "linked_list.h"
 
-#include "printing.h"
-
 int ll_insert(void **root, void *node, ll_funct_cmp_nodes_t funct)
 {
     void **p = root;
     void **n = node;
     int retval;
-print_string("ll_insert()\n");
     do {
         if ( *p == NULL ) {
             // reached end of list, insert here
@@ -34,7 +31,6 @@ print_string("ll_insert()\n");
 void *ll_find(void **root, void *key, ll_funct_cmp_node_key_t funct)
 {
     void **p = root;
-print_string("ll_find()\n");
 
     while ( *p != NULL ) {
         if ( funct(*p, key) == 0 ) {
@@ -51,7 +47,6 @@ void *ll_delete(void **root, void *key, ll_funct_cmp_node_key_t funct)
 {
     void **p = root;
     void **n;
-print_string("ll_delete()\n");
 
     while ( *p != NULL ) {
         if ( funct(*p, key) == 0 ) {
@@ -72,7 +67,6 @@ int ll_traverse(void **root, ll_funct_process_node_t funct)
 {
     void **p = root;
     int count = 0;
-print_string("ll_traverse()\n");
 
     while ( *p != NULL ) {
         if ( funct != NULL ) funct(*p);
