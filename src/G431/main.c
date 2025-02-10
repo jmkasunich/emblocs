@@ -40,6 +40,7 @@ bl_inst_def_t const bl_instances[] = {
     { NULL, NULL, NULL }
 };
 
+#ifndef INIT_BY_NET
 char const * const bl_signals_float[] = {
     "fp_sig",
     "output",
@@ -67,7 +68,17 @@ bl_link_def_t const bl_links[] = {
     { "comp4", "sel", "sel_sig" },
     { NULL, NULL, NULL }
 };
+#endif
 
+#ifdef INIT_BY_NET
+char const * const bl_nets[] = {
+    "FLOAT", "fp_sig", "comp1", "out", "comp4", "in1",
+    "FLOAT", "output", 
+    "BIT", "sel_sig", "comp4", "sel",
+    "U32", "clocks", "timer", "time",
+    NULL
+};
+#endif
 
 
 

@@ -244,12 +244,12 @@ bl_sig_meta_t *bl_signal_new(char const *name, bl_type_t type)
     return meta;
 }
 
-bl_retval_t  bl_link_pin_to_signal(char const *inst_name, char const *pin_name, char const *sig_name )
+
+bl_retval_t bl_link_pin_to_signal_by_names(char const *inst_name, char const *pin_name, char const *sig_name )
 {
     bl_inst_meta_t *inst;
     bl_pin_meta_t *pin;
     bl_sig_meta_t *sig;
-    bl_sig_data_t *sig_data_addr, **pin_ptr_addr;
 
     inst = bl_find_instance_by_name(inst_name);
     if ( inst == NULL ) {
@@ -263,6 +263,19 @@ bl_retval_t  bl_link_pin_to_signal(char const *inst_name, char const *pin_name, 
     if ( sig == NULL ) {
         return BL_SIG_NOT_FOUND;
     }
+    bl_link_pin_to_signal(pin, sig );
+    return BL_SUCCESS;
+}
+
+
+bl_retval_t bl_link_pin_to_signal(bl_pin_meta_t *pin, bl_sig_meta_t *sig )
+{
+    bl_sig_data_t *sig_data_addr, **pin_ptr_addr;
+
+    // check types
+    if ( pin->data_type != sig->data_type ) {
+        return BL_TYPE_MISMATCH;
+    }
     // convert indexes to addresses
     pin_ptr_addr = TO_RT_ADDR(pin->ptr_index);
     sig_data_addr = TO_RT_ADDR(sig->data_index);
@@ -272,11 +285,10 @@ bl_retval_t  bl_link_pin_to_signal(char const *inst_name, char const *pin_name, 
 }
 
 
-bl_retval_t bl_unlink_pin(char const *inst_name, char const *pin_name)
+bl_retval_t bl_unlink_pin_by_name(char const *inst_name, char const *pin_name)
 {
     bl_inst_meta_t *inst;
     bl_pin_meta_t *pin;
-    bl_sig_data_t *pin_dummy_addr, **pin_ptr_addr, *pin_ptr_value;
 
     inst = bl_find_instance_by_name(inst_name);
     if ( inst == NULL ) {
@@ -286,6 +298,15 @@ bl_retval_t bl_unlink_pin(char const *inst_name, char const *pin_name)
     if ( pin == NULL ) {
         return BL_PIN_NOT_FOUND;
     }
+    bl_unlink_pin(pin);
+    return BL_SUCCESS;
+}
+
+
+void bl_unlink_pin(bl_pin_meta_t *pin)
+{
+    bl_sig_data_t *pin_dummy_addr, **pin_ptr_addr, *pin_ptr_value;
+
     // convert indexes to addresses
     pin_ptr_addr = TO_RT_ADDR(pin->ptr_index);
     pin_dummy_addr = TO_RT_ADDR(pin->dummy_index);
@@ -294,8 +315,6 @@ bl_retval_t bl_unlink_pin(char const *inst_name, char const *pin_name)
     *pin_dummy_addr = *pin_ptr_value;
     // link pin to its dummy
     *pin_ptr_addr = pin_dummy_addr;
-    return BL_SUCCESS;
-
 }
 
 
@@ -694,18 +713,59 @@ void bl_linksp(char const *sig_name, char const *inst_name, char const *pin_name
 }
 #endif
 
+#ifdef INIT_BY_NET
+static int is_type_str(char const *str, bl_type_t *result)
+{
+    if ( strcmp(str, "BIT") == 0 ) {
+        *result = BL_TYPE_BIT;
+        return 1;
+    }
+    if ( strcmp(str, "FLOAT") == 0 ) {
+        *result = BL_TYPE_FLOAT;
+        return 1;
+    }
+    if ( strcmp(str, "S32") == 0 ) {
+        *result = BL_TYPE_S32;
+        return 1;
+    }
+    if ( strcmp(str, "U32") == 0 ) {
+        *result = BL_TYPE_U32;
+        return 1;
+    }
+    return 0;
+}
+#endif
+
+
 void emblocs_init(void)
 {
     bl_inst_def_t const *idp;  // instance definition pointer
+#ifndef INIT_BY_NET
     char const * const *snp;  // signal name pointer
     bl_link_def_t const *ldp;  // link defintion pointer
+#endif
     bl_retval_t retval;
+#ifdef INIT_BY_NET
+    char const * const *netp;
+    bl_type_t net_type;
+    bl_sig_meta_t *sig;
+    bl_inst_meta_t *inst;
+    bl_pin_meta_t *pin;
+    enum {
+        START,
+        GET_SIG,
+        GOT_SIG,
+        GET_PIN
+    } state;
+
+#endif
 
     idp = bl_instances;
     while ( idp->name != NULL ) {
         bl_instance_new(idp->name, idp->comp_def, idp->personality);
         idp++;
     }
+#ifndef INIT_BY_NET
     snp = bl_signals_float;
     while ( *snp != NULL ) {
         bl_signal_new(*snp, BL_TYPE_FLOAT);
@@ -728,10 +788,51 @@ void emblocs_init(void)
     }
     ldp = bl_links;
     while ( ldp->sig_name != NULL ) {
-        retval = bl_link_pin_to_signal(ldp->inst_name, ldp->pin_name, ldp->sig_name);
+        retval = bl_link_pin_to_signal_by_names(ldp->inst_name, ldp->pin_name, ldp->sig_name);
         assert(retval == BL_SUCCESS);
         ldp++;
     }
+#endif
+#ifdef INIT_BY_NET
+    netp = bl_nets;
+    state = START;
+    while ( *netp != NULL ) {
+        switch (state) {
+        case START:
+            if ( is_type_str(*netp, &net_type) ) {
+                state = GET_SIG;
+            } else {
+                assert(0);
+            }
+            break;
+        case GET_SIG:
+            sig = bl_signal_new(*netp, net_type);
+            assert(sig != NULL);
+            state = GOT_SIG;
+            break;
+        case GOT_SIG:
+            if ( is_type_str(*netp, &net_type) ) {
+                // done with previous net, start a new one
+                state = GET_SIG;
+            } else {
+                inst = bl_find_instance_by_name(*netp);
+                assert(inst != NULL);
+                state = GET_PIN;
+            }
+            break;
+        case GET_PIN:
+            pin = bl_find_pin_in_instance_by_name(*netp, inst);
+            assert(pin != NULL);
+            retval = bl_link_pin_to_signal(pin, sig);
+            assert(retval == BL_SUCCESS);
+            state = GOT_SIG;
+            break;
+        default:
+            assert(0);
+        }
+        netp++;
+    }
+#endif
 }
 
 #if 0

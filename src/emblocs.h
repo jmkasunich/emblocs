@@ -15,6 +15,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#define INIT_BY_NET
+
 /* some basic assumptions */
 _Static_assert(sizeof(int) == 4, "ints must be 32 bits");
 _Static_assert(sizeof(void *) == 4, "pointers must be 32 bits");
@@ -25,7 +27,7 @@ _Static_assert(sizeof(void *) == 4, "pointers must be 32 bits");
 
 typedef enum {
     BL_SUCCESS = 0,
-    BL_NOMEM = -1,
+    BL_TYPE_MISMATCH = -1,
     BL_INST_NOT_FOUND = -2,
     BL_PIN_NOT_FOUND = -3,
     BL_SIG_NOT_FOUND = -4
@@ -308,13 +310,15 @@ bl_sig_meta_t *bl_signal_new(char const *name, bl_type_t type);
 /*************************************************************
  * Links the specified instance/pin to the specified signal
  */
-bl_retval_t bl_link_pin_to_signal(char const *inst_name, char const *pin_name, char const *sig_name );
+bl_retval_t bl_link_pin_to_signal_by_names(char const *inst_name, char const *pin_name, char const *sig_name );
+bl_retval_t bl_link_pin_to_signal(bl_pin_meta_t *pin, bl_sig_meta_t *sig );
 
 
 /*************************************************************
  * Disconnects the specified instance/pin from any signal
  */
-bl_retval_t bl_unlink_pin(char const *inst_name, char const *pin_name);
+bl_retval_t bl_unlink_pin_by_name(char const *inst_name, char const *pin_name);
+void bl_unlink_pin(bl_pin_meta_t *pin);
 
 
 
@@ -430,6 +434,19 @@ typedef struct inst_def_s {
 /* array listing all instances to be created */
 extern bl_inst_def_t const bl_instances[];
 
+#ifdef INIT_BY_NET
+/* nets array consists of a series of strings defining nets
+ * each net starts with the one of the type strings "FLOAT",
+ * "BIT", "S32" or "U32", then the net name, followed by an
+ * instance name and a pin name.  The pin name is followed 
+ * by either another instance and pin name, or by a type 
+ * string to start a new signal, or by NULL to end the list.
+ */
+
+extern char const * const bl_nets[];
+
+#else  // not INIT_BY_NET
+
 /* arrays listing all signals to be created */
 extern char const * const bl_signals_float[];
 extern char const * const bl_signals_bit[];
@@ -444,17 +461,7 @@ typedef struct link_def_s {
 
 extern bl_link_def_t const bl_links[];
 
-
-/* nets array consists of a series of strings defining nets
- * each net starts with the one of the type strings "FLOAT",
- * "BIT", "S32" or "U32", then the net name, followed by an
- * instance name and a pin name.  The pin name is followed 
- * by either another instance and pin name, or by a type 
- * string to start a new signal, or by NULL to end the list.
- */
-
-extern char *bl_nets[];
-
+#endif
 
 /* function that reads the above and builds the system */
 void emblocs_init(void);
