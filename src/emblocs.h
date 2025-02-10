@@ -395,36 +395,6 @@ void bl_show_sig_data_t_value(bl_sig_data_t *data, bl_type_t type);
 void bl_show_all_signals(void);
 
 
-#if 0  // OLD STUFF
-/* structure to hold signal metadata */
-typedef struct bl_sig_meta_s {
-    struct bl_sig_meta_s *next;
-    char const *name;
-    bl_dpwt_t dpwt;
-} bl_sig_meta_t;
-
-/* system building functions */
-
-/*   create a signal */
-bl_sig_meta_t *bl_newsig(bl_type_t type, char const * sig_name);
-
-/*   link a pin to a signal */
-void bl_linksp(char const *sig_name, char const *inst_name, char const *pin_name);
-
-/* helpers for system building functions */
-
-/*   find a signal by name */
-
-/* listing/observation functions */
-
-/*   list all signals */
-void list_all_signals(void);
-
-/*   list pins connected to a signal */
-void list_signal_pins(bl_sig_meta_t *sig);
-
-#endif  // OLD STUFF
-
 /* arrays that the application must supply to define the system */
 
 typedef struct inst_def_s {
