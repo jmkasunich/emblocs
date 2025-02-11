@@ -77,7 +77,9 @@ int main (void) {
     reg &= ~GPIO_MODER_MODE6_Msk;
     reg |= 0x01 << GPIO_MODER_MODE6_Pos;
     LED_PORT->MODER = reg;
-    
+
+    print_string("BOOT\n");
+
     print_string(hello);
     delay(500);
     printf("sum2_def is at %p, has %d pins at %p\n", 
