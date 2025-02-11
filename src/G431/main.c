@@ -3,7 +3,6 @@
 #include "emblocs.h"
 #include "printing.h"
 #include "main.h"
-#include "linked_list.h"
 
 void __assert_func (const char * file, int line, const char * funct, const char *expr)
 {
@@ -27,39 +26,45 @@ static void delay (unsigned int time) {
         for (volatile unsigned int j = 0; j < 20000; j++);
 }
 
-
 extern bl_comp_def_t bl_mux2_def;
 extern bl_comp_def_t bl_sum2_def;
 extern bl_comp_def_t bl_perftimer_def;
 
-bl_inst_def_t const instances[] = {
-    { "comp1", &bl_sum2_def, NULL },
-    { "sum21", &bl_sum2_def, NULL },
-    { "timer", &bl_perftimer_def, NULL },
-    { "comp4", &bl_mux2_def, NULL },
-    { NULL, NULL, NULL }
+bl_inst_def_t bl_instances[] = {
+    { "comp1", &bl_sum2_def },
+    { "sum21", &bl_sum2_def },
+    { "timer", &bl_perftimer_def },
+    { "comp4", &bl_mux2_def },
+    { NULL, NULL }
 };
 
-char const * const nets[] = {
-    "FLOAT", "fp_sig", "comp1", "out", "comp4", "in1",
-    "FLOAT", "output", "comp4", "out", "sum21", "gain0",
-    "BIT", "sel_sig", "comp4", "sel",
-    "U32", "clocks", "timer", "time",
+char *bl_signals_float[] = {
+    "fp_sig",
+    "output",
     NULL
 };
 
-bl_setsig_def_t const setsigs[] = {
-    { "sel_sig", { .b = 1 } },
-    { "fp_sig", { .f = 3.14F } },
-    {NULL, {0} }
+char *bl_signals_bit[] = {
+    "sel_sig",
+    NULL
 };
 
-bl_setpin_def_t const setpins[] = {
-    { "comp1", "in0", { .f = 2.1F } },
-    { "sum21", "gain0", { .f = 4.5F } },
-    { NULL, NULL, {0} }
+char *bl_signals_s32[] = {
+    NULL
 };
 
+char *bl_signals_u32[] = {
+    "clocks",
+    NULL
+};
+
+bl_link_def_t bl_links[] = {
+    { "clocks", "timer", "time" },
+    { "fp_sig", "comp1", "out" },
+    { "fp_sig", "comp4", "in1" },
+    { "sel_sig", "comp4", "sel" },
+    { NULL, NULL, NULL }
+};
 
 
 int main (void) {
@@ -72,27 +77,21 @@ int main (void) {
     reg &= ~GPIO_MODER_MODE6_Msk;
     reg |= 0x01 << GPIO_MODER_MODE6_Pos;
     LED_PORT->MODER = reg;
-
-    print_string("BOOT\n");
-
-//    linked_list_test();
-
+    
     print_string(hello);
+    delay(500);
+    printf("sum2_def is at %p, has %d pins at %p\n", 
+        &bl_sum2_def, bl_sum2_def.pin_count, bl_sum2_def.pin_defs);
+    printf("and a function at %p\n", bl_sum2_def.funct_defs[0].fp);
+    printf("sum2_def is at %p, has %d pins\n", &bl_sum2_def, bl_sum2_def.pin_count);
+
 
     print_memory((void *)hello, 512);
-    print_string("\n\n");
-    bl_show_memory_status();
-    bl_show_all_instances();
-    bl_show_all_signals();
-    print_string("begin init\n");
-    bl_init_instances(instances);
-    bl_init_nets(nets);
-    bl_init_setsigs(setsigs);
-    bl_init_setpins(setpins);
-    print_string("init complete\n");
-    bl_show_memory_status();
-    bl_show_all_instances();
-    bl_show_all_signals();
+    list_all_instances();
+    list_all_signals();
+    emblocs_init();
+    list_all_instances();
+    list_all_signals();
 
     
 

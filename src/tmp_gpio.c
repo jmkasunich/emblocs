@@ -73,34 +73,26 @@ _Static_assert((sizeof(bl_gpio_inst_t) < 32767), "instance structure too large")
 
 // array of pin definitions - one copy in FLASH
 static bl_pin_def_t const bl_gpio_pins[] = {
-    { "time", BL_TYPE_U32, BL_DIR_OUT, offsetof(bl_gpio_inst_t, bits[0])}
+    { "time", BL_TYPE_U32, BL_DIR_OUT, BL_OFFSET(bl_gpio_inst_t, bits[0])}
 };
 
 static void bl_gpio_read_funct(void *ptr);
 static void bl_gpio_write_funct(void *ptr);
 
-/*
 // array of function definitions - one copy in FLASH
 static bl_funct_def_t const bl_gpio_functs[] = {
     { "read", &bl_gpio_read_funct },
     { "write", &bl_gpio_write_funct }
 };
-*/
-
-/* component-specific setup function */
-bl_inst_meta_t * gpio_setup(char const *inst_name, struct bl_comp_def_s *comp_def, void *personality);
-
-
 
 // component definition - one copy in FLASH
 bl_comp_def_t const bl_gpio_def = { 
     "gpio",
-    gpio_setup,
+    ARRAYCOUNT(bl_gpio_pins),
+    ARRAYCOUNT(bl_gpio_functs),
     sizeof(bl_gpio_inst_t),
-    _countof(bl_gpio_pins),
-//    ARRAYCOUNT(bl_gpio_functs),
-    &(bl_gpio_pins[0])
-//    &(bl_gpio_functs[0])
+    &(bl_gpio_pins[0]),
+    &(bl_gpio_functs[0])
 };
 
 // realtime code - one copy in FLASH
@@ -115,6 +107,6 @@ static void bl_gpio_write_funct(void *ptr)
 {
     bl_gpio_inst_t *p = (bl_gpio_inst_t *)ptr;
 
-    *(p->bits) = tsc_read() - p->tsc;
+    *(p->time.pin) = tsc_read() - p->tsc;
 }
 
