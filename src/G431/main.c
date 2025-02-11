@@ -3,7 +3,6 @@
 #include "emblocs.h"
 #include "printing.h"
 #include "main.h"
-#include "linked_list.h"
 
 void __assert_func (const char * file, int line, const char * funct, const char *expr)
 {
@@ -74,8 +73,6 @@ int main (void) {
     LED_PORT->MODER = reg;
 
     print_string("BOOT\n");
-
-//    linked_list_test();
 
     print_string(hello);
 
