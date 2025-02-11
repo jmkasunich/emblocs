@@ -32,7 +32,7 @@ extern bl_comp_def_t bl_mux2_def;
 extern bl_comp_def_t bl_sum2_def;
 extern bl_comp_def_t bl_perftimer_def;
 
-bl_inst_def_t const bl_instances[] = {
+bl_inst_def_t const instances[] = {
     { "comp1", &bl_sum2_def, NULL },
     { "sum21", &bl_sum2_def, NULL },
     { "timer", &bl_perftimer_def, NULL },
@@ -40,47 +40,13 @@ bl_inst_def_t const bl_instances[] = {
     { NULL, NULL, NULL }
 };
 
-#ifndef INIT_BY_NET
-char const * const bl_signals_float[] = {
-    "fp_sig",
-    "output",
-    NULL
-};
-
-char const * const bl_signals_bit[] = {
-    "sel_sig",
-    NULL
-};
-
-char const * const bl_signals_s32[] = {
-    NULL
-};
-
-char const * const bl_signals_u32[] = {
-    "clocks",
-    NULL
-};
-
-bl_link_def_t const bl_links[] = {
-    { "timer", "time", "clocks" },
-    { "comp1", "out", "fp_sig" },
-    { "comp4", "in1", "fp_sig" },
-    { "comp4", "sel", "sel_sig" },
-    { NULL, NULL, NULL }
-};
-#endif
-
-#ifdef INIT_BY_NET
-char const * const bl_nets[] = {
+char const * const nets[] = {
     "FLOAT", "fp_sig", "comp1", "out", "comp4", "in1",
     "FLOAT", "output", 
     "BIT", "sel_sig", "comp4", "sel",
     "U32", "clocks", "timer", "time",
     NULL
 };
-#endif
-
-
 
 
 int main (void) {
@@ -106,7 +72,8 @@ int main (void) {
     bl_show_all_instances();
     bl_show_all_signals();
     print_string("begin init\n");
-    emblocs_init();
+    bl_init_instances(instances);
+    bl_init_nets(nets);
     print_string("init complete\n");
     bl_show_memory_status();
     bl_show_all_instances();

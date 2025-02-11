@@ -536,7 +536,6 @@ void bl_show_sig_data_t_value(bl_sig_data_t *data, bl_type_t type)
     }
 }
 
-
 void bl_show_all_signals(void)
 {
     int ll_result;
@@ -546,9 +545,19 @@ void bl_show_all_signals(void)
     printf("Total of %d signals\n", ll_result);
 }
 
+void bl_init_instances(const bl_inst_def_t instances[])
+{
+    bl_inst_def_t const *idp;  // instance definition pointer
+    bl_inst_meta_t *inst;
 
+    idp = instances;
+    while ( idp->name != NULL ) {
+        inst = bl_instance_new(idp->name, idp->comp_def, idp->personality);
+        assert(inst != NULL);
+        idp++;
+    }
+}
 
-#ifdef INIT_BY_NET
 static int is_type_str(char const *str, bl_type_t *result)
 {
     if ( strcmp(str, "BIT") == 0 ) {
@@ -569,19 +578,10 @@ static int is_type_str(char const *str, bl_type_t *result)
     }
     return 0;
 }
-#endif
 
-
-void emblocs_init(void)
+void bl_init_nets(char const *const nets[])
 {
-    bl_inst_def_t const *idp;  // instance definition pointer
-#ifndef INIT_BY_NET
-    char const * const *snp;  // signal name pointer
-    bl_link_def_t const *ldp;  // link defintion pointer
-#endif
     bl_retval_t retval;
-#ifdef INIT_BY_NET
-    char const * const *netp;
     bl_type_t net_type;
     bl_sig_meta_t *sig;
     bl_inst_meta_t *inst;
@@ -593,70 +593,33 @@ void emblocs_init(void)
         GET_PIN
     } state;
 
-#endif
-
-    idp = bl_instances;
-    while ( idp->name != NULL ) {
-        bl_instance_new(idp->name, idp->comp_def, idp->personality);
-        idp++;
-    }
-#ifndef INIT_BY_NET
-    snp = bl_signals_float;
-    while ( *snp != NULL ) {
-        bl_signal_new(*snp, BL_TYPE_FLOAT);
-        snp++;
-    }
-    snp = bl_signals_bit;
-    while ( *snp != NULL ) {
-        bl_signal_new(*snp, BL_TYPE_BIT);
-        snp++;
-    }
-    snp = bl_signals_s32;
-    while ( *snp != NULL ) {
-        bl_signal_new(*snp, BL_TYPE_S32);
-        snp++;
-    }
-    snp = bl_signals_u32;
-    while ( *snp != NULL ) {
-        bl_signal_new(*snp, BL_TYPE_U32);
-        snp++;
-    }
-    ldp = bl_links;
-    while ( ldp->sig_name != NULL ) {
-        retval = bl_link_pin_to_signal_by_names(ldp->inst_name, ldp->pin_name, ldp->sig_name);
-        assert(retval == BL_SUCCESS);
-        ldp++;
-    }
-#endif
-#ifdef INIT_BY_NET
-    netp = bl_nets;
     state = START;
-    while ( *netp != NULL ) {
+    while ( *nets != NULL ) {
         switch (state) {
         case START:
-            if ( is_type_str(*netp, &net_type) ) {
+            if ( is_type_str(*nets, &net_type) ) {
                 state = GET_SIG;
             } else {
                 assert(0);
             }
             break;
         case GET_SIG:
-            sig = bl_signal_new(*netp, net_type);
+            sig = bl_signal_new(*nets, net_type);
             assert(sig != NULL);
             state = GOT_SIG;
             break;
         case GOT_SIG:
-            if ( is_type_str(*netp, &net_type) ) {
+            if ( is_type_str(*nets, &net_type) ) {
                 // done with previous net, start a new one
                 state = GET_SIG;
             } else {
-                inst = bl_find_instance_by_name(*netp);
+                inst = bl_find_instance_by_name(*nets);
                 assert(inst != NULL);
                 state = GET_PIN;
             }
             break;
         case GET_PIN:
-            pin = bl_find_pin_in_instance_by_name(*netp, inst);
+            pin = bl_find_pin_in_instance_by_name(*nets, inst);
             assert(pin != NULL);
             retval = bl_link_pin_to_signal(pin, sig);
             assert(retval == BL_SUCCESS);
@@ -665,8 +628,6 @@ void emblocs_init(void)
         default:
             assert(0);
         }
-        netp++;
+        nets++;
     }
-#endif
 }
-
