@@ -247,15 +247,10 @@ bl_sig_meta_t *bl_signal_new(char const *name, bl_type_t type)
 
 bl_retval_t bl_link_pin_to_signal_by_names(char const *inst_name, char const *pin_name, char const *sig_name )
 {
-    bl_inst_meta_t *inst;
     bl_pin_meta_t *pin;
     bl_sig_meta_t *sig;
 
-    inst = bl_find_instance_by_name(inst_name);
-    if ( inst == NULL ) {
-        return BL_INST_NOT_FOUND;
-    }
-    pin = bl_find_pin_in_instance_by_name(pin_name, inst);
+    pin = bl_find_pin_by_names(inst_name, pin_name);
     if ( pin == NULL ) {
         return BL_PIN_NOT_FOUND;
     }
@@ -287,14 +282,9 @@ bl_retval_t bl_link_pin_to_signal(bl_pin_meta_t *pin, bl_sig_meta_t *sig )
 
 bl_retval_t bl_unlink_pin_by_name(char const *inst_name, char const *pin_name)
 {
-    bl_inst_meta_t *inst;
     bl_pin_meta_t *pin;
 
-    inst = bl_find_instance_by_name(inst_name);
-    if ( inst == NULL ) {
-        return BL_INST_NOT_FOUND;
-    }
-    pin = bl_find_pin_in_instance_by_name(pin_name, inst);
+    pin = bl_find_pin_by_names(inst_name, pin_name);
     if ( pin == NULL ) {
         return BL_PIN_NOT_FOUND;
     }
@@ -318,6 +308,51 @@ void bl_unlink_pin(bl_pin_meta_t *pin)
 }
 
 
+void bl_set_sig(bl_sig_meta_t *sig, bl_sig_data_t const *value)
+{
+    bl_sig_data_t *sig_data;
+
+    sig_data = TO_RT_ADDR(sig->data_index);
+    *sig_data = *value;
+}
+
+
+bl_retval_t bl_set_sig_by_name(char const *sig_name, bl_sig_data_t const *value)
+{
+    bl_sig_meta_t *sig;
+
+    sig = bl_find_signal_by_name(sig_name);
+    if ( sig == NULL ) {
+        return BL_SIG_NOT_FOUND;
+    }
+    bl_set_sig(sig, value);
+    return BL_SUCCESS;
+}
+
+
+void bl_set_pin(bl_pin_meta_t *pin, bl_sig_data_t const *value)
+{
+    bl_sig_data_t **pin_ptr, *sig_data;
+
+    pin_ptr = TO_RT_ADDR(pin->ptr_index);
+    sig_data = *pin_ptr;
+    *sig_data = *value;
+}
+
+
+bl_retval_t bl_set_pin_by_name(char const *inst_name, char const *pin_name, bl_sig_data_t const *value)
+{
+    bl_pin_meta_t *pin;
+
+    pin = bl_find_pin_by_names(inst_name, pin_name);
+    if ( pin == NULL ) {
+        return BL_PIN_NOT_FOUND;
+    }
+    bl_set_pin(pin, value);
+    return BL_SUCCESS;
+}
+
+
 bl_inst_meta_t *bl_find_instance_by_name(char const *name)
 {
     return ll_find((void **)(&(instance_root)), (void *)(name), inst_meta_cmp_name_key);
@@ -326,6 +361,17 @@ bl_inst_meta_t *bl_find_instance_by_name(char const *name)
 bl_pin_meta_t *bl_find_pin_in_instance_by_name(char const *name, bl_inst_meta_t *inst)
 {
     return ll_find((void **)(&(inst->pin_list)), (void *)(name), pin_meta_cmp_name_key);
+}
+
+bl_pin_meta_t *bl_find_pin_by_names(char const *inst_name, char const *pin_name)
+{
+    bl_inst_meta_t *inst;
+    
+    inst = bl_find_instance_by_name(inst_name);
+    if ( inst == NULL ) {
+        return NULL;
+    }
+    return bl_find_pin_in_instance_by_name(pin_name, inst);
 }
 
 bl_sig_meta_t *bl_find_signal_by_name(char const *name)
@@ -361,14 +407,11 @@ void bl_find_pins_linked_to_signal(bl_sig_meta_t *sig, void (*callback)(bl_inst_
 }
 
 
-
-
 void bl_show_memory_status(void)
 {
     printf("RT pool:   %d/%d, %d free\n", sizeof(bl_rt_pool)-rt_pool_avail, sizeof(bl_rt_pool), rt_pool_avail);
     printf("Meta pool: %d/%d, %d free\n", sizeof(bl_meta_pool)-meta_pool_avail, sizeof(bl_meta_pool), meta_pool_avail);
 }
-
 
 void bl_show_instance(bl_inst_meta_t *inst)
 {
@@ -453,7 +496,6 @@ void bl_show_pin_value(bl_pin_meta_t *pin)
     bl_show_sig_data_t_value(data, pin->data_type);
 }
 
-
 void bl_show_pin_linkage(bl_pin_meta_t *pin)
 {
     bl_sig_data_t *dummy_addr, **ptr_addr, *ptr_val;
@@ -474,7 +516,6 @@ void bl_show_pin_linkage(bl_pin_meta_t *pin)
     }
 }
 
-
 void bl_show_signal(bl_sig_meta_t *sig)
 {
     bl_sig_data_t *data_addr;
@@ -487,7 +528,6 @@ void bl_show_signal(bl_sig_meta_t *sig)
     bl_show_signal_linkage(sig);
 }
 
-
 void bl_show_signal_value(bl_sig_meta_t *sig)
 {
     bl_sig_data_t *data;
@@ -495,7 +535,6 @@ void bl_show_signal_value(bl_sig_meta_t *sig)
     data = (bl_sig_data_t *)TO_RT_ADDR(sig->data_index);
     bl_show_sig_data_t_value(data, sig->data_type);
 }
-
 
 static void signal_linkage_callback(bl_inst_meta_t *inst, bl_pin_meta_t *pin)
 {
@@ -505,12 +544,10 @@ static void signal_linkage_callback(bl_inst_meta_t *inst, bl_pin_meta_t *pin)
     printf("    %s %s.%s\n", dir, inst->name, pin->name);
 }
 
-
 void bl_show_signal_linkage(bl_sig_meta_t *sig)
 {
     bl_find_pins_linked_to_signal(sig, signal_linkage_callback);
 }
-
 
 void bl_show_sig_data_t_value(bl_sig_data_t *data, bl_type_t type)
 {
@@ -545,7 +582,7 @@ void bl_show_all_signals(void)
     printf("Total of %d signals\n", ll_result);
 }
 
-void bl_init_instances(const bl_inst_def_t instances[])
+void bl_init_instances(bl_inst_def_t const instances[])
 {
     bl_inst_def_t const *idp;  // instance definition pointer
     bl_inst_meta_t *inst;
@@ -629,5 +666,31 @@ void bl_init_nets(char const *const nets[])
             assert(0);
         }
         nets++;
+    }
+}
+
+void bl_init_setsigs(bl_setsig_def_t const setsigs[])
+{
+    bl_setsig_def_t const *sdp;
+    bl_retval_t retval;
+
+    sdp = setsigs;
+    while ( sdp->name != NULL ) {
+        retval = bl_set_sig_by_name(sdp->name, &sdp->value);
+        assert(retval == BL_SUCCESS);
+        sdp++;
+    }
+}
+
+void bl_init_setpins(bl_setpin_def_t const setpins[])
+{
+    bl_setpin_def_t const *sdp;
+    bl_retval_t retval;
+
+    sdp = setpins;
+    while ( sdp->inst_name != NULL ) {
+        retval = bl_set_pin_by_name(sdp->inst_name, sdp->pin_name, &sdp->value);
+        assert(retval == BL_SUCCESS);
+        sdp++;
     }
 }

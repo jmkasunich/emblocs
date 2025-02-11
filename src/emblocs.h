@@ -301,17 +301,28 @@ bl_inst_meta_t *bl_instance_new(char const *name, bl_comp_def_t const *comp_def,
 bl_sig_meta_t *bl_signal_new(char const *name, bl_type_t type);
 
 /**************************************************************
- * Link the specified instance/pin to the specified signal
+ * Link the specified pin to the specified signal
  */
 bl_retval_t bl_link_pin_to_signal(bl_pin_meta_t *pin, bl_sig_meta_t *sig );
 bl_retval_t bl_link_pin_to_signal_by_names(char const *inst_name, char const *pin_name, char const *sig_name );
 
 /**************************************************************
- * Disconnect the specified instance/pin from any signal
+ * Disconnect the specified pin from any signal
  */
 void bl_unlink_pin(bl_pin_meta_t *pin);
 bl_retval_t bl_unlink_pin_by_name(char const *inst_name, char const *pin_name);
 
+/**************************************************************
+ * Set the specified signal to a value
+ */
+void bl_set_sig(bl_sig_meta_t *sig, bl_sig_data_t const *value);
+bl_retval_t bl_set_sig_by_name(char const *sig_name, bl_sig_data_t const *value);
+
+/**************************************************************
+ * Set the specified pin to a value
+ */
+void bl_set_pin(bl_pin_meta_t *pin, bl_sig_data_t const *value);
+bl_retval_t bl_set_pin_by_name(char const *inst_name, char const *pin_name, bl_sig_data_t const *value);
 
 /**************************************************************
  * Lower-level EMBLOCS API functions; typically helpers used  *
@@ -362,6 +373,7 @@ bl_pin_meta_t *bl_inst_add_pin(bl_inst_meta_t *inst, bl_pin_def_t const *def);
  */
 bl_inst_meta_t *bl_find_instance_by_name(char const *name);
 bl_pin_meta_t *bl_find_pin_in_instance_by_name(char const *name, bl_inst_meta_t *inst);
+bl_pin_meta_t *bl_find_pin_by_names(char const *inst_name, char const *pin_name);
 bl_sig_meta_t *bl_find_signal_by_name(char const *name);
 bl_sig_meta_t *bl_find_signal_by_index(uint32_t index);
 void bl_find_pins_linked_to_signal(bl_sig_meta_t *sig, void (*callback)(bl_inst_meta_t *inst, bl_pin_meta_t *pin));
@@ -403,7 +415,7 @@ typedef struct inst_def_s {
     void *personality;
 } bl_inst_def_t;
 
-void bl_init_instances(const bl_inst_def_t instances[]);
+void bl_init_instances(bl_inst_def_t const instances[]);
 
 /**************************************************************
  * A NULL terminated array of strings can be passed to 
@@ -418,5 +430,20 @@ void bl_init_instances(const bl_inst_def_t instances[]);
  */
 
 void bl_init_nets(char const * const nets[]);
+
+typedef struct bl_setsig_def_s {
+    char *name;
+    bl_sig_data_t value;
+} bl_setsig_def_t;
+
+void bl_init_setsigs(bl_setsig_def_t const setsigs[]);
+
+typedef struct bl_setpin_def_s {
+    char *inst_name;
+    char *pin_name;
+    bl_sig_data_t value;
+} bl_setpin_def_t;
+
+void bl_init_setpins(bl_setpin_def_t const setpins[]);
 
 #endif // EMBLOCS_H

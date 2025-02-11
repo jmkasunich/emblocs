@@ -42,11 +42,24 @@ bl_inst_def_t const instances[] = {
 
 char const * const nets[] = {
     "FLOAT", "fp_sig", "comp1", "out", "comp4", "in1",
-    "FLOAT", "output", 
+    "FLOAT", "output", "comp4", "out", "sum21", "gain0",
     "BIT", "sel_sig", "comp4", "sel",
     "U32", "clocks", "timer", "time",
     NULL
 };
+
+bl_setsig_def_t const setsigs[] = {
+    { "sel_sig", { .b = 1 } },
+    { "fp_sig", { .f = 3.14F } },
+    {NULL, {0} }
+};
+
+bl_setpin_def_t const setpins[] = {
+    { "comp1", "in0", { .f = 2.1F } },
+    { "sum21", "gain0", { .f = 4.5F } },
+    { NULL, NULL, {0} }
+};
+
 
 
 int main (void) {
@@ -74,6 +87,8 @@ int main (void) {
     print_string("begin init\n");
     bl_init_instances(instances);
     bl_init_nets(nets);
+    bl_init_setsigs(setsigs);
+    bl_init_setpins(setpins);
     print_string("init complete\n");
     bl_show_memory_status();
     bl_show_all_instances();
