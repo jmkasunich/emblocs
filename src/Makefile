@@ -186,27 +186,30 @@ all : list $(ALL_TARGETS)
 
 $(OBJ_DIR)/%.o : G431/%.c
 	@echo Compiling $(<)
-	@$(CC) $(C_STANDARD) $(CFLAGS) -c -MMD -MP -MT $(@) -MF $(DEPS_DIR)/$(*F).d $< -o $(@)
+	$(CC) $(C_STANDARD) $(CFLAGS) -c -MMD -MP -MT $(@) -MF $(DEPS_DIR)/$(*F).d $< -o $(@)
+	$(SIZE) --format=berkeley $@
 
 $(OBJ_DIR)/%.o : ./%.c
 	@echo Compiling $(<)
-	@$(CC) $(C_STANDARD) $(CFLAGS) -c -MMD -MP -MT $(@) -MF $(DEPS_DIR)/$(*F).d $< -o $(@)
+	$(CC) $(C_STANDARD) $(CFLAGS) -c -MMD -MP -MT $(@) -MF $(DEPS_DIR)/$(*F).d $< -o $(@)
+	$(SIZE) --format=berkeley $@
 
 
 # assembly rule
 
 $(OBJ_DIR)/%.o : G431/%.s
 	@echo Assembling $(<)
-	@$(AS) $(ASFLAGS) $< -o $(@)
+	$(AS) $(ASFLAGS) $< -o $(@)
+	$(SIZE) --format=berkeley $@
 
 
 # hex file generator rule
 
 %.hex : %.elf
+	@echo ' '
+	@echo 'Generating: $@'
 	@echo 'Invoking: Cross ARM GNU Create Flash Image'
 	$(OBJCOPY) -O ihex $< $(@) 
-	@echo 'Finished building: $@'
-	@echo ' '
 	@echo 'Invoking: Cross ARM GNU Print Size'
 	$(SIZE) --format=berkeley $<
 	@echo 'Finished building: $@'
@@ -216,29 +219,25 @@ $(OBJ_DIR)/%.o : G431/%.s
 
 $(BUILD_DIR)/main.elf : $(FOO_OBJECTS) | $(DIRS)
 	@echo ' '
-	@echo 'Building $(@)'
-	@echo 'from $(FOO_OBJECTS)'
+	@echo 'Linking $(@)'
 	@echo 'Invoking: Cross ARM C Linker'
 	$(CC) \
 		-Xlinker -Map=$(patsubst %.elf,%.map,$(@)) \
 		$(LDFLAGS) \
 		$(LDSCRIPTS) \
 		-o $(@) $(FOO_OBJECTS)
-	@echo 'Finished building: $@'
-	@echo ' '
+	@echo 'Finished linking: $@'
 
 $(BUILD_DIR)/printing-test.elf : $(PRINT_TEST_OBJECTS) | $(DIRS)
 	@echo ' '
-	@echo 'Building $(@)'
-	@echo 'from $(PRINT_TEST_OBJECTS)'
+	@echo 'Linking $(@)'
 	@echo 'Invoking: Cross ARM C Linker'
 	$(CC) \
 		-Xlinker -Map=$(patsubst %.elf,%.map,$(@)) \
 		$(LDFLAGS) \
 		$(LDSCRIPTS) \
 		-o $(@) $(PRINT_TEST_OBJECTS)
-	@echo 'Finished building: $@'
-	@echo ' '
+	@echo 'Finished linking: $@'
 
 # directory creation rule(s)
 
@@ -246,11 +245,12 @@ $(OBJECTS) : | $(DIRS)
 
 $(DIRS) : 
 	@echo Creating $(@)
-	@mkdir -p $(@)
+	mkdir -p $(@)
 
 # extra rules
 
 clean:
+	@echo "Cleaning"
 	rm -rf *.o
 	rm -rf *.d
 	rm -rf *.i
@@ -279,8 +279,7 @@ list :
 
 .PHONY : clean all list
 
-
-
+.SILENT :
 
 
 # =======================================================================================================================================
