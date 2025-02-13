@@ -32,7 +32,6 @@ static void *alloc_from_rt_pool(int32_t size)
 {
     void *retval;
 
-    printf("alloc rt   (%d)", size);
     assert ( size > 0 );
     // round size up to multiple of 4
     if ( size & 3 ) {
@@ -43,7 +42,6 @@ static void *alloc_from_rt_pool(int32_t size)
     retval = rt_pool_next;
     rt_pool_next += size/4;
     rt_pool_avail -= size;
-    printf(" @ %p, %d left\n", retval, rt_pool_avail);
     return retval;
 }
 
@@ -51,7 +49,6 @@ static void *alloc_from_meta_pool(int32_t size)
 {
     void *retval;
 
-    printf("alloc meta (%d)", size);
     assert ( size > 0 );
     // round size up to multiple of 4
     if ( size & 3 ) {
@@ -62,13 +59,11 @@ static void *alloc_from_meta_pool(int32_t size)
     retval = meta_pool_next;
     meta_pool_next += size/4;
     meta_pool_avail -= size;
-    printf(" %p, %d left\n", retval, meta_pool_avail);
     return retval;
 }
 
 bl_inst_meta_t *bl_instance_new(char const *name, bl_comp_def_t const *comp_def, void const *personality)
 {
-    printf("%s: instance of %s, compdef @ %p, personality @ %p\n", name, comp_def->name, comp_def, personality);
     if ( comp_def->setup == NULL ) {
         // no setup function, cannot support personality
         assert(personality == NULL);

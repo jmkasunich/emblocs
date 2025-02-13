@@ -64,6 +64,7 @@ bl_setpin_def_t const setpins[] = {
 int main (void) {
     uint32_t reg;
     char *hello = "\nHello, world!\n";
+    uint32_t t_start, t_inst, t_nets, t_setsig, t_setpin;
 
     platform_init();
     // Put pin PC6 in general purpose output mode
@@ -73,20 +74,30 @@ int main (void) {
     LED_PORT->MODER = reg;
 
     print_string("BOOT\n");
-
     print_string(hello);
-
-    print_memory((void *)hello, 512);
+//    print_memory((void *)hello, 512);
     print_string("\n\n");
     bl_show_memory_status();
-    bl_show_all_instances();
-    bl_show_all_signals();
     print_string("begin init\n");
+    t_start = tsc_read();
     bl_init_instances(instances);
+    t_inst = tsc_read();
     bl_init_nets(nets);
+    t_nets = tsc_read();
     bl_init_setsigs(setsigs);
+    t_setsig = tsc_read();
     bl_init_setpins(setpins);
+    t_setpin = tsc_read();
     print_string("init complete\n");
+    t_setpin -= t_setsig;
+    t_setsig -= t_nets;
+    t_nets -= t_inst;
+    t_inst -= t_start;
+    printf("Init time:        Clocks      uSec\n");
+    printf("  Instances:    %8d  %8d\n", t_inst, t_inst/170);
+    printf("  Nets:         %8d  %8d\n", t_nets, t_nets/170);
+    printf("  Set signals:  %8d  %8d\n", t_setsig, t_setsig/170);
+    printf("  Set pins:     %8d  %8d\n\n", t_setpin, t_setpin/170);
     bl_show_memory_status();
     bl_show_all_instances();
     bl_show_all_signals();
