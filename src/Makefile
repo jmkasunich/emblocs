@@ -181,7 +181,7 @@ ALL_TARGETS := $(addprefix $(BUILD_DIR)/, $(ALL_TARGETS))
 # RULES
 
 # master rule
-all : list $(ALL_TARGETS)
+all : $(ALL_TARGETS)
 
 # C compilation rule (with dependency tracking
 
