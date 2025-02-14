@@ -119,7 +119,7 @@ CFLAGS 					+= -Wconversion
 CFLAGS 					+= -Wlogical-op
 CFLAGS 					+= -Wpointer-arith
 CFLAGS 					+= -Wdisabled-optimization
-CFLAGS                	+= -Wno-unused-parameter
+CFLAGS                	+= -Wunused-parameter
 CFLAGS					+= -Wno-sign-conversion
 # Assembler settings
 CFLAGS                  += -Wa,-alh=$(@:.o=.lst)

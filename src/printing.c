@@ -45,6 +45,8 @@ static int snprint_uint_dec_helper(char *buf, int size, uint32_t value, int digi
     int digit, len;
     char *start, *end, tmp;
 
+    // largest possible uint32_t fits in 10 digits
+    assert(size > 10);
     if ( digits > 10 ) digits = 10;
     // calculate digits in reverse order, then reverse them
     // init start and end pointers
