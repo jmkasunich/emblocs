@@ -130,7 +130,7 @@ static int sig_meta_cmp_name_key(void *node, void *key)
 {
     bl_sig_meta_t *np = node;
     char *kp = key;
-    return strcmp(np->sig_name, kp);
+    return strcmp(np->name, kp);
 }
 
 static int sig_meta_cmp_index_key(void *node, void *key)
@@ -144,7 +144,7 @@ static int sig_meta_cmp_names(void *node1, void *node2)
 {
     bl_sig_meta_t  *np1 = node1;
     bl_sig_meta_t  *np2 = node2;
-    return strcmp(np1->sig_name, np2->sig_name);
+    return strcmp(np1->name, np2->name);
 }
 
 static void sig_meta_print_node(void *node)
@@ -156,14 +156,14 @@ static int thread_meta_cmp_name_key(void *node, void *key)
 {
     bl_thread_meta_t *np = node;
     char *kp = key;
-    return strcmp(np->thread_name, kp);
+    return strcmp(np->name, kp);
 }
 
 static int thread_meta_cmp_names(void *node1, void *node2)
 {
     bl_thread_meta_t  *np1 = node1;
     bl_thread_meta_t  *np2 = node2;
-    return strcmp(np1->thread_name, np2->thread_name);
+    return strcmp(np1->name, np2->name);
 }
 
 static void thread_meta_print_node(void *node)
@@ -254,7 +254,7 @@ bl_sig_meta_t *bl_signal_new(char const *name, bl_type_t type)
     // initialise metadata fields
     meta->data_index = TO_RT_INDEX(data);
     meta->data_type = type;
-    meta->sig_name = name;
+    meta->name = name;
     // add metadata to master signal list
     ll_result = ll_insert((void **)(&(signal_root)), (void *)meta, sig_meta_cmp_names);
     assert(ll_result == 0);
@@ -279,7 +279,7 @@ bl_retval_t bl_link_pin_to_signal_by_names(char const *inst_name, char const *pi
 }
 
 
-bl_retval_t bl_link_pin_to_signal(bl_pin_meta_t *pin, bl_sig_meta_t *sig )
+bl_retval_t bl_link_pin_to_signal(bl_pin_meta_t const *pin, bl_sig_meta_t const *sig )
 {
     bl_sig_data_t *sig_data_addr, **pin_ptr_addr;
 
@@ -309,7 +309,7 @@ bl_retval_t bl_unlink_pin_by_name(char const *inst_name, char const *pin_name)
 }
 
 
-void bl_unlink_pin(bl_pin_meta_t *pin)
+void bl_unlink_pin(bl_pin_meta_t const *pin)
 {
     bl_sig_data_t *pin_dummy_addr, **pin_ptr_addr, *pin_ptr_value;
 
@@ -324,7 +324,7 @@ void bl_unlink_pin(bl_pin_meta_t *pin)
 }
 
 
-void bl_set_sig(bl_sig_meta_t *sig, bl_sig_data_t const *value)
+void bl_set_sig(bl_sig_meta_t const *sig, bl_sig_data_t const *value)
 {
     bl_sig_data_t *sig_data;
 
@@ -346,7 +346,7 @@ bl_retval_t bl_set_sig_by_name(char const *sig_name, bl_sig_data_t const *value)
 }
 
 
-void bl_set_pin(bl_pin_meta_t *pin, bl_sig_data_t const *value)
+void bl_set_pin(bl_pin_meta_t const *pin, bl_sig_data_t const *value)
 {
     bl_sig_data_t **pin_ptr, *sig_data;
 
@@ -385,7 +385,7 @@ bl_thread_meta_t *bl_thread_new(char const *name, uint32_t period_ns, bl_nofp_t 
     // initialise metadata fields
     meta->data_index = TO_RT_INDEX(data);
     meta->nofp = nofp;
-    meta->thread_name = name;
+    meta->name = name;
     // add metadata to master thread list
     ll_result = ll_insert((void **)(&(thread_root)), (void *)meta, thread_meta_cmp_names);
     assert(ll_result == 0);
@@ -393,7 +393,7 @@ bl_thread_meta_t *bl_thread_new(char const *name, uint32_t period_ns, bl_nofp_t 
 }
 
 
-void bl_thread_update(bl_thread_data_t *thread, uint32_t period_ns)
+void bl_thread_update(bl_thread_data_t const *thread, uint32_t period_ns)
 {
     bl_thread_entry_t *entry;
 
@@ -408,7 +408,7 @@ void bl_thread_update(bl_thread_data_t *thread, uint32_t period_ns)
 }
 
 
-bl_retval_t bl_add_funct_to_thread(bl_funct_def_t const *funct, bl_inst_meta_t *inst, bl_thread_meta_t *thread)
+bl_retval_t bl_add_funct_to_thread(bl_funct_def_t const *funct, bl_inst_meta_t const *inst, bl_thread_meta_t const *thread)
 {
     bl_thread_entry_t *new_entry;
     bl_thread_data_t *thread_data;
@@ -465,7 +465,7 @@ bl_inst_meta_t *bl_find_instance_by_name(char const *name)
     return ll_find((void **)(&(instance_root)), (void *)(name), inst_meta_cmp_name_key);
 }
 
-bl_pin_meta_t *bl_find_pin_in_instance_by_name(char const *name, bl_inst_meta_t *inst)
+bl_pin_meta_t *bl_find_pin_in_instance_by_name(char const *name, bl_inst_meta_t const *inst)
 {
     return ll_find((void **)(&(inst->pin_list)), (void *)(name), pin_meta_cmp_name_key);
 }
@@ -491,7 +491,7 @@ bl_sig_meta_t *bl_find_signal_by_index(uint32_t index)
     return ll_find((void **)(&(signal_root)), (void *)(&index), sig_meta_cmp_index_key);
 }
 
-void bl_find_pins_linked_to_signal(bl_sig_meta_t *sig, void (*callback)(bl_inst_meta_t *inst, bl_pin_meta_t *pin))
+void bl_find_pins_linked_to_signal(bl_sig_meta_t const *sig, void (*callback)(bl_inst_meta_t *inst, bl_pin_meta_t *pin))
 {
     bl_inst_meta_t *inst;
     bl_pin_meta_t *pin;
@@ -525,8 +525,7 @@ bl_thread_data_t *bl_find_thread_data_by_name(char const *name)
     return TO_RT_ADDR(thread->data_index);
 }
 
-
-bl_funct_def_t const *bl_find_funct_def_in_instance_by_name(char const *name, bl_inst_meta_t *inst)
+bl_funct_def_t const *bl_find_funct_def_in_instance_by_name(char const *name, bl_inst_meta_t const *inst)
 {
     bl_comp_def_t const *comp;
     bl_funct_def_t const *fdef;
@@ -547,7 +546,7 @@ void bl_show_memory_status(void)
     printf("Meta pool: %d/%d, %d free\n", sizeof(bl_meta_pool)-meta_pool_avail, sizeof(bl_meta_pool), meta_pool_avail);
 }
 
-void bl_show_instance(bl_inst_meta_t *inst)
+void bl_show_instance(bl_inst_meta_t const *inst)
 {
     printf("INST: %20s <= %20s @ %p, %d RT bytes @ [%3d]=%p\n", inst->name, inst->comp_def->name,
                     inst, inst->data_size, inst->data_index, TO_RT_ADDR(inst->data_index) );
@@ -595,7 +594,7 @@ static char const * const dirs_sp[] = {
     "<=>"
 };
 
-void bl_show_pin(bl_pin_meta_t *pin)
+void bl_show_pin(bl_pin_meta_t const *pin)
 {
     bl_sig_data_t *dummy_addr, **ptr_addr, *ptr_val;
 
@@ -612,7 +611,7 @@ void bl_show_pin(bl_pin_meta_t *pin)
     printf("\n");
 }
 
-void bl_show_all_pins_of_instance(bl_inst_meta_t *inst)
+void bl_show_all_pins_of_instance(bl_inst_meta_t const *inst)
 {
     int ll_result;
 
@@ -620,7 +619,7 @@ void bl_show_all_pins_of_instance(bl_inst_meta_t *inst)
     printf("Total of %d pins\n", ll_result);
 }
 
-void bl_show_pin_value(bl_pin_meta_t *pin)
+void bl_show_pin_value(bl_pin_meta_t const *pin)
 {
     bl_sig_data_t **pin_ptr_addr, *data;
 
@@ -629,7 +628,7 @@ void bl_show_pin_value(bl_pin_meta_t *pin)
     bl_show_sig_data_t_value(data, pin->data_type);
 }
 
-void bl_show_pin_linkage(bl_pin_meta_t *pin)
+void bl_show_pin_linkage(bl_pin_meta_t const *pin)
 {
     bl_sig_data_t *dummy_addr, **ptr_addr, *ptr_val;
     char const *dir;
@@ -645,23 +644,23 @@ void bl_show_pin_linkage(bl_pin_meta_t *pin)
         // find the matching signal
         sig = bl_find_signal_by_index(TO_RT_INDEX(ptr_val));
         assert(sig != NULL);
-        printf("%s %s", dir, sig->sig_name);
+        printf("%s %s", dir, sig->name);
     }
 }
 
-void bl_show_signal(bl_sig_meta_t *sig)
+void bl_show_signal(bl_sig_meta_t const *sig)
 {
     bl_sig_data_t *data_addr;
 
     data_addr = TO_RT_ADDR(sig->data_index);
     printf("SIG: %20s  %s @ %p, data @ [%3d]=%p = ",
-                            sig->sig_name, types[sig->data_type], sig, sig->data_index, data_addr);
+                            sig->name, types[sig->data_type], sig, sig->data_index, data_addr);
     bl_show_signal_value(sig);
     printf("\n");
     bl_show_signal_linkage(sig);
 }
 
-void bl_show_signal_value(bl_sig_meta_t *sig)
+void bl_show_signal_value(bl_sig_meta_t const *sig)
 {
     bl_sig_data_t *data;
 
@@ -677,12 +676,12 @@ static void signal_linkage_callback(bl_inst_meta_t *inst, bl_pin_meta_t *pin)
     printf("    %s %s.%s\n", dir, inst->name, pin->name);
 }
 
-void bl_show_signal_linkage(bl_sig_meta_t *sig)
+void bl_show_signal_linkage(bl_sig_meta_t const *sig)
 {
     bl_find_pins_linked_to_signal(sig, signal_linkage_callback);
 }
 
-void bl_show_sig_data_t_value(bl_sig_data_t *data, bl_type_t type)
+void bl_show_sig_data_t_value(bl_sig_data_t const *data, bl_type_t type)
 {
     switch(type) {
     case BL_TYPE_BIT:
@@ -715,19 +714,19 @@ void bl_show_all_signals(void)
     printf("Total of %d signals\n", ll_result);
 }
 
-void bl_show_thread_entry(bl_thread_entry_t *entry)
+void bl_show_thread_entry(bl_thread_entry_t const *entry)
 {
     printf("  thread_entry @[%d]=%p, calls %p, inst data @%p\n", TO_RT_INDEX(entry), entry, entry->funct, entry->inst_data);
 }
 
-void bl_show_thread(bl_thread_meta_t *thread)
+void bl_show_thread(bl_thread_meta_t const *thread)
 {
     bl_thread_data_t *data;
     bl_thread_entry_t *entry;
 
     data = TO_RT_ADDR(thread->data_index);
     entry = data->start;
-    printf(" thread '%s' @[%d]=%p, no_fp = %d, period_ns = %d, RT data at [%d]=%p\n", thread->thread_name, 
+    printf(" thread '%s' @[%d]=%p, no_fp = %d, period_ns = %d, RT data at [%d]=%p\n", thread->name, 
                                 TO_RT_INDEX(thread), thread, thread->nofp, data->period_ns,
                                 thread->data_index, data);
     while ( entry != NULL ) {

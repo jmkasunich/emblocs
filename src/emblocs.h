@@ -260,7 +260,7 @@ typedef struct bl_sig_meta_s {
     struct bl_sig_meta_s *next;
     uint32_t data_index   : BL_RT_INDEX_BITS;
     uint32_t data_type    : BL_TYPE_BITS;
-    char const *sig_name;
+    char const *name;
 } bl_sig_meta_t;
 
 /* Verify that bitfields fit in one uint32_t */
@@ -276,7 +276,7 @@ typedef struct bl_thread_meta_s {
     struct bl_thread_meta_s *next;
     uint32_t data_index   : BL_RT_INDEX_BITS;
     uint32_t nofp         : BL_NOFP_BITS;
-    char const *thread_name;
+    char const *name;
 } bl_thread_meta_t;
 
 /* Verify that bitfields fit in one uint32_t */
@@ -329,7 +329,7 @@ _Static_assert((BL_INST_DATA_SIZE_BITS+BL_PIN_COUNT_BITS+BL_FUNCT_COUNT_BITS) <=
  */
 
 typedef struct bl_pin_def_s {
-    char const *name;
+    char const * const name;
     uint32_t data_type    : BL_TYPE_BITS;
     uint32_t pin_dir      : BL_DIR_BITS;
     uint32_t data_offset  : BL_INST_DATA_SIZE_BITS;
@@ -348,7 +348,7 @@ _Static_assert((BL_INST_DATA_SIZE_BITS+BL_TYPE_BITS+BL_DIR_BITS) <= 32, "pin_def
 typedef struct bl_funct_def_s {
     char const * const name;
     uint32_t nofp         : BL_NOFP_BITS;
-    bl_rt_funct_t *fp;
+    bl_rt_funct_t *const fp;
 } bl_funct_def_t;
 
 /* Verify that bitfields fit in one uint32_t */
@@ -374,25 +374,25 @@ bl_sig_meta_t *bl_signal_new(char const *name, bl_type_t type);
 /**************************************************************
  * Link the specified pin to the specified signal
  */
-bl_retval_t bl_link_pin_to_signal(bl_pin_meta_t *pin, bl_sig_meta_t *sig );
+bl_retval_t bl_link_pin_to_signal(bl_pin_meta_t const *pin, bl_sig_meta_t const *sig );
 bl_retval_t bl_link_pin_to_signal_by_names(char const *inst_name, char const *pin_name, char const *sig_name );
 
 /**************************************************************
  * Disconnect the specified pin from any signal
  */
-void bl_unlink_pin(bl_pin_meta_t *pin);
+void bl_unlink_pin(bl_pin_meta_t const *pin);
 bl_retval_t bl_unlink_pin_by_name(char const *inst_name, char const *pin_name);
 
 /**************************************************************
  * Set the specified signal to a value
  */
-void bl_set_sig(bl_sig_meta_t *sig, bl_sig_data_t const *value);
+void bl_set_sig(bl_sig_meta_t const *sig, bl_sig_data_t const *value);
 bl_retval_t bl_set_sig_by_name(char const *sig_name, bl_sig_data_t const *value);
 
 /**************************************************************
  * Set the specified pin to a value
  */
-void bl_set_pin(bl_pin_meta_t *pin, bl_sig_data_t const *value);
+void bl_set_pin(bl_pin_meta_t const *pin, bl_sig_data_t const *value);
 bl_retval_t bl_set_pin_by_name(char const *inst_name, char const *pin_name, bl_sig_data_t const *value);
 
 /**************************************************************
@@ -411,12 +411,12 @@ bl_thread_meta_t *bl_thread_new(char const *name, uint32_t period_ns, bl_nofp_t 
  * the 'thread_ns' value from thread creation will be passed 
  * instead.
  */
-void bl_thread_update(bl_thread_data_t *thread, uint32_t period_ns);
+void bl_thread_update(bl_thread_data_t const *thread, uint32_t period_ns);
 
 /**************************************************************
  * Add the specified function to the end of the specified thread
  */
-bl_retval_t bl_add_funct_to_thread(bl_funct_def_t const *funct, bl_inst_meta_t *inst, bl_thread_meta_t *thread);
+bl_retval_t bl_add_funct_to_thread(bl_funct_def_t const *funct, bl_inst_meta_t const *inst, bl_thread_meta_t const *thread);
 bl_retval_t bl_add_funct_to_thread_by_names(char const *inst_name, char const *funct_name, char const *thread_name);
 
 
@@ -468,14 +468,14 @@ bl_pin_meta_t *bl_inst_add_pin(bl_inst_meta_t *inst, bl_pin_def_t const *def);
  * More helper functions
  */
 bl_inst_meta_t *bl_find_instance_by_name(char const *name);
-bl_pin_meta_t *bl_find_pin_in_instance_by_name(char const *name, bl_inst_meta_t *inst);
+bl_pin_meta_t *bl_find_pin_in_instance_by_name(char const *name, bl_inst_meta_t const *inst);
 bl_pin_meta_t *bl_find_pin_by_names(char const *inst_name, char const *pin_name);
 bl_sig_meta_t *bl_find_signal_by_name(char const *name);
 bl_sig_meta_t *bl_find_signal_by_index(uint32_t index);
-void bl_find_pins_linked_to_signal(bl_sig_meta_t *sig, void (*callback)(bl_inst_meta_t *inst, bl_pin_meta_t *pin));
+void bl_find_pins_linked_to_signal(bl_sig_meta_t const *sig, void (*callback)(bl_inst_meta_t *inst, bl_pin_meta_t *pin));
 bl_thread_meta_t *bl_find_thread_by_name(char const *name);
 bl_thread_data_t *bl_find_thread_data_by_name(char const *name);
-bl_funct_def_t const *bl_find_funct_def_in_instance_by_name(char const *name, bl_inst_meta_t *inst);
+bl_funct_def_t const *bl_find_funct_def_in_instance_by_name(char const *name, bl_inst_meta_t const *inst);
 
 /**************************************************************
  * Introspection functions
@@ -483,19 +483,19 @@ bl_funct_def_t const *bl_find_funct_def_in_instance_by_name(char const *name, bl
  */
 
 void bl_show_memory_status(void);
-void bl_show_instance(bl_inst_meta_t *inst);
+void bl_show_instance(bl_inst_meta_t const *inst);
 void bl_show_all_instances(void);
-void bl_show_pin(bl_pin_meta_t *pin);
-void bl_show_all_pins_of_instance(bl_inst_meta_t *inst);
-void bl_show_pin_value(bl_pin_meta_t *pin);
-void bl_show_pin_linkage(bl_pin_meta_t *pin);
-void bl_show_signal(bl_sig_meta_t *sig);
-void bl_show_signal_value(bl_sig_meta_t *sig);
-void bl_show_signal_linkage(bl_sig_meta_t *sig);
-void bl_show_sig_data_t_value(bl_sig_data_t *data, bl_type_t type);
+void bl_show_pin(bl_pin_meta_t const *pin);
+void bl_show_all_pins_of_instance(bl_inst_meta_t const *inst);
+void bl_show_pin_value(bl_pin_meta_t const *pin);
+void bl_show_pin_linkage(bl_pin_meta_t const *pin);
+void bl_show_signal(bl_sig_meta_t const *sig);
+void bl_show_signal_value(bl_sig_meta_t const *sig);
+void bl_show_signal_linkage(bl_sig_meta_t const *sig);
+void bl_show_sig_data_t_value(bl_sig_data_t const *data, bl_type_t type);
 void bl_show_all_signals(void);
-void bl_show_thread_entry(bl_thread_entry_t *entry);
-void bl_show_thread(bl_thread_meta_t *thread);
+void bl_show_thread_entry(bl_thread_entry_t const *entry);
+void bl_show_thread(bl_thread_meta_t const *thread);
 void bl_show_all_threads(void);
 
 
@@ -512,7 +512,7 @@ void bl_show_all_threads(void);
  */
 
 typedef struct inst_def_s {
-    char *name;
+    char const *name;
     bl_comp_def_t *comp_def;
     void *personality;
 } bl_inst_def_t;
@@ -540,7 +540,7 @@ void bl_init_nets(char const * const nets[]);
  */
 
 typedef struct bl_setsig_def_s {
-    char *name;
+    char const *name;
     bl_sig_data_t value;
 } bl_setsig_def_t;
 
@@ -553,8 +553,8 @@ void bl_init_setsigs(bl_setsig_def_t const setsigs[]);
  */
 
 typedef struct bl_setpin_def_s {
-    char *inst_name;
-    char *pin_name;
+    char const *inst_name;
+    char const *pin_name;
     bl_sig_data_t value;
 } bl_setpin_def_t;
 
