@@ -59,12 +59,22 @@ bl_setpin_def_t const setpins[] = {
     { NULL, NULL, {0} }
 };
 
+char const * const threads[] = {
+    "NO_FP", "100000", "thread_100us",
+    "timer", "start",
+    "HAS_FP", "1000000", "thread_1ms",
+    "sum21", "update",
+    "comp4", "update",
+    "timer", "stop",
+    NULL
+};
 
+#define CLK_MHZ 170
 
 int main (void) {
     uint32_t reg;
     char *hello = "\nHello, world!\n";
-    uint32_t t_start, t_inst, t_nets, t_setsig, t_setpin;
+    uint32_t t_start, t_inst, t_nets, t_setsig, t_setpin, t_threads, t_total;
 
     platform_init();
     // Put pin PC6 in general purpose output mode
@@ -88,19 +98,26 @@ int main (void) {
     t_setsig = tsc_read();
     bl_init_setpins(setpins);
     t_setpin = tsc_read();
+    bl_init_threads(threads);
+    t_threads = tsc_read();
     print_string("init complete\n");
+    t_total = t_threads - t_start;
+    t_threads -= t_setpin;
     t_setpin -= t_setsig;
     t_setsig -= t_nets;
     t_nets -= t_inst;
     t_inst -= t_start;
     printf("Init time:        Clocks      uSec\n");
-    printf("  Instances:    %8d  %8d\n", t_inst, t_inst/170);
-    printf("  Nets:         %8d  %8d\n", t_nets, t_nets/170);
-    printf("  Set signals:  %8d  %8d\n", t_setsig, t_setsig/170);
-    printf("  Set pins:     %8d  %8d\n\n", t_setpin, t_setpin/170);
+    printf("  Instances:    %8d  %8d\n", t_inst, t_inst/CLK_MHZ);
+    printf("  Nets:         %8d  %8d\n", t_nets, t_nets/CLK_MHZ);
+    printf("  Set signals:  %8d  %8d\n", t_setsig, t_setsig/CLK_MHZ);
+    printf("  Set pins:     %8d  %8d\n", t_setpin, t_setpin/CLK_MHZ);
+    printf("  Threads:      %8d  %8d\n\n", t_threads, t_threads/CLK_MHZ);
+    printf("  Total:        %8d  %8d\n\n", t_total, t_total/CLK_MHZ);
     bl_show_memory_status();
     bl_show_all_instances();
     bl_show_all_signals();
+    bl_show_all_threads();
 
     
 

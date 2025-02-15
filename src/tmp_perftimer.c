@@ -12,23 +12,28 @@ typedef struct bl_perftimer_inst_s {
 	uint32_t tsc;
 } bl_perftimer_inst_t;
 
-_Static_assert((sizeof(bl_perftimer_inst_t) < 32767), "instance structure too large");
+_Static_assert((sizeof(bl_perftimer_inst_t) < BL_INST_DATA_MAX_SIZE), "instance structure too large");
+
 
 // array of pin definitions - one copy in FLASH
 static bl_pin_def_t const bl_perftimer_pins[] = {
     { "time", BL_TYPE_U32, BL_DIR_OUT, offsetof(bl_perftimer_inst_t, time)}
 };
 
-static void bl_perftimer_start_funct(void *ptr);
-static void bl_perftimer_stop_funct(void *ptr);
+_Static_assert((_countof(bl_perftimer_pins) < BL_PIN_COUNT_MAX), "too many pins");
 
-/*
+
+static void bl_perftimer_start_funct(void *ptr, uint32_t period_ns);
+static void bl_perftimer_stop_funct(void *ptr, uint32_t period_ns);
+
 // array of function definitions - one copy in FLASH
 static bl_funct_def_t const bl_perftimer_functs[] = {
-    { "start", &bl_perftimer_start_funct },
-    { "stop", &bl_perftimer_stop_funct }
+    { "start", BL_NO_FP, &bl_perftimer_start_funct },
+    { "stop", BL_NO_FP, &bl_perftimer_stop_funct }
 };
-*/
+
+_Static_assert((_countof(bl_perftimer_functs) < BL_FUNCT_COUNT_MAX), "too many functions");
+
 
 // component definition - one copy in FLASH
 bl_comp_def_t const bl_perftimer_def = { 
@@ -36,21 +41,25 @@ bl_comp_def_t const bl_perftimer_def = {
     NULL,
     sizeof(bl_perftimer_inst_t),
     _countof(bl_perftimer_pins),
-//    ARRAYCOUNT(bl_perftimer_functs),
-    &(bl_perftimer_pins[0])
-//    &(bl_perftimer_functs[0])
+    _countof(bl_perftimer_functs),
+    bl_perftimer_pins,
+    bl_perftimer_functs
 };
 
 // realtime code - one copy in FLASH
-static void bl_perftimer_start_funct(void *ptr)
+static void bl_perftimer_start_funct(void *ptr, uint32_t period_ns)
 {
+    (void)period_ns;  // unused in this component
+
     bl_perftimer_inst_t *p = (bl_perftimer_inst_t *)ptr;
 
     p->tsc = tsc_read();
 }
 
-static void bl_perftimer_stop_funct(void *ptr)
+static void bl_perftimer_stop_funct(void *ptr, uint32_t period_ns)
 {
+    (void)period_ns;  // unused in this component
+
     bl_perftimer_inst_t *p = (bl_perftimer_inst_t *)ptr;
 
     *(p->time) = tsc_read() - p->tsc;

@@ -52,13 +52,35 @@ typedef union bl_pin_u {
     bl_pin_u32_t u;
 } bl_pin_t;
 
+/* realtime data needed for a thread */
+typedef struct bl_thread_data_s {
+    uint32_t period_ns;
+    struct bl_thread_entry_s *start;
+} bl_thread_data_t;
+
+/* a realtime function to be called from a thread
+ * the function is passed a pointer to the instance data
+ * and the calling period in nano-seconds
+ */
+typedef void (bl_rt_funct_t)(void *inst_data, uint32_t period_ns);
+
+/* bl_thread_run() traverses a list of these structures */
+typedef struct bl_thread_entry_s {
+    bl_rt_funct_t *funct;
+    void *inst_data;
+    struct bl_thread_entry_s *next;
+} bl_thread_entry_t;
+
+
 /* return values for some API functions */
 typedef enum {
     BL_SUCCESS = 0,
-    BL_TYPE_MISMATCH = -1,
-    BL_INST_NOT_FOUND = -2,
-    BL_PIN_NOT_FOUND = -3,
-    BL_SIG_NOT_FOUND = -4
+    BL_ERR_TYPE_MISMATCH = -1,
+    BL_ERR_INST_NOT_FOUND = -2,
+    BL_ERR_PIN_NOT_FOUND = -3,
+    BL_ERR_SIG_NOT_FOUND = -4,
+    BL_ERR_THREAD_NOT_FOUND = -5,
+    BL_ERR_FUNCT_NOT_FOUND = -6
 } bl_retval_t;
 
 
@@ -124,6 +146,17 @@ _Static_assert((4<<(BL_META_INDEX_BITS)) >= (BL_META_POOL_SIZE), "not enough met
 #define BL_PIN_COUNT_BITS 8
 #endif
 
+#define BL_PIN_COUNT_MAX (1<<(BL_PIN_COUNT_BITS))
+
+/* the number of functions provided by a component
+ * is stored in bitfields, need to specify the size
+ */
+#ifndef BL_FUNCT_COUNT_BITS
+#define BL_FUNCT_COUNT_BITS 3
+#endif
+
+#define BL_FUNCT_COUNT_MAX (1<<(BL_FUNCT_COUNT_BITS))
+
 /**************************************************************
  * Data types for pins and signals.  Type is sometimes stored
  * in a bitfield, so we need to specify the bitfield length 
@@ -152,6 +185,20 @@ typedef enum {
 } bl_dir_t;
 
 #define BL_DIR_BITS  2
+
+/**************************************************************
+ * Floating point info for threads and functions.  Threads
+ * defined as "no_fp" can contain only functions which are
+ * also defined as "no_fp".  This flag is stored in a bitfield,
+ * so we need to specify the bitfield length as well.
+ */
+
+typedef enum {
+	BL_HAS_FP        = 0,
+	BL_NO_FP         = 1
+} bl_nofp_t;
+
+#define BL_NOFP_BITS  1
 
 
 /**************************************************************
@@ -219,6 +266,22 @@ typedef struct bl_sig_meta_s {
 /* Verify that bitfields fit in one uint32_t */
 _Static_assert((BL_RT_INDEX_BITS+BL_TYPE_BITS) <= 32, "sig bitfields too big");
 
+/**************************************************************
+ * Data structure that describes a thread.  There is one list
+ * of threads which lives in the metadata pool, but points to
+ * data in the realtime pool.
+ */
+
+typedef struct bl_thread_meta_s {
+    struct bl_thread_meta_s *next;
+    uint32_t data_index   : BL_RT_INDEX_BITS;
+    uint32_t nofp         : BL_NOFP_BITS;
+    char const *thread_name;
+} bl_thread_meta_t;
+
+/* Verify that bitfields fit in one uint32_t */
+_Static_assert((BL_RT_INDEX_BITS+BL_NOFP_BITS) <= 32, "thread bitfields too big");
+
 
 /**************************************************************
  * The following data structures are used by components to    *
@@ -245,13 +308,13 @@ typedef struct bl_comp_def_s {
     bl_inst_meta_t * (*setup) (char const *inst_name, struct bl_comp_def_s const *comp_def, void const *personality);
     uint32_t data_size   : BL_INST_DATA_SIZE_BITS;
     uint32_t pin_count   : BL_PIN_COUNT_BITS;
-//    uint8_t const funct_count;
+    uint32_t funct_count : BL_FUNCT_COUNT_BITS;
     struct bl_pin_def_s const *pin_defs;
-//    struct bl_funct_def_s const *funct_defs;
+    struct bl_funct_def_s const *funct_defs;
 } bl_comp_def_t;
 
 /* Verify that bitfields fit in one uint32_t */
-_Static_assert((BL_INST_DATA_SIZE_BITS+BL_PIN_COUNT_BITS) <= 32, "comp_def bitfields too big");
+_Static_assert((BL_INST_DATA_SIZE_BITS+BL_PIN_COUNT_BITS+BL_FUNCT_COUNT_BITS) <= 32, "comp_def bitfields too big");
 
 /**************************************************************
  * Data structure that defines a pin.  These can exist in flash
@@ -275,14 +338,22 @@ typedef struct bl_pin_def_s {
 /* Verify that bitfields fit in one uint32_t */
 _Static_assert((BL_INST_DATA_SIZE_BITS+BL_TYPE_BITS+BL_DIR_BITS) <= 32, "pin_def bitfields too big");
 
-#if 0
+/**************************************************************
+ * Data structure that defines a realtime function.
+ * For components that have realtime functions, an array of
+ * these structures in flash is pointed to by the component
+ * definition.
+ */
 
 typedef struct bl_funct_def_s {
     char const * const name;
-    void (*fp) (void *);
+    uint32_t nofp         : BL_NOFP_BITS;
+    bl_rt_funct_t *fp;
 } bl_funct_def_t;
 
-#endif
+/* Verify that bitfields fit in one uint32_t */
+_Static_assert((BL_NOFP_BITS) <= 32, "funct_def bitfields too big");
+
 
 /**************************************************************
  * Top-level EMBLOCS API functions used to build a system     *
@@ -323,6 +394,31 @@ bl_retval_t bl_set_sig_by_name(char const *sig_name, bl_sig_data_t const *value)
  */
 void bl_set_pin(bl_pin_meta_t *pin, bl_sig_data_t const *value);
 bl_retval_t bl_set_pin_by_name(char const *inst_name, char const *pin_name, bl_sig_data_t const *value);
+
+/**************************************************************
+ * Create a thread to which functions can be added.
+ * 'period_ns' will be passed to functions in the thread.
+ * This API does not directly control the period of the thread;
+ * see 'run_thread()' below.
+ */
+bl_thread_meta_t *bl_thread_new(char const *name, uint32_t period_ns, bl_nofp_t nofp);
+
+/**************************************************************
+ * Runs a thread once by calling all of the functions that have
+ * been added to the thread.  Typically bl_thread_run() will be
+ * called from an ISR or an RTOS thread.  If 'period_ns' is 
+ * non-zero, it will be passed to the thread functions; if zero,
+ * the 'thread_ns' value from thread creation will be passed 
+ * instead.
+ */
+void bl_thread_update(bl_thread_data_t *thread, uint32_t period_ns);
+
+/**************************************************************
+ * Add the specified function to the end of the specified thread
+ */
+bl_retval_t bl_add_funct_to_thread(bl_funct_def_t const *funct, bl_inst_meta_t *inst, bl_thread_meta_t *thread);
+bl_retval_t bl_add_funct_to_thread_by_names(char const *inst_name, char const *funct_name, char const *thread_name);
+
 
 /**************************************************************
  * Lower-level EMBLOCS API functions; typically helpers used  *
@@ -377,6 +473,9 @@ bl_pin_meta_t *bl_find_pin_by_names(char const *inst_name, char const *pin_name)
 bl_sig_meta_t *bl_find_signal_by_name(char const *name);
 bl_sig_meta_t *bl_find_signal_by_index(uint32_t index);
 void bl_find_pins_linked_to_signal(bl_sig_meta_t *sig, void (*callback)(bl_inst_meta_t *inst, bl_pin_meta_t *pin));
+bl_thread_meta_t *bl_find_thread_by_name(char const *name);
+bl_thread_data_t *bl_find_thread_data_by_name(char const *name);
+bl_funct_def_t const *bl_find_funct_def_in_instance_by_name(char const *name, bl_inst_meta_t *inst);
 
 /**************************************************************
  * Introspection functions
@@ -395,6 +494,9 @@ void bl_show_signal_value(bl_sig_meta_t *sig);
 void bl_show_signal_linkage(bl_sig_meta_t *sig);
 void bl_show_sig_data_t_value(bl_sig_data_t *data, bl_type_t type);
 void bl_show_all_signals(void);
+void bl_show_thread_entry(bl_thread_entry_t *entry);
+void bl_show_thread(bl_thread_meta_t *thread);
+void bl_show_all_threads(void);
 
 
 /**************************************************************
@@ -431,12 +533,24 @@ void bl_init_instances(bl_inst_def_t const instances[]);
 
 void bl_init_nets(char const * const nets[]);
 
+/**************************************************************
+ * A NULL terminated array of "setsig definitions" (usually
+ * in FLASH) can be passed to bl_init_setsigs() to set the
+ * values of all non-zero signals in a system.
+ */
+
 typedef struct bl_setsig_def_s {
     char *name;
     bl_sig_data_t value;
 } bl_setsig_def_t;
 
 void bl_init_setsigs(bl_setsig_def_t const setsigs[]);
+
+/**************************************************************
+ * A NULL terminated array of "setpin definitions" (usually
+ * in FLASH) can be passed to bl_init_setpins() to set the
+ * values of all non-zero unconnected pins in a system.
+ */
 
 typedef struct bl_setpin_def_s {
     char *inst_name;
@@ -445,5 +559,23 @@ typedef struct bl_setpin_def_s {
 } bl_setpin_def_t;
 
 void bl_init_setpins(bl_setpin_def_t const setpins[]);
+
+/**************************************************************
+ * A NULL terminated array of strings can be passed to 
+ * bl_init_threads() to create all of the threads needed for
+ * a system.  The array starts with either "HAS_FP" or "NO_FP"
+ * to mark the beginning of a thread and determine whether that
+ * thread should allow functions that need floating point.
+ * The next string is a number (in ASCII) that is period_ns
+ * for the new thread, followed by the name of the thread.
+ * After the thread name, there must be one or more "instance
+ * name" / "function name" pairs to define the functions called
+ * by the thread, in calling order.  An instance name of either
+ * "HAS_FP" or "NO_FP" begins another thread, while NULL ends
+ * the array.
+ */
+
+void bl_init_threads(char const * const threads[]);
+
 
 #endif // EMBLOCS_H

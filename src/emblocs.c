@@ -152,12 +152,34 @@ static void sig_meta_print_node(void *node)
     bl_show_signal((bl_sig_meta_t *)node);
 }
 
+static int thread_meta_cmp_name_key(void *node, void *key)
+{
+    bl_thread_meta_t *np = node;
+    char *kp = key;
+    return strcmp(np->thread_name, kp);
+}
+
+static int thread_meta_cmp_names(void *node1, void *node2)
+{
+    bl_thread_meta_t  *np1 = node1;
+    bl_thread_meta_t  *np2 = node2;
+    return strcmp(np1->thread_name, np2->thread_name);
+}
+
+static void thread_meta_print_node(void *node)
+{
+    bl_show_thread((bl_thread_meta_t *)node);
+}
+
 
 /* root of instance linked list */
 static bl_inst_meta_t *instance_root;
 
 /* root of signal linked list */
 static bl_sig_meta_t *signal_root;
+
+/* root of thread linked list */
+static bl_thread_meta_t *thread_root;
 
 
 bl_inst_meta_t *bl_inst_create(char const *name, bl_comp_def_t const *comp_def, uint32_t data_size)
@@ -247,14 +269,13 @@ bl_retval_t bl_link_pin_to_signal_by_names(char const *inst_name, char const *pi
 
     pin = bl_find_pin_by_names(inst_name, pin_name);
     if ( pin == NULL ) {
-        return BL_PIN_NOT_FOUND;
+        return BL_ERR_PIN_NOT_FOUND;
     }
     sig = bl_find_signal_by_name(sig_name);
     if ( sig == NULL ) {
-        return BL_SIG_NOT_FOUND;
+        return BL_ERR_SIG_NOT_FOUND;
     }
-    bl_link_pin_to_signal(pin, sig );
-    return BL_SUCCESS;
+    return bl_link_pin_to_signal(pin, sig);
 }
 
 
@@ -264,7 +285,7 @@ bl_retval_t bl_link_pin_to_signal(bl_pin_meta_t *pin, bl_sig_meta_t *sig )
 
     // check types
     if ( pin->data_type != sig->data_type ) {
-        return BL_TYPE_MISMATCH;
+        return BL_ERR_TYPE_MISMATCH;
     }
     // convert indexes to addresses
     pin_ptr_addr = TO_RT_ADDR(pin->ptr_index);
@@ -281,7 +302,7 @@ bl_retval_t bl_unlink_pin_by_name(char const *inst_name, char const *pin_name)
 
     pin = bl_find_pin_by_names(inst_name, pin_name);
     if ( pin == NULL ) {
-        return BL_PIN_NOT_FOUND;
+        return BL_ERR_PIN_NOT_FOUND;
     }
     bl_unlink_pin(pin);
     return BL_SUCCESS;
@@ -318,7 +339,7 @@ bl_retval_t bl_set_sig_by_name(char const *sig_name, bl_sig_data_t const *value)
 
     sig = bl_find_signal_by_name(sig_name);
     if ( sig == NULL ) {
-        return BL_SIG_NOT_FOUND;
+        return BL_ERR_SIG_NOT_FOUND;
     }
     bl_set_sig(sig, value);
     return BL_SUCCESS;
@@ -341,10 +362,101 @@ bl_retval_t bl_set_pin_by_name(char const *inst_name, char const *pin_name, bl_s
 
     pin = bl_find_pin_by_names(inst_name, pin_name);
     if ( pin == NULL ) {
-        return BL_PIN_NOT_FOUND;
+        return BL_ERR_PIN_NOT_FOUND;
     }
     bl_set_pin(pin, value);
     return BL_SUCCESS;
+}
+
+
+bl_thread_meta_t *bl_thread_new(char const *name, uint32_t period_ns, bl_nofp_t nofp)
+{
+    bl_thread_meta_t *meta;
+    bl_thread_data_t *data;
+    int ll_result;
+
+    // allocate memory for metadata
+    meta = alloc_from_meta_pool(sizeof(bl_thread_meta_t));
+    // allocate memory for RT thread data
+    data = alloc_from_rt_pool(sizeof(bl_thread_data_t));
+    // initialize data fields
+    data->period_ns = period_ns;
+    data->start = NULL;
+    // initialise metadata fields
+    meta->data_index = TO_RT_INDEX(data);
+    meta->nofp = nofp;
+    meta->thread_name = name;
+    // add metadata to master thread list
+    ll_result = ll_insert((void **)(&(thread_root)), (void *)meta, thread_meta_cmp_names);
+    assert(ll_result == 0);
+    return meta;
+}
+
+
+void bl_thread_update(bl_thread_data_t *thread, uint32_t period_ns)
+{
+    bl_thread_entry_t *entry;
+
+    if ( period_ns == 0 ) {
+        period_ns = thread->period_ns;
+    }
+    entry = thread->start;
+    while ( entry != NULL ) {
+        (*(entry->funct))(entry->inst_data, period_ns);
+        entry = entry->next;
+    }
+}
+
+
+bl_retval_t bl_add_funct_to_thread(bl_funct_def_t const *funct, bl_inst_meta_t *inst, bl_thread_meta_t *thread)
+{
+    bl_thread_entry_t *new_entry;
+    bl_thread_data_t *thread_data;
+    bl_thread_entry_t *prev, **prev_ptr;
+
+    // validate floating point
+    if ( ( thread->nofp == BL_NO_FP) && ( funct->nofp == BL_HAS_FP ) ) {
+        return BL_ERR_TYPE_MISMATCH;
+    }
+    // allocate memory for thread entry
+    new_entry = alloc_from_rt_pool(sizeof(bl_thread_entry_t));
+    // set entry's fields
+    new_entry->funct = funct->fp;
+    new_entry->inst_data = TO_RT_ADDR(inst->data_index);
+    // find end of thread
+    thread_data = TO_RT_ADDR(thread->data_index);
+    prev_ptr = &(thread_data->start);
+    prev = *prev_ptr;
+    while ( prev != NULL ) {
+        prev_ptr = &(prev->next);
+        prev = *prev_ptr;
+    }
+    // append new entry
+    new_entry->next = NULL;
+    *prev_ptr = new_entry;
+    return BL_SUCCESS;
+}
+
+
+bl_retval_t bl_add_funct_to_thread_by_names(char const *inst_name, char const *funct_name, char const *thread_name)
+{
+    bl_inst_meta_t *inst;
+    bl_funct_def_t const *funct;
+    bl_thread_meta_t *thread;
+
+    inst = bl_find_instance_by_name(inst_name);
+    if ( inst == NULL ) {
+        return BL_ERR_INST_NOT_FOUND;
+    }
+    funct = bl_find_funct_def_in_instance_by_name(funct_name, inst);
+    if ( inst == NULL ) {
+        return BL_ERR_FUNCT_NOT_FOUND;
+    }
+    thread = bl_find_thread_by_name(thread_name);
+    if ( inst == NULL ) {
+        return BL_ERR_THREAD_NOT_FOUND;
+    }
+    return bl_add_funct_to_thread(funct, inst, thread);
 }
 
 
@@ -398,9 +510,36 @@ void bl_find_pins_linked_to_signal(bl_sig_meta_t *sig, void (*callback)(bl_inst_
         }
         inst = inst->next;
     }
-
 }
 
+bl_thread_meta_t *bl_find_thread_by_name(char const *name)
+{
+    return ll_find((void **)(&(thread_root)), (void *)(name), thread_meta_cmp_name_key);
+}
+
+bl_thread_data_t *bl_find_thread_data_by_name(char const *name)
+{
+    bl_thread_meta_t *thread;
+
+    thread = bl_find_thread_by_name(name);
+    return TO_RT_ADDR(thread->data_index);
+}
+
+
+bl_funct_def_t const *bl_find_funct_def_in_instance_by_name(char const *name, bl_inst_meta_t *inst)
+{
+    bl_comp_def_t const *comp;
+    bl_funct_def_t const *fdef;
+
+    comp = inst->comp_def;
+    for ( int n = 0 ; n < comp->funct_count ; n++ ) {
+        fdef = &(comp->funct_defs[n]);
+        if ( strcmp(name, fdef->name ) == 0 ) {
+            return fdef;
+        }
+    }
+    return NULL;
+}
 
 void bl_show_memory_status(void)
 {
@@ -413,7 +552,6 @@ void bl_show_instance(bl_inst_meta_t *inst)
     printf("INST: %20s <= %20s @ %p, %d RT bytes @ [%3d]=%p\n", inst->name, inst->comp_def->name,
                     inst, inst->data_size, inst->data_index, TO_RT_ADDR(inst->data_index) );
     bl_show_all_pins_of_instance(inst);
-
 }
 
 void bl_show_all_instances(void)
@@ -577,6 +715,37 @@ void bl_show_all_signals(void)
     printf("Total of %d signals\n", ll_result);
 }
 
+void bl_show_thread_entry(bl_thread_entry_t *entry)
+{
+    printf("  thread_entry @[%d]=%p, calls %p, inst data @%p\n", TO_RT_INDEX(entry), entry, entry->funct, entry->inst_data);
+}
+
+void bl_show_thread(bl_thread_meta_t *thread)
+{
+    bl_thread_data_t *data;
+    bl_thread_entry_t *entry;
+
+    data = TO_RT_ADDR(thread->data_index);
+    entry = data->start;
+    printf(" thread '%s' @[%d]=%p, no_fp = %d, period_ns = %d, RT data at [%d]=%p\n", thread->thread_name, 
+                                TO_RT_INDEX(thread), thread, thread->nofp, data->period_ns,
+                                thread->data_index, data);
+    while ( entry != NULL ) {
+        bl_show_thread_entry(entry);
+        entry = entry->next;
+    }
+}
+
+void bl_show_all_threads(void)
+{
+    int ll_result;
+
+    printf("List of all threads:\n");
+    ll_result = ll_traverse((void **)(&thread_root), thread_meta_print_node);
+    printf("Total of %d threads\n", ll_result);
+}
+
+
 void bl_init_instances(bl_inst_def_t const instances[])
 {
     bl_inst_def_t const *idp;  // instance definition pointer
@@ -590,7 +759,7 @@ void bl_init_instances(bl_inst_def_t const instances[])
     }
 }
 
-static int is_type_str(char const *str, bl_type_t *result)
+static int is_sig_type_str(char const *str, bl_type_t *result)
 {
     if ( strcmp(str, "BIT") == 0 ) {
         *result = BL_TYPE_BIT;
@@ -629,7 +798,7 @@ void bl_init_nets(char const *const nets[])
     while ( *nets != NULL ) {
         switch (state) {
         case START:
-            if ( is_type_str(*nets, &net_type) ) {
+            if ( is_sig_type_str(*nets, &net_type) ) {
                 state = GET_SIG;
             } else {
                 assert(0);
@@ -641,7 +810,7 @@ void bl_init_nets(char const *const nets[])
             state = GOT_SIG;
             break;
         case GOT_SIG:
-            if ( is_type_str(*nets, &net_type) ) {
+            if ( is_sig_type_str(*nets, &net_type) ) {
                 // done with previous net, start a new one
                 state = GET_SIG;
             } else {
@@ -689,3 +858,95 @@ void bl_init_setpins(bl_setpin_def_t const setpins[])
         sdp++;
     }
 }
+
+static int is_thread_type_str(char const *str, bl_nofp_t *result)
+{
+    if ( strcmp(str, "HAS_FP") == 0 ) {
+        *result = BL_HAS_FP;
+        return 1;
+    }
+    if ( strcmp(str, "NO_FP") == 0 ) {
+        *result = BL_NO_FP;
+        return 1;
+    }
+    return 0;
+}
+
+static int is_uint32_str(char const *str, uint32_t *result)
+{
+    uint32_t r = 0;
+
+    do {
+        if ( ( *str < '0' ) || ( *str > '9' )  ) {
+            return 0;
+        }
+        r += *str - '0';
+        r *= 10;
+        str++;
+    } while ( *str != '\0' );
+    *result = r;
+    return 1;
+}
+
+void bl_init_threads(char const * const threads[])
+{
+    bl_retval_t retval;
+    bl_nofp_t thread_type;
+    uint32_t period_ns;
+    bl_thread_meta_t *thread;
+    bl_inst_meta_t *inst;
+    bl_funct_def_t const *funct_def;
+
+    enum {
+        START,
+        GET_PERIOD,
+        GET_NAME,
+        GOT_NAME,
+        GET_FUNCT
+    } state;
+
+    state = START;
+    while ( *threads != NULL ) {
+        switch (state) {
+        case START:
+            if ( is_thread_type_str(*threads, &thread_type) ) {
+                state = GET_PERIOD;
+            } else {
+                assert(0);
+            }
+            break;
+        case GET_PERIOD:
+            if ( ! is_uint32_str(*threads, &period_ns) ) {
+                assert(0);
+            }
+            state = GET_NAME;
+            break;
+        case GET_NAME:
+            thread = bl_thread_new(*threads, period_ns, thread_type);
+            assert(thread != NULL);
+            state = GOT_NAME;
+            break;
+        case GOT_NAME:
+            if ( is_thread_type_str(*threads, &thread_type) ) {
+                // done with previous thread, start a new one
+                state = GET_PERIOD;
+            } else {
+                inst = bl_find_instance_by_name(*threads);
+                assert(inst != NULL);
+                state = GET_FUNCT;
+            }
+            break;
+        case GET_FUNCT:
+            funct_def = bl_find_funct_def_in_instance_by_name(*threads, inst);
+            assert(funct_def != NULL);
+            retval = bl_add_funct_to_thread(funct_def, inst, thread);
+            assert(retval == BL_SUCCESS);
+            state = GOT_NAME;
+            break;
+        default:
+            assert(0);
+        }
+        threads++;
+    }
+}
+
