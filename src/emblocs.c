@@ -986,8 +986,8 @@ static int is_uint32_str(char const *str, uint32_t *result)
         if ( ( *str < '0' ) || ( *str > '9' )  ) {
             return 0;
         }
-        r += *str - '0';
         r *= 10;
+        r += *str - '0';
         str++;
     } while ( *str != '\0' );
     *result = r;
