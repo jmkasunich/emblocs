@@ -613,9 +613,11 @@ static char const * const types[] = {
     "float", "bit  ", "s32  ", "u32  "
 };
 
+#ifdef SHOW_VERBOSE
 static char const * const dirs[] = {
     "xxx", "in ", "out", "i/o"
 };
+#endif
 
 static char const * const dirs_ps[] = {
     "xxx", "<==", "==>", "<=>"
@@ -633,8 +635,12 @@ void bl_show_memory_status(void)
 
 void bl_show_instance(bl_inst_meta_t const *inst)
 {
+#ifdef SHOW_VERBOSE
     printf("INST: %20s <= %20s @ %p, %d RT bytes @ [%3d]=%p\n", inst->name, inst->comp_def->name,
                     inst, inst->data_size, inst->data_index, TO_RT_ADDR(inst->data_index) );
+#else
+    printf("instance '%s' of component '%s'\n", inst->name, inst->comp_def->name);
+#endif
     bl_show_all_pins_of_instance(inst);
 }
 
@@ -649,6 +655,7 @@ void bl_show_all_instances(void)
 
 void bl_show_pin(bl_pin_meta_t const *pin)
 {
+#ifdef SHOW_VERBOSE
     bl_sig_data_t *dummy_addr, **ptr_addr, *ptr_val;
 
     dummy_addr = (bl_sig_data_t *)TO_RT_ADDR(pin->dummy_index);
@@ -662,6 +669,14 @@ void bl_show_pin(bl_pin_meta_t const *pin)
     printf(" = ");
     bl_show_pin_value(pin);
     printf("\n");
+#else
+    printf("  %-12s ", pin->name);
+    bl_show_pin_linkage(pin);
+    printf(" = %s : ", types[pin->data_type]);
+    bl_show_pin_value(pin);
+    printf("\n");
+#endif
+
 }
 
 void bl_show_all_pins_of_instance(bl_inst_meta_t const *inst)
@@ -669,7 +684,7 @@ void bl_show_all_pins_of_instance(bl_inst_meta_t const *inst)
     int ll_result;
 
     ll_result = ll_traverse((void **)(&inst->pin_list), pin_meta_print_node);
-    printf("Total of %d pins\n", ll_result);
+    printf("    %d pins\n", ll_result);
 }
 
 void bl_show_pin_value(bl_pin_meta_t const *pin)
@@ -692,17 +707,18 @@ void bl_show_pin_linkage(bl_pin_meta_t const *pin)
     ptr_val = *ptr_addr;
     dir = dirs_ps[pin->pin_dir];
     if ( ptr_val == dummy_addr ) {
-        printf("%s (dummy)", dir);
+        printf("%s %-12s", dir, " ");
     } else {
         // find the matching signal
         sig = bl_find_signal_by_index(TO_RT_INDEX(ptr_val));
         assert(sig != NULL);
-        printf("%s %s", dir, sig->name);
+        printf("%s %-12s", dir, sig->name);
     }
 }
 
 void bl_show_signal(bl_sig_meta_t const *sig)
 {
+#ifdef SHOW_VERBOSE
     bl_sig_data_t *data_addr;
 
     data_addr = TO_RT_ADDR(sig->data_index);
@@ -711,6 +727,12 @@ void bl_show_signal(bl_sig_meta_t const *sig)
     bl_show_signal_value(sig);
     printf("\n");
     bl_show_signal_linkage(sig);
+#else
+    printf("  %-12s = %s : ", sig->name, types[sig->data_type]);
+    bl_show_signal_value(sig);
+    printf("\n");
+    bl_show_signal_linkage(sig);
+#endif
 }
 
 void bl_show_signal_value(bl_sig_meta_t const *sig)
@@ -726,7 +748,7 @@ static void signal_linkage_callback(bl_inst_meta_t *inst, bl_pin_meta_t *pin)
     char const *dir;
 
     dir = dirs_sp[pin->pin_dir];
-    printf("    %s %s.%s\n", dir, inst->name, pin->name);
+    printf("     %s %s.%s\n", dir, inst->name, pin->name);
 }
 
 void bl_show_signal_linkage(bl_sig_meta_t const *sig)
@@ -769,11 +791,21 @@ void bl_show_all_signals(void)
 
 void bl_show_thread_entry(bl_thread_entry_t const *entry)
 {
+#ifdef SHOW_VERBOSE
     printf("  thread_entry @[%d]=%p, calls %p, inst data @%p\n", TO_RT_INDEX(entry), entry, entry->funct, entry->inst_data);
+#else
+    bl_inst_meta_t *inst;
+    bl_funct_def_t *funct;
+
+    inst = bl_find_instance_by_data_addr(entry->inst_data);
+    funct = bl_find_funct_def_in_instance_by_address(entry->funct, inst);
+    printf("     %s.%s\n", inst->name, funct->name);
+#endif
 }
 
 void bl_show_thread(bl_thread_meta_t const *thread)
 {
+#ifdef SHOW_VERBOSE
     bl_thread_data_t *data;
     bl_thread_entry_t *entry;
 
@@ -786,6 +818,24 @@ void bl_show_thread(bl_thread_meta_t const *thread)
         bl_show_thread_entry(entry);
         entry = entry->next;
     }
+#else
+    bl_thread_data_t *data;
+    bl_thread_entry_t *entry;
+    char *fp_str;
+
+    data = TO_RT_ADDR(thread->data_index);
+    entry = data->start;
+    if ( thread->nofp ) {
+        fp_str = "no fp ";
+    } else {
+        fp_str = "has fp";
+    }
+    printf("  %-12s = %s : %10d nsec\n", thread->name, fp_str, data->period_ns);
+    while ( entry != NULL ) {
+        bl_show_thread_entry(entry);
+        entry = entry->next;
+    }
+#endif
 }
 
 void bl_show_all_threads(void)
