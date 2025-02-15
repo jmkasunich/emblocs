@@ -213,11 +213,7 @@ typedef enum {
  * 'data_index' and 'data_size' refer to the realtime instance
  * data; size is in bytes, while index is a uint32_t offset
  * from the base of the RT pool.  'pin_list' is a list of pins
- * that belong to this specific instance; the full pin name
- * can be created by concatenating the instance name and pin
- * name.
- * This structure is incomplete; it will eventually have
- * function data in it as well.
+ * that belong to this specific instance.
  */
 
 typedef struct bl_inst_meta_s {
@@ -404,6 +400,12 @@ bl_retval_t bl_set_pin_by_name(char const *inst_name, char const *pin_name, bl_s
 bl_thread_meta_t *bl_thread_new(char const *name, uint32_t period_ns, bl_nofp_t nofp);
 
 /**************************************************************
+ * Add the specified function to the end of the specified thread
+ */
+bl_retval_t bl_add_funct_to_thread(bl_funct_def_t const *funct, bl_inst_meta_t const *inst, bl_thread_meta_t const *thread);
+bl_retval_t bl_add_funct_to_thread_by_names(char const *inst_name, char const *funct_name, char const *thread_name);
+
+/**************************************************************
  * Runs a thread once by calling all of the functions that have
  * been added to the thread.  Typically bl_thread_run() will be
  * called from an ISR or an RTOS thread.  If 'period_ns' is 
@@ -413,19 +415,12 @@ bl_thread_meta_t *bl_thread_new(char const *name, uint32_t period_ns, bl_nofp_t 
  */
 void bl_thread_update(bl_thread_data_t const *thread, uint32_t period_ns);
 
-/**************************************************************
- * Add the specified function to the end of the specified thread
- */
-bl_retval_t bl_add_funct_to_thread(bl_funct_def_t const *funct, bl_inst_meta_t const *inst, bl_thread_meta_t const *thread);
-bl_retval_t bl_add_funct_to_thread_by_names(char const *inst_name, char const *funct_name, char const *thread_name);
-
 
 /**************************************************************
  * Lower-level EMBLOCS API functions; typically helpers used  *
  * by the main API functions.  Some of these may become       *
  * private at some point.                                     *
  **************************************************************/
-
 
 /**************************************************************
  * Helper function for bl_instance_new(); creates an instance
@@ -465,7 +460,7 @@ bl_inst_meta_t *bl_inst_create(char const *name, bl_comp_def_t const *comp_def, 
 bl_pin_meta_t *bl_inst_add_pin(bl_inst_meta_t *inst, bl_pin_def_t const *def);
 
 /**************************************************************
- * More helper functions
+ * Helper functions for finding things in the metadata
  */
 bl_inst_meta_t *bl_find_instance_by_name(char const *name);
 bl_pin_meta_t *bl_find_pin_in_instance_by_name(char const *name, bl_inst_meta_t const *inst);
@@ -478,8 +473,7 @@ bl_thread_data_t *bl_find_thread_data_by_name(char const *name);
 bl_funct_def_t const *bl_find_funct_def_in_instance_by_name(char const *name, bl_inst_meta_t const *inst);
 
 /**************************************************************
- * Introspection functions
- *
+ * Helper functions for viewing things in the metadata
  */
 
 void bl_show_memory_status(void);
