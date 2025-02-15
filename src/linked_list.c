@@ -86,6 +86,8 @@ void *ll_next(void *node)
 
 /* test and demo code, will probably be deleted or moved to another file */
 
+#if 0
+
 #include <string.h>
 #include "printing.h"
 
@@ -206,3 +208,5 @@ int linked_list_test(void)
     
     return 0;
 }
+
+#endif
