@@ -300,7 +300,7 @@ _Static_assert((BL_RT_INDEX_BITS+BL_NOFP_BITS) <= 32, "thread bitfields too big"
  */
 
 typedef struct bl_comp_def_s {
-    char const * const name;
+    char const *name;
     bl_inst_meta_t * (*setup) (char const *inst_name, struct bl_comp_def_s const *comp_def, void const *personality);
     uint32_t data_size   : BL_INST_DATA_SIZE_BITS;
     uint32_t pin_count   : BL_PIN_COUNT_BITS;
@@ -325,7 +325,7 @@ _Static_assert((BL_INST_DATA_SIZE_BITS+BL_PIN_COUNT_BITS+BL_FUNCT_COUNT_BITS) <=
  */
 
 typedef struct bl_pin_def_s {
-    char const * const name;
+    char const *name;
     uint32_t data_type    : BL_TYPE_BITS;
     uint32_t pin_dir      : BL_DIR_BITS;
     uint32_t data_offset  : BL_INST_DATA_SIZE_BITS;
@@ -342,9 +342,9 @@ _Static_assert((BL_INST_DATA_SIZE_BITS+BL_TYPE_BITS+BL_DIR_BITS) <= 32, "pin_def
  */
 
 typedef struct bl_funct_def_s {
-    char const * const name;
+    char const *name;
     uint32_t nofp         : BL_NOFP_BITS;
-    bl_rt_funct_t *const fp;
+    bl_rt_funct_t *fp;
 } bl_funct_def_t;
 
 /* Verify that bitfields fit in one uint32_t */
@@ -461,16 +461,28 @@ bl_pin_meta_t *bl_inst_add_pin(bl_inst_meta_t *inst, bl_pin_def_t const *def);
 
 /**************************************************************
  * Helper functions for finding things in the metadata
+ * 
+ * The first group finds the single matching item.
+ * The second group finds the zero or more matching items,
+ * calls a callback functions for each match (if 'callback'
+ * is not NULL), and returns the number of matches.
  */
 bl_inst_meta_t *bl_find_instance_by_name(char const *name);
+bl_inst_meta_t *bl_find_instance_by_data_addr(void *data_addr);
+bl_inst_meta_t *bl_find_instance_from_thread_entry(bl_thread_entry_t const *entry);
 bl_pin_meta_t *bl_find_pin_in_instance_by_name(char const *name, bl_inst_meta_t const *inst);
 bl_pin_meta_t *bl_find_pin_by_names(char const *inst_name, char const *pin_name);
 bl_sig_meta_t *bl_find_signal_by_name(char const *name);
 bl_sig_meta_t *bl_find_signal_by_index(uint32_t index);
-int bl_find_pins_linked_to_signal(bl_sig_meta_t const *sig, void (*callback)(bl_inst_meta_t *inst, bl_pin_meta_t *pin));
 bl_thread_meta_t *bl_find_thread_by_name(char const *name);
 bl_thread_data_t *bl_find_thread_data_by_name(char const *name);
-bl_funct_def_t const *bl_find_funct_def_in_instance_by_name(char const *name, bl_inst_meta_t const *inst);
+bl_funct_def_t *bl_find_funct_def_in_instance_by_name(char const *name, bl_inst_meta_t const *inst);
+bl_funct_def_t *bl_find_funct_def_in_instance_by_address(bl_rt_funct_t *addr, bl_inst_meta_t const *inst);
+bl_funct_def_t *bl_find_funct_def_from_thread_entry(bl_thread_entry_t const *entry);
+
+int bl_find_pins_linked_to_signal(bl_sig_meta_t const *sig, void (*callback)(bl_inst_meta_t *inst, bl_pin_meta_t *pin));
+int bl_find_functions_in_thread(bl_thread_meta_t const *thread, void (*callback)(bl_inst_meta_t *inst, bl_funct_def_t *funct));
+
 
 /**************************************************************
  * Helper functions for viewing things in the metadata
