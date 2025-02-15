@@ -230,7 +230,7 @@ bl_retval_t bl_link_pin_to_signal_by_names(char const *inst_name, char const *pi
     return bl_link_pin_to_signal(pin, sig);
 }
 
-void bl_unlink_pin(bl_pin_meta_t const *pin)
+bl_retval_t bl_unlink_pin(bl_pin_meta_t const *pin)
 {
     bl_sig_data_t *pin_dummy_addr, **pin_ptr_addr, *pin_ptr_value;
 
@@ -242,6 +242,7 @@ void bl_unlink_pin(bl_pin_meta_t const *pin)
     *pin_dummy_addr = *pin_ptr_value;
     // link pin to its dummy
     *pin_ptr_addr = pin_dummy_addr;
+    return BL_SUCCESS;
 }
 
 bl_retval_t bl_unlink_pin_by_name(char const *inst_name, char const *pin_name)
@@ -256,12 +257,13 @@ bl_retval_t bl_unlink_pin_by_name(char const *inst_name, char const *pin_name)
     return BL_SUCCESS;
 }
 
-void bl_set_sig(bl_sig_meta_t const *sig, bl_sig_data_t const *value)
+bl_retval_t bl_set_sig(bl_sig_meta_t const *sig, bl_sig_data_t const *value)
 {
     bl_sig_data_t *sig_data;
 
     sig_data = TO_RT_ADDR(sig->data_index);
     *sig_data = *value;
+    return BL_SUCCESS;
 }
 
 bl_retval_t bl_set_sig_by_name(char const *sig_name, bl_sig_data_t const *value)
@@ -276,13 +278,14 @@ bl_retval_t bl_set_sig_by_name(char const *sig_name, bl_sig_data_t const *value)
     return BL_SUCCESS;
 }
 
-void bl_set_pin(bl_pin_meta_t const *pin, bl_sig_data_t const *value)
+bl_retval_t bl_set_pin(bl_pin_meta_t const *pin, bl_sig_data_t const *value)
 {
     bl_sig_data_t **pin_ptr, *sig_data;
 
     pin_ptr = TO_RT_ADDR(pin->ptr_index);
     sig_data = *pin_ptr;
     *sig_data = *value;
+    return BL_SUCCESS;
 }
 
 bl_retval_t bl_set_pin_by_name(char const *inst_name, char const *pin_name, bl_sig_data_t const *value)
@@ -483,25 +486,31 @@ bl_sig_meta_t *bl_find_signal_by_index(uint32_t index)
     return ll_find((void **)(&(signal_root)), (void *)(&index), sig_meta_cmp_index_key);
 }
 
-void bl_find_pins_linked_to_signal(bl_sig_meta_t const *sig, void (*callback)(bl_inst_meta_t *inst, bl_pin_meta_t *pin))
+int bl_find_pins_linked_to_signal(bl_sig_meta_t const *sig, void (*callback)(bl_inst_meta_t *inst, bl_pin_meta_t *pin))
 {
     bl_inst_meta_t *inst;
     bl_pin_meta_t *pin;
     bl_sig_data_t *sp, **pp;
+    int matches;
 
     sp = TO_RT_ADDR(sig->data_index);
     inst = instance_root;
+    matches = 0;
     while ( inst != NULL ) {
         pin = inst->pin_list;
         while ( pin != NULL ) {
             pp = TO_RT_ADDR(pin->ptr_index);
             if ( *pp == sp ) {
-                callback(inst, pin);
+                matches++;
+                if ( callback != NULL ) {
+                    callback(inst, pin);
+                }
             }
             pin = pin->next;
         }
         inst = inst->next;
     }
+    return matches;
 }
 
 bl_thread_meta_t *bl_find_thread_by_name(char const *name)

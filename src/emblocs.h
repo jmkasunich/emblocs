@@ -376,19 +376,19 @@ bl_retval_t bl_link_pin_to_signal_by_names(char const *inst_name, char const *pi
 /**************************************************************
  * Disconnect the specified pin from any signal
  */
-void bl_unlink_pin(bl_pin_meta_t const *pin);
+bl_retval_t bl_unlink_pin(bl_pin_meta_t const *pin);
 bl_retval_t bl_unlink_pin_by_name(char const *inst_name, char const *pin_name);
 
 /**************************************************************
  * Set the specified signal to a value
  */
-void bl_set_sig(bl_sig_meta_t const *sig, bl_sig_data_t const *value);
+bl_retval_t bl_set_sig(bl_sig_meta_t const *sig, bl_sig_data_t const *value);
 bl_retval_t bl_set_sig_by_name(char const *sig_name, bl_sig_data_t const *value);
 
 /**************************************************************
  * Set the specified pin to a value
  */
-void bl_set_pin(bl_pin_meta_t const *pin, bl_sig_data_t const *value);
+bl_retval_t bl_set_pin(bl_pin_meta_t const *pin, bl_sig_data_t const *value);
 bl_retval_t bl_set_pin_by_name(char const *inst_name, char const *pin_name, bl_sig_data_t const *value);
 
 /**************************************************************
@@ -467,7 +467,7 @@ bl_pin_meta_t *bl_find_pin_in_instance_by_name(char const *name, bl_inst_meta_t 
 bl_pin_meta_t *bl_find_pin_by_names(char const *inst_name, char const *pin_name);
 bl_sig_meta_t *bl_find_signal_by_name(char const *name);
 bl_sig_meta_t *bl_find_signal_by_index(uint32_t index);
-void bl_find_pins_linked_to_signal(bl_sig_meta_t const *sig, void (*callback)(bl_inst_meta_t *inst, bl_pin_meta_t *pin));
+int bl_find_pins_linked_to_signal(bl_sig_meta_t const *sig, void (*callback)(bl_inst_meta_t *inst, bl_pin_meta_t *pin));
 bl_thread_meta_t *bl_find_thread_by_name(char const *name);
 bl_thread_data_t *bl_find_thread_data_by_name(char const *name);
 bl_funct_def_t const *bl_find_funct_def_in_instance_by_name(char const *name, bl_inst_meta_t const *inst);
