@@ -3,6 +3,7 @@
 #include "emblocs.h"
 #include "printing.h"
 #include "main.h"
+#include <assert.h>
 
 void __assert_func (const char * file, int line, const char * funct, const char *expr)
 {
@@ -32,39 +33,46 @@ extern bl_comp_def_t bl_sum2_def;
 extern bl_comp_def_t bl_perftimer_def;
 
 bl_inst_def_t const instances[] = {
-    { "comp1", &bl_sum2_def, NULL },
-    { "sum21", &bl_sum2_def, NULL },
+    { "ramp_sum", &bl_sum2_def, NULL },
+    { "inv_sum", &bl_sum2_def, NULL },
     { "timer", &bl_perftimer_def, NULL },
-    { "comp4", &bl_mux2_def, NULL },
+    { "dir_mux", &bl_mux2_def, NULL },
+    { "ramp_mux", &bl_mux2_def, NULL },
     { NULL, NULL, NULL }
 };
 
 char const * const nets[] = {
-    "FLOAT", "fp_sig", "comp1", "out", "comp4", "in1",
-    "FLOAT", "output", "comp4", "out", "sum21", "gain0",
-    "BIT", "sel_sig", "comp4", "sel",
+    "FLOAT", "speed", "dir_mux", "in0", "inv_sum", "in0",
+    "FLOAT", "speed_inv", "inv_sum", "out", "dir_mux", "in1",
+    "BIT", "dir", "dir_mux", "sel",
+    "BIT", "ramp", "ramp_mux", "sel",
+    "FLOAT", "slope", "dir_mux", "out", "ramp_sum", "in1",
+    "FLOAT", "ramp_gain", "ramp_mux", "out", "ramp_sum", "gain1",
+    "FLOAT", "output", "ramp_sum", "out", "ramp_sum", "in0",
     "U32", "clocks", "timer", "time",
     NULL
 };
 
 bl_setsig_def_t const setsigs[] = {
-    { "sel_sig", { .b = 1 } },
-    { "fp_sig", { .f = 3.14F } },
+    { "ramp", { .b = 1 } },
+    { "speed", { .f = 1.5F } },
     {NULL, {0} }
 };
 
 bl_setpin_def_t const setpins[] = {
-    { "comp1", "in0", { .f = 2.1F } },
-    { "sum21", "gain0", { .f = 4.5F } },
+    { "inv_sum", "gain0", { .f = -1.0F } },
+    { "ramp_sum", "gain0", { .f = 1.0F } },
+    { "ramp_mux", "in1", { .f = 1.0F } },
     { NULL, NULL, {0} }
 };
 
 char const * const threads[] = {
-    "NO_FP", "100000", "thread_100us",
+    "HAS_FP", "1000000", "main_thread",
     "timer", "start",
-    "HAS_FP", "1000000", "thread_1ms",
-    "sum21", "update",
-    "comp4", "update",
+    "inv_sum", "update",
+    "dir_mux", "update",
+    "ramp_mux", "update",
+    "ramp_sum", "update",
     "timer", "stop",
     NULL
 };
@@ -75,6 +83,9 @@ int main (void) {
     uint32_t reg;
     char *hello = "\nHello, world!\n";
     uint32_t t_start, t_inst, t_nets, t_setsig, t_setpin, t_threads, t_total;
+    bl_thread_data_t *thread;
+    char c;
+    bl_sig_data_t data;
 
     platform_init();
     // Put pin PC6 in general purpose output mode
@@ -120,26 +131,49 @@ int main (void) {
     bl_show_all_threads();
 
     
-
+    thread = bl_find_thread_data_by_name("main_thread");
+    assert(thread != NULL);
     while (1) {
         // Reset the state of pin 6 to output low
         LED_PORT->BSRR = GPIO_BSRR_BR_6;
 
-        delay(5000);
-        print_string("tick... ");
-        if ( cons_rx_ready() ) {
-          cons_tx_wait(cons_rx());
+        print_string("ready... ");
+        // wait for key pressed
+        while ( ! cons_rx_ready() );
+        // read the key
+        c = cons_rx();
+        switch(c) {
+        case '+':
+            data.b = 0;
+            bl_set_sig_by_name("dir", &data);
+            break;
+        case '-':
+            data.b = 1;
+            bl_set_sig_by_name("dir", &data);
+            break;
+        case 'g':
+            data.b = 1;
+            bl_set_sig_by_name("ramp", &data);
+            break;
+        case 's':
+            data.b = 0;
+            bl_set_sig_by_name("ramp", &data);
+            break;
+        default:
+            break;
         }
+        print_string("running...");
+        t_start = tsc_read();
+        bl_thread_update(thread, 1);
+        t_threads = tsc_read();
+        print_string("done\n");
+        t_threads -= t_start;
+        printf("execution time: %d\n", t_threads);
+        bl_show_all_signals();
         // Set the state of pin 6 to output high
         LED_PORT->BSRR = GPIO_BSRR_BS_6;
-
         delay(500);
-        print_string("tock\n");
-        if ( cons_rx_ready() ) {
-          cons_tx_wait(cons_rx());
-        }
     }
-
     // Return 0 to satisfy compiler
     return 0;
 }
