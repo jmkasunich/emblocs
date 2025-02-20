@@ -610,7 +610,7 @@ void print_memory(void const *mem, uint32_t len)
     row = (void *)((uint32_t)(start) & 0xFFFFFFF0);
     while ( row <= end ) {
         print_char('\n');
-        print_uint_hex((uint32_t)row, 8, 1, 0);
+        print_uint_hex((uint32_t)row, 8, 0, 0);
         print_string(" :");
         addr = row;
         for ( n = 0 ; n < 16 ; n++ ) {
