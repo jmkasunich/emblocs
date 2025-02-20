@@ -117,6 +117,10 @@ typedef enum {
 #define BL_META_POOL_SIZE  (4<<(BL_META_INDEX_BITS))
 #endif
 
+/* the memory pools */
+extern uint32_t bl_rt_pool[];
+extern uint32_t bl_meta_pool[];
+
 /* These asserts verify that the specified number of bits can 
    be used to address the specified pool size. */
 _Static_assert((4<<(BL_RT_INDEX_BITS)) >= (BL_RT_POOL_SIZE), "not enough RT index bits");
@@ -125,6 +129,15 @@ _Static_assert((4<<(BL_META_INDEX_BITS)) >= (BL_META_POOL_SIZE), "not enough met
 /* A couple of other constants based on pool size */
 #define BL_RT_INDEX_MASK ((1<<(BL_RT_INDEX_BITS))-1)
 #define BL_META_INDEX_MASK ((1<<(BL_META_INDEX_BITS))-1)
+
+/* returns the index of 'addr' in the respective pool, masked so it can
+ * go into a bitfield without a conversion warning */
+#define TO_RT_INDEX(addr) ((uint32_t)((uint32_t *)(addr)-bl_rt_pool) & BL_RT_INDEX_MASK)
+#define TO_META_INDEX(addr) ((uint32_t)((uint32_t *)(addr)-bl_meta_pool) & BL_META_INDEX_MASK)
+/* returns an address in the respective pool */
+#define TO_RT_ADDR(index) ((void *)(&bl_rt_pool[index]))
+#define TO_META_ADDR(index) ((void *)(&bl_meta_pool[index]))
+
 
 /**************************************************************
  * Each instance of a component has "instance data" which is
