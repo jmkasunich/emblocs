@@ -519,8 +519,8 @@ void bl_show_all_threads(void);
 
 typedef struct inst_def_s {
     char const *name;
-    bl_comp_def_t *comp_def;
-    void *personality;
+    bl_comp_def_t const *comp_def;
+    void const *personality;
 } bl_inst_def_t;
 
 void bl_init_instances(bl_inst_def_t const instances[]);
