@@ -16,9 +16,6 @@ uint32_t bl_meta_pool[BL_META_POOL_SIZE >> 2]  __attribute__ ((aligned(4)));
 static uint32_t *meta_pool_next = bl_meta_pool;
 static int32_t meta_pool_avail = sizeof(bl_meta_pool);
 
-/* masks 'size' so it can go into a bit field without a conversion warning */
-#define TO_INST_SIZE(size) ((size) & BL_INST_DATA_SIZE_MASK)
-
 /* memory allocation functions */
 
 static void *alloc_from_rt_pool(int32_t size)

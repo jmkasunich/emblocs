@@ -152,6 +152,10 @@ _Static_assert((4<<(BL_META_INDEX_BITS)) >= (BL_META_POOL_SIZE), "not enough met
 #define BL_INST_DATA_MAX_SIZE (1<<(BL_INST_DATA_SIZE_BITS))
 #define BL_INST_DATA_SIZE_MASK ((BL_INST_DATA_MAX_SIZE)-1)
 
+/* masks 'size' so it can go into a bit field without a conversion warning */
+#define TO_INST_SIZE(size) ((size) & BL_INST_DATA_SIZE_MASK)
+
+
 /* pin count (number of pins in a component instance) is 
  * stored in bitfields, need to specify the size
  */
