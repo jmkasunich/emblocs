@@ -113,6 +113,7 @@ char const * const nets[] = {
     "FLOAT", "ramp_gain", "ramp_mux", "out", "ramp_sum", "gain1",
     "FLOAT", "output", "ramp_sum", "out", "ramp_sum", "in0",
     "U32", "clocks", "timer", "time",
+    "BIT", "LED", "PortC", "10_in", "PortC", "06_out",
     NULL
 };
 
@@ -132,10 +133,12 @@ bl_setpin_def_t const setpins[] = {
 char const * const threads[] = {
     "HAS_FP", "1000000", "main_thread",
     "timer", "start",
+//    "PortC", "read",
     "inv_sum", "update",
     "dir_mux", "update",
     "ramp_mux", "update",
     "ramp_sum", "update",
+    "PortC", "write",
     "timer", "stop",
     NULL
 };
@@ -198,7 +201,7 @@ int main (void) {
     assert(thread != NULL);
     while (1) {
         // Reset the state of pin 6 to output low
-        LED_PORT->BSRR = GPIO_BSRR_BR_6;
+//        LED_PORT->BSRR = GPIO_BSRR_BR_6;
 
         print_string("ready... ");
         // wait for key pressed
@@ -222,6 +225,14 @@ int main (void) {
             data.b = 0;
             bl_set_sig_by_name("ramp", &data);
             break;
+        case 'l':
+            data.b = 1;
+            bl_set_sig_by_name("LED", &data);
+            break;
+        case 'k':
+            data.b = 0;
+            bl_set_sig_by_name("LED", &data);
+            break;
         default:
             break;
         }
@@ -234,7 +245,7 @@ int main (void) {
         printf("execution time: %d\n", t_threads);
         bl_show_all_signals();
         // Set the state of pin 6 to output high
-        LED_PORT->BSRR = GPIO_BSRR_BS_6;
+//        LED_PORT->BSRR = GPIO_BSRR_BS_6;
         delay(500);
     }
     // Return 0 to satisfy compiler

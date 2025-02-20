@@ -6,8 +6,6 @@
 #include "tmp_gpio.h"
 #include "platform_g431.h"
 #include "printing.h"
-#include <assert.h>
-
 
 // instance data structure - one copy per instance in RAM
 typedef struct bl_gpio_inst_s {
@@ -18,10 +16,15 @@ typedef struct bl_gpio_inst_s {
     uint16_t out_ena_bitmask;
     bl_pin_bit_t *input_pins;
     uint16_t input_bitmask;
-	uint32_t tsc;
 } bl_gpio_inst_t;
 
-_Static_assert((sizeof(bl_gpio_inst_t) < 32767), "instance structure too large");
+// we can have up to 3 blocs pins (in, out, output enable) per hardware pin
+// and 16 hardware pins per port
+#define GPIO_MAX_PINS (3*16)
+#define GPIO_MAX_INST_SIZE (sizeof(bl_gpio_inst_t)+GPIO_MAX_PINS*sizeof(bl_pin_t))
+
+_Static_assert((GPIO_MAX_PINS < BL_PIN_COUNT_MAX), "too many pins");
+_Static_assert((GPIO_MAX_INST_SIZE < BL_INST_DATA_MAX_SIZE), "instance structure too large");
 
 // pin name strings
 // (pin definitions are created dynamically, but the strings must exist in flash)
@@ -39,11 +42,11 @@ char const pin_names_out[16][7] = {
     "12_out", "13_out", "14_out", "15_out"
 };
 
-char const pin_names_io[16][6] = {
-    "00_io", "01_io", "02_io", "03_io",
-    "04_io", "05_io", "06_io", "07_io",
-    "08_io", "09_io", "10_io", "11_io",
-    "12_io", "13_io", "14_io", "15_io"
+char const pin_names_oe[16][6] = {
+    "00_oe", "01_oe", "02_oe", "03_oe",
+    "04_oe", "05_oe", "06_oe", "07_oe",
+    "08_oe", "09_oe", "10_oe", "11_oe",
+    "12_oe", "13_oe", "14_oe", "15_oe"
 };
 
 
@@ -76,11 +79,97 @@ bl_comp_def_t const bl_gpio_def = {
 /* component-specific setup function */
 bl_inst_meta_t * gpio_setup(char const *inst_name, struct bl_comp_def_s const *comp_def, void const *personality)
 {
+    gpio_port_config_t *p = (gpio_port_config_t *)personality;
+    int pins_in, pins_out, pins_oe, pins_total;
+    uint16_t input_bitmask, output_bitmask, out_ena_bitmask, active_bit;
+    bl_inst_meta_t *meta;
+    bl_gpio_inst_t *data;
+    bl_pin_t *next_pin;
+    bl_pin_def_t pindef;
 
+    // find out how many blocs pins we need
+    pins_in = pins_out = pins_oe = 0;
+    input_bitmask = output_bitmask = out_ena_bitmask = 0;
+    active_bit = 1;
+    for ( int n = 0 ; n < 16 ; n++ ) {
+        switch(p->pins[n].pin_mode) {
+        case BGPIO_MD_BIN:
+            pins_in++;
+            input_bitmask |= active_bit;
+            break;
+        case BGPIO_MD_BOUT:
+            pins_out++;
+            output_bitmask |= active_bit;
+            break;
+        case BGPIO_MD_BIO:
+            pins_in++;
+            input_bitmask |= active_bit;
+            pins_out++;
+            output_bitmask |= active_bit;
+            pins_oe++;
+            out_ena_bitmask |= active_bit;
+            break;
+        default:
+            break;
+        }
+        active_bit <<= 1;
+    }
+    pins_total = pins_in + pins_out + pins_oe;
+    // create an instance of the proper size to include all pins
+    meta = bl_inst_create(inst_name, comp_def, comp_def->data_size+pins_total*sizeof(bl_pin_t));
+    data = TO_RT_ADDR(meta->data_index);
+    // fill in instance data fields
+    data->base_addr = p->base_address;
+    data->input_bitmask = input_bitmask;
+    data->output_bitmask = output_bitmask;
+    data->out_ena_bitmask = out_ena_bitmask;
+    // prepare for pin creation
+    // dynamic pins follow the main instance data structure
+    next_pin = (bl_pin_t *)((char *)data + sizeof(bl_gpio_inst_t));
+    pindef.data_type = BL_TYPE_BIT;
+    // hardware input pins result in data flow out of the driver
+    pindef.pin_dir = BL_DIR_OUT;
+    data->input_pins = (bl_pin_bit_t *)next_pin;
+    active_bit = 1;
+    for ( int n = 0 ; n < 16 ; n++ ) {
+        if ( input_bitmask & active_bit ) {
+            // create a pin
+            pindef.name = &(pin_names_in[n][0]);
+            pindef.data_offset = TO_INST_SIZE((uint32_t)((char *)next_pin - (char *)data));
+            bl_inst_add_pin(meta, &pindef);
+            next_pin++;
+        }
+        active_bit <<= 1;
+    }
+    // hardware output pins are driven by data flowing into the driver
+    pindef.pin_dir = BL_DIR_IN;
+    data->output_pins = (bl_pin_bit_t *)next_pin;
+    active_bit = 1;
+    for ( int n = 0 ; n < 16 ; n++ ) {
+        if ( output_bitmask & active_bit ) {
+            // create a pin
+            pindef.name = &(pin_names_out[n][0]);
+            pindef.data_offset = TO_INST_SIZE((uint32_t)((char *)next_pin - (char *)data));
+            bl_inst_add_pin(meta, &pindef);
+            next_pin++;
+        }
+        active_bit <<= 1;
+    }
+    data->out_ena_pins = (bl_pin_bit_t *)next_pin;
+    active_bit = 1;
+    for ( int n = 0 ; n < 16 ; n++ ) {
+        if ( out_ena_bitmask & active_bit ) {
+            // create a pin
+            pindef.name = &(pin_names_oe[n][0]);
+            pindef.data_offset = TO_INST_SIZE((uint32_t)((char *)next_pin - (char *)data));
+            bl_inst_add_pin(meta, &pindef);
+            next_pin++;
+        }
+        active_bit <<= 1;
+    }
+    return meta;
 }
 
-
-static volatile uint16_t IDR;
 
 // realtime code - one copy in FLASH
 static void bl_gpio_read_funct(void *ptr, uint32_t period_ns)
@@ -91,7 +180,7 @@ static void bl_gpio_read_funct(void *ptr, uint32_t period_ns)
     bl_pin_bit_t *pin;
 
     // read the hardware into low half of shifter
-    shifter = IDR;
+    shifter = p->base_addr->IDR;
     // put bitmask in high half of shifter
     shifter |= ((uint32_t)(p->input_bitmask) << 16);
     pin = p->input_pins;
@@ -104,11 +193,6 @@ static void bl_gpio_read_funct(void *ptr, uint32_t period_ns)
         shifter >>= 1;
     }
 }
-
-
-
-
-static volatile uint32_t BSRR;
 
 static void bl_gpio_write_funct(void *ptr, uint32_t period_ns)
 {
@@ -135,7 +219,6 @@ static void bl_gpio_write_funct(void *ptr, uint32_t period_ns)
         }
         active_bit <<= 1;
     }
-    BSRR = bsrr;
-    p->tsc = tsc_read() - p->tsc;
+    p->base_addr->BSRR = bsrr;
 }
 
