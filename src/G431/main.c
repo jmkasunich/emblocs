@@ -133,7 +133,7 @@ bl_setpin_def_t const setpins[] = {
 char const * const threads[] = {
     "HAS_FP", "1000000", "main_thread",
     "timer", "start",
-//    "PortC", "read",
+    "PortC", "read",
     "inv_sum", "update",
     "dir_mux", "update",
     "ramp_mux", "update",
@@ -224,14 +224,6 @@ int main (void) {
         case 's':
             data.b = 0;
             bl_set_sig_by_name("ramp", &data);
-            break;
-        case 'l':
-            data.b = 1;
-            bl_set_sig_by_name("LED", &data);
-            break;
-        case 'k':
-            data.b = 0;
-            bl_set_sig_by_name("LED", &data);
             break;
         default:
             break;

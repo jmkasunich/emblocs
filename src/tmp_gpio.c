@@ -75,6 +75,15 @@ bl_comp_def_t const bl_gpio_def = {
     bl_gpio_functs
 };
 
+static void write_bitfield(uint32_t *dest, uint32_t value, int field_width, int field_num)
+{
+    uint32_t mask, tmp;
+
+    mask = ~(0xFFFFFFFF << field_width);
+    tmp = (*dest) & (~(mask << (field_num * field_width)));
+    *dest = tmp | ((value & mask) << (field_num * field_width));
+}
+
 
 /* component-specific setup function */
 bl_inst_meta_t * gpio_setup(char const *inst_name, struct bl_comp_def_s const *comp_def, void const *personality)
@@ -82,40 +91,80 @@ bl_inst_meta_t * gpio_setup(char const *inst_name, struct bl_comp_def_s const *c
     gpio_port_config_t *p = (gpio_port_config_t *)personality;
     int pins_in, pins_out, pins_oe, pins_total;
     uint16_t input_bitmask, output_bitmask, out_ena_bitmask, active_bit;
+    GPIO_TypeDef *base_addr;
+    uint32_t mode_reg, type_reg, spd_reg, pupd_reg, af_reg[2];
+    gpio_pin_config_t *pin;
+    uint32_t tmp = 0;
     bl_inst_meta_t *meta;
     bl_gpio_inst_t *data;
     bl_pin_t *next_pin;
     bl_pin_def_t pindef;
 
-    // find out how many blocs pins we need
+    // configure the hardware and find out how many blocs pins we need
     pins_in = pins_out = pins_oe = 0;
     input_bitmask = output_bitmask = out_ena_bitmask = 0;
+    // read current config from registers
+    base_addr = p->base_address;
+    mode_reg = base_addr->MODER;
+    type_reg = base_addr->OTYPER;
+    spd_reg = base_addr->OSPEEDR;
+    pupd_reg = base_addr->PUPDR;
+    af_reg[0] = base_addr->AFR[0];
+    af_reg[1] = base_addr->AFR[1];
+    // loop through config info
     active_bit = 1;
     for ( int n = 0 ; n < 16 ; n++ ) {
-        switch(p->pins[n].pin_mode) {
-        case BGPIO_MD_BIN:
-            pins_in++;
-            input_bitmask |= active_bit;
-            break;
-        case BGPIO_MD_BOUT:
-            pins_out++;
-            output_bitmask |= active_bit;
-            break;
+        pin = &(p->pins[n]);
+        switch(pin->pin_mode) {
         case BGPIO_MD_BIO:
-            pins_in++;
-            input_bitmask |= active_bit;
             pins_out++;
             output_bitmask |= active_bit;
             pins_oe++;
             out_ena_bitmask |= active_bit;
+            [[fallthrough]];
+        case BGPIO_MD_BIN:
+            pins_in++;
+            input_bitmask |= active_bit;
+            [[fallthrough]];
+        case BGPIO_MD_IN:
+            tmp = 0;
+            break;
+        case BGPIO_MD_BOUT:
+            pins_out++;
+            output_bitmask |= active_bit;
+            [[fallthrough]];
+        case BGPIO_MD_OUT:
+            tmp = 1;
+            break;
+        case BGPIO_MD_ALT:
+            tmp = 2;
+            break;
+        case BGPIO_MD_ANA:
+            tmp = 3;
             break;
         default:
             break;
         }
+        write_bitfield(&mode_reg, tmp, 2, n);
+        write_bitfield(&type_reg, pin->output_type, 1, n);
+        write_bitfield(&spd_reg, pin->output_spd, 2, n);
+        write_bitfield(&pupd_reg, pin->pu_pd, 2, n);
+        if ( n < 8 ) {
+            write_bitfield(&af_reg[0], pin->alt_funct, 4, n);
+        } else {
+            write_bitfield(&af_reg[1], pin->alt_funct, 4, n-8);
+        }
         active_bit <<= 1;
     }
+    // write back to the hardware
+    base_addr->MODER = mode_reg;
+    base_addr->OTYPER = type_reg;
+    base_addr->OSPEEDR = spd_reg;
+    base_addr->PUPDR = pupd_reg;
+    base_addr->AFR[0] = af_reg[0];
+    base_addr->AFR[1] = af_reg[1];
+    // now the emblos setup - create an instance of the proper size to include all pins
     pins_total = pins_in + pins_out + pins_oe;
-    // create an instance of the proper size to include all pins
     meta = bl_inst_create(inst_name, comp_def, comp_def->data_size+pins_total*sizeof(bl_pin_t));
     data = TO_RT_ADDR(meta->data_index);
     // fill in instance data fields
