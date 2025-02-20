@@ -47,11 +47,6 @@ char const pin_names_io[16][6] = {
 };
 
 
-// array of pin definitions - one copy in FLASH
-static bl_pin_def_t const bl_gpio_pins[] = {
-    { "time", BL_TYPE_U32, BL_DIR_OUT, offsetof(bl_gpio_inst_t, tsc)}
-};
-
 static void bl_gpio_read_funct(void *ptr, uint32_t period_ns);
 static void bl_gpio_write_funct(void *ptr, uint32_t period_ns);
 
@@ -71,9 +66,9 @@ bl_comp_def_t const bl_gpio_def = {
     "gpio",
     gpio_setup,
     sizeof(bl_gpio_inst_t),
-    _countof(bl_gpio_pins),
+    0,
     _countof(bl_gpio_functs),
-    bl_gpio_pins,
+    NULL,
     bl_gpio_functs
 };
 
