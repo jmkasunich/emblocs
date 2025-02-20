@@ -34,7 +34,7 @@ extern bl_comp_def_t bl_sum2_def;
 extern bl_comp_def_t bl_perftimer_def;
 extern bl_comp_def_t bl_gpio_def;
 
-gpio_port_config_t portA = { 'A', {
+gpio_port_config_t const portA = { GPIOA, {
     { BGPIO_MD_ANA,  BGPIO_OUT_PP, BGPIO_SPD_SLOW, BGPIO_PULL_NONE, BGPIO_AF0 }, // PA0  = VBUS
     { BGPIO_MD_ANA,  BGPIO_OUT_PP, BGPIO_SPD_SLOW, BGPIO_PULL_NONE, BGPIO_AF0 }, // PA1  = Ifb1 opamp +
     { BGPIO_MD_ANA,  BGPIO_OUT_PP, BGPIO_SPD_SLOW, BGPIO_PULL_NONE, BGPIO_AF0 }, // PA2  = opamp 1 out
@@ -53,7 +53,7 @@ gpio_port_config_t portA = { 'A', {
     { BGPIO_MD_ALT,  BGPIO_OUT_PP, BGPIO_SPD_SLOW, BGPIO_PULL_UP,   BGPIO_AF0 }  // PA15 = PWM
 }};
 
-gpio_port_config_t portB = { 'B', {
+gpio_port_config_t const portB = { GPIOB, {
     { BGPIO_MD_ANA,  BGPIO_OUT_PP, BGPIO_SPD_SLOW, BGPIO_PULL_NONE, BGPIO_AF0 }, // PB0  = BEMF 2
     { BGPIO_MD_ANA,  BGPIO_OUT_PP, BGPIO_SPD_SLOW, BGPIO_PULL_NONE, BGPIO_AF0 }, // PB1  = opamp 3 out
     { BGPIO_MD_ANA,  BGPIO_OUT_PP, BGPIO_SPD_SLOW, BGPIO_PULL_NONE, BGPIO_AF0 }, // PB2  = Ifb3 opamp -
@@ -72,7 +72,7 @@ gpio_port_config_t portB = { 'B', {
     { BGPIO_MD_OUT,  BGPIO_OUT_PP, BGPIO_SPD_MED,  BGPIO_PULL_NONE, BGPIO_AF0 }  // PB15 = gate W lo
 }};
 
-gpio_port_config_t portC = { 'C', {
+gpio_port_config_t const portC = { GPIOC, {
     { BGPIO_MD_ANA,  BGPIO_OUT_PP, BGPIO_SPD_SLOW, BGPIO_PULL_NONE, BGPIO_AF0 }, // PC0  = 
     { BGPIO_MD_ANA,  BGPIO_OUT_PP, BGPIO_SPD_SLOW, BGPIO_PULL_NONE, BGPIO_AF0 }, // PC1  = 
     { BGPIO_MD_ANA,  BGPIO_OUT_PP, BGPIO_SPD_SLOW, BGPIO_PULL_NONE, BGPIO_AF0 }, // PC2  = 
@@ -93,6 +93,9 @@ gpio_port_config_t portC = { 'C', {
 
 
 bl_inst_def_t const instances[] = {
+    { "PortA", &bl_gpio_def, &portA},
+    { "PortB", &bl_gpio_def, &portB},
+    { "PortC", &bl_gpio_def, &portC},
     { "ramp_sum", &bl_sum2_def, NULL },
     { "inv_sum", &bl_sum2_def, NULL },
     { "timer", &bl_perftimer_def, NULL },

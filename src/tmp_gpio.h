@@ -20,6 +20,7 @@
 #define GPIO_H PB
 
 #include <stdint.h>
+#include "platform_g431.h"
 
 typedef enum {
     BGPIO_MD_IN = 0,        // no blocs pins; GP output control by registers
@@ -87,7 +88,7 @@ typedef struct  {
 } gpio_pin_config_t;
 
 typedef struct {
-    char port;
+    GPIO_TypeDef *base_address;
     gpio_pin_config_t pins[16];
 } gpio_port_config_t;
 

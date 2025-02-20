@@ -4,10 +4,14 @@
 #include "emblocs.h"
 #include "platform.h"
 #include "tmp_gpio.h"
+#include "platform_g431.h"
+#include "printing.h"
+#include <assert.h>
 
 
 // instance data structure - one copy per instance in RAM
 typedef struct bl_gpio_inst_s {
+    GPIO_TypeDef *base_addr;
     bl_pin_bit_t *output_pins;
     bl_pin_bit_t *out_ena_pins;
     uint16_t output_bitmask;
