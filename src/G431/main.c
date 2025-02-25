@@ -62,7 +62,7 @@ gpio_port_config_t const portB = { GPIOB, {
     { BGPIO_MD_ANA,  BGPIO_OUT_PP, BGPIO_SPD_SLOW, BGPIO_PULL_NONE, BGPIO_AF0 }, // PB5  = GPIO BEMF
     { BGPIO_MD_BIN,  BGPIO_OUT_PP, BGPIO_SPD_SLOW, BGPIO_PULL_NONE, BGPIO_AF0 }, // PB6  = ENC PH A / HALL 1
     { BGPIO_MD_BIN,  BGPIO_OUT_PP, BGPIO_SPD_SLOW, BGPIO_PULL_NONE, BGPIO_AF0 }, // PB7  = ENC PH V / HALL 2
-    { BGPIO_MD_BIN,  BGPIO_OUT_PP, BGPIO_SPD_SLOW, BGPIO_PULL_NONE, BGPIO_AF0 }, // PB8  = ENC PH Z / HALL 3
+    { BGPIO_MD_BIO,  BGPIO_OUT_PP, BGPIO_SPD_SLOW, BGPIO_PULL_NONE, BGPIO_AF0 }, // PB8  = ENC PH Z / HALL 3
     { BGPIO_MD_ANA,  BGPIO_OUT_PP, BGPIO_SPD_SLOW, BGPIO_PULL_NONE, BGPIO_AF0 }, // PB9  = CAN TX
     { BGPIO_MD_ANA,  BGPIO_OUT_PP, BGPIO_SPD_SLOW, BGPIO_PULL_NONE, BGPIO_AF0 }, // PB10 = NC
     { BGPIO_MD_ANA,  BGPIO_OUT_PP, BGPIO_SPD_SLOW, BGPIO_PULL_NONE, BGPIO_AF0 }, // PB11 = BEMF 3
@@ -114,6 +114,9 @@ char const * const nets[] = {
     "FLOAT", "output", "ramp_sum", "out", "ramp_sum", "in0",
     "U32", "clocks", "timer", "time",
     "BIT", "LED", "PortC", "10_in", "PortC", "06_out",
+    "BIT", "oe", "PortB", "08_oe",
+    "BIT", "out", "PortB", "08_out",
+    "BIT", "in", "PortB", "08_in",
     NULL
 };
 
@@ -133,11 +136,13 @@ bl_setpin_def_t const setpins[] = {
 char const * const threads[] = {
     "HAS_FP", "1000000", "main_thread",
     "timer", "start",
+    "PortB", "read",
     "PortC", "read",
     "inv_sum", "update",
     "dir_mux", "update",
     "ramp_mux", "update",
     "ramp_sum", "update",
+    "PortB", "write",
     "PortC", "write",
     "timer", "stop",
     NULL
@@ -224,6 +229,22 @@ int main (void) {
         case 's':
             data.b = 0;
             bl_set_sig_by_name("ramp", &data);
+            break;
+        case 'Z':
+            data.b = 0;
+            bl_set_sig_by_name("oe", &data);
+            break;
+        case 'z':
+            data.b = 1;
+            bl_set_sig_by_name("oe", &data);
+            break;
+        case 'O':
+            data.b = 1;
+            bl_set_sig_by_name("out", &data);
+            break;
+        case 'o':
+            data.b = 0;
+            bl_set_sig_by_name("out", &data);
             break;
         default:
             break;
