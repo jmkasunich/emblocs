@@ -234,9 +234,10 @@ static void bl_gpio_write_funct(void *ptr, uint32_t period_ns)
 {
     (void)period_ns;  // not used
     bl_gpio_inst_t *p = (bl_gpio_inst_t *)ptr;
-    uint32_t bitmask, active_bit, bsrr;
+    uint32_t bitmask, active_bit, bsrr, mode;
     bl_pin_bit_t *pin;
 
+    // manage outputs
     bitmask = p->output_bitmask;
     active_bit = 1;
     bsrr = 0;
@@ -256,5 +257,25 @@ static void bl_gpio_write_funct(void *ptr, uint32_t period_ns)
         active_bit <<= 1;
     }
     p->base_addr->BSRR = bsrr;
+    // manage output enables
+    bitmask = p->out_ena_bitmask;
+    active_bit = 1;
+    mode = p->base_addr->MODER;
+    pin = p->out_ena_pins;
+    while ( bitmask != 0 ) {
+        if ( bitmask & 0x0001 ) {
+            // a blocs pin exists
+            if ( **(pin++) ) {    // test pin and update ptr for next one
+                // set the pin mode to output
+                bsrr |= active_bit;
+            } else {
+                // set the pin mode to input
+                bsrr &= ~active_bit;
+            }
+        }
+        bitmask >>= 1;
+        active_bit <<= 2;
+    }
+    p->base_addr->MODER = mode;
 }
 
