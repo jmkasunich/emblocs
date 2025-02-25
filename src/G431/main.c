@@ -2,7 +2,6 @@
 
 #include "emblocs.h"
 #include "printing.h"
-#include "main.h"
 #include <assert.h>
 #include "tmp_gpio.h"
 
@@ -23,7 +22,7 @@ void __assert_func (const char * file, int line, const char * funct, const char 
 
 
 // Quick and dirty delay
-static void delay (unsigned int time) {
+void delay (unsigned int time) {
     for (unsigned int i = 0; i < time; i++)
         for (volatile unsigned int j = 0; j < 20000; j++);
 }
@@ -151,7 +150,6 @@ char const * const threads[] = {
 #define CLK_MHZ 170
 
 int main (void) {
-    uint32_t reg;
     char *hello = "\nHello, world!\n";
     uint32_t t_start, t_inst, t_nets, t_setsig, t_setpin, t_threads, t_total;
     bl_thread_data_t *thread;
@@ -159,11 +157,6 @@ int main (void) {
     bl_sig_data_t data;
 
     platform_init();
-    // Put pin PC6 in general purpose output mode
-    reg = LED_PORT->MODER;
-    reg &= ~GPIO_MODER_MODE6_Msk;
-    reg |= 0x01 << GPIO_MODER_MODE6_Pos;
-    LED_PORT->MODER = reg;
 
     print_string("BOOT\n");
     print_string(hello);
@@ -205,9 +198,6 @@ int main (void) {
     thread = bl_find_thread_data_by_name("main_thread");
     assert(thread != NULL);
     while (1) {
-        // Reset the state of pin 6 to output low
-//        LED_PORT->BSRR = GPIO_BSRR_BR_6;
-
         print_string("ready... ");
         // wait for key pressed
         while ( ! cons_rx_ready() );
@@ -257,9 +247,6 @@ int main (void) {
         t_threads -= t_start;
         printf("execution time: %d\n", t_threads);
         bl_show_all_signals();
-        // Set the state of pin 6 to output high
-//        LED_PORT->BSRR = GPIO_BSRR_BS_6;
-        delay(500);
     }
     // Return 0 to satisfy compiler
     return 0;
