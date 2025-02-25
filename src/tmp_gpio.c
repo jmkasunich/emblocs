@@ -93,7 +93,7 @@ bl_inst_meta_t * gpio_setup(char const *inst_name, struct bl_comp_def_s const *c
     uint16_t input_bitmask, output_bitmask, out_ena_bitmask, active_bit;
     GPIO_TypeDef *base_addr;
     gpio_pin_config_t *pin;
-    uint32_t tmp = 0;
+    uint32_t hw_mode;
     bl_inst_meta_t *meta;
     bl_gpio_inst_t *data;
     bl_pin_t *next_pin;
@@ -108,6 +108,7 @@ bl_inst_meta_t * gpio_setup(char const *inst_name, struct bl_comp_def_s const *c
     active_bit = 1;
     for ( int n = 0 ; n < 16 ; n++ ) {
         pin = &(p->pins[n]);
+        hw_mode = 0;
         switch(pin->pin_mode) {
         case BGPIO_MD_BIO:
             pins_out++;
@@ -120,25 +121,25 @@ bl_inst_meta_t * gpio_setup(char const *inst_name, struct bl_comp_def_s const *c
             input_bitmask |= active_bit;
             [[fallthrough]];
         case BGPIO_MD_IN:
-            tmp = 0;
+            hw_mode = 0;
             break;
         case BGPIO_MD_BOUT:
             pins_out++;
             output_bitmask |= active_bit;
             [[fallthrough]];
         case BGPIO_MD_OUT:
-            tmp = 1;
+            hw_mode = 1;
             break;
         case BGPIO_MD_ALT:
-            tmp = 2;
+            hw_mode = 2;
             break;
         case BGPIO_MD_ANA:
-            tmp = 3;
+            hw_mode = 3;
             break;
         default:
             break;
         }
-        write_bitfield(&(base_addr->MODER), tmp, 2, n);
+        write_bitfield(&(base_addr->MODER), hw_mode, 2, n);
         write_bitfield(&(base_addr->OTYPER), pin->output_type, 1, n);
         write_bitfield(&(base_addr->OSPEEDR), pin->output_spd, 2, n);
         write_bitfield(&(base_addr->PUPDR), pin->pu_pd, 2, n);
