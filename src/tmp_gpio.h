@@ -45,7 +45,7 @@ typedef enum {
     BGPIO_SPD_SLOW = 0,
     BGPIO_SPD_MED = 1,
     BGPIO_SPD_FAST = 2,
-    BGPIO_SPD_VFAST = 3
+    BGPIO_SPD_VFST = 3
 } gpio_output_speed_t;
 
 #define GPIO_OUTPUT_SPEED_BITS (2)
