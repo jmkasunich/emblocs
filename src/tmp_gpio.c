@@ -267,10 +267,10 @@ static void bl_gpio_write_funct(void *ptr, uint32_t period_ns)
             // a blocs pin exists
             if ( **(pin++) ) {    // test pin and update ptr for next one
                 // set the pin mode to output
-                bsrr |= active_bit;
+                mode |= active_bit;
             } else {
                 // set the pin mode to input
-                bsrr &= ~active_bit;
+                mode &= ~active_bit;
             }
         }
         bitmask >>= 1;
