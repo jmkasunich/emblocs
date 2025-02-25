@@ -117,6 +117,10 @@ typedef enum {
 #define BL_META_POOL_SIZE  (4<<(BL_META_INDEX_BITS))
 #endif
 
+/* the memory pools */
+extern uint32_t bl_rt_pool[];
+extern uint32_t bl_meta_pool[];
+
 /* These asserts verify that the specified number of bits can 
    be used to address the specified pool size. */
 _Static_assert((4<<(BL_RT_INDEX_BITS)) >= (BL_RT_POOL_SIZE), "not enough RT index bits");
@@ -125,6 +129,15 @@ _Static_assert((4<<(BL_META_INDEX_BITS)) >= (BL_META_POOL_SIZE), "not enough met
 /* A couple of other constants based on pool size */
 #define BL_RT_INDEX_MASK ((1<<(BL_RT_INDEX_BITS))-1)
 #define BL_META_INDEX_MASK ((1<<(BL_META_INDEX_BITS))-1)
+
+/* returns the index of 'addr' in the respective pool, masked so it can
+ * go into a bitfield without a conversion warning */
+#define TO_RT_INDEX(addr) ((uint32_t)((uint32_t *)(addr)-bl_rt_pool) & BL_RT_INDEX_MASK)
+#define TO_META_INDEX(addr) ((uint32_t)((uint32_t *)(addr)-bl_meta_pool) & BL_META_INDEX_MASK)
+/* returns an address in the respective pool */
+#define TO_RT_ADDR(index) ((void *)(&bl_rt_pool[index]))
+#define TO_META_ADDR(index) ((void *)(&bl_meta_pool[index]))
+
 
 /**************************************************************
  * Each instance of a component has "instance data" which is
@@ -138,6 +151,10 @@ _Static_assert((4<<(BL_META_INDEX_BITS)) >= (BL_META_POOL_SIZE), "not enough met
 
 #define BL_INST_DATA_MAX_SIZE (1<<(BL_INST_DATA_SIZE_BITS))
 #define BL_INST_DATA_SIZE_MASK ((BL_INST_DATA_MAX_SIZE)-1)
+
+/* masks 'size' so it can go into a bit field without a conversion warning */
+#define TO_INST_SIZE(size) ((size) & BL_INST_DATA_SIZE_MASK)
+
 
 /* pin count (number of pins in a component instance) is 
  * stored in bitfields, need to specify the size
@@ -519,8 +536,8 @@ void bl_show_all_threads(void);
 
 typedef struct inst_def_s {
     char const *name;
-    bl_comp_def_t *comp_def;
-    void *personality;
+    bl_comp_def_t const *comp_def;
+    void const *personality;
 } bl_inst_def_t;
 
 void bl_init_instances(bl_inst_def_t const instances[]);

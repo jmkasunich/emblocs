@@ -8,23 +8,13 @@
  * memory pools
  */
 
-static uint32_t bl_rt_pool[BL_RT_POOL_SIZE >> 2]  __attribute__ ((aligned(4)));
+uint32_t bl_rt_pool[BL_RT_POOL_SIZE >> 2]  __attribute__ ((aligned(4)));
 static uint32_t *rt_pool_next = bl_rt_pool;
 static int32_t rt_pool_avail = sizeof(bl_rt_pool);
 
-static uint32_t bl_meta_pool[BL_META_POOL_SIZE >> 2]  __attribute__ ((aligned(4)));
+uint32_t bl_meta_pool[BL_META_POOL_SIZE >> 2]  __attribute__ ((aligned(4)));
 static uint32_t *meta_pool_next = bl_meta_pool;
 static int32_t meta_pool_avail = sizeof(bl_meta_pool);
-
-/* returns the index of 'addr' in the respective pool, masked so it can
- * go into a bitfield without a conversion warning */
-#define TO_RT_INDEX(addr) ((uint32_t)((uint32_t *)(addr)-bl_rt_pool) & BL_RT_INDEX_MASK)
-#define TO_META_INDEX(addr) ((uint32_t)((uint32_t *)(addr)-bl_meta_pool) & BL_META_INDEX_MASK)
-/* returns an address in the respective pool */
-#define TO_RT_ADDR(index) ((void *)(&bl_rt_pool[index]))
-#define TO_META_ADDR(index) ((void *)(&bl_meta_pool[index]))
-/* masks 'size' so it can go into a bit field without a conversion warning */
-#define TO_INST_SIZE(size) ((size) & BL_INST_DATA_SIZE_MASK)
 
 /* memory allocation functions */
 
