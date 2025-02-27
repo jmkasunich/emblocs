@@ -80,9 +80,12 @@ typedef enum {
     BL_ERR_PIN_NOT_FOUND = -3,
     BL_ERR_SIG_NOT_FOUND = -4,
     BL_ERR_THREAD_NOT_FOUND = -5,
-    BL_ERR_FUNCT_NOT_FOUND = -6
+    BL_ERR_FUNCT_NOT_FOUND = -6, 
+    BL_ERR_NOMEM = -7
 } bl_retval_t;
 
+// uncomment this define to print error messages
+#define BL_ERROR_VERBOSE
 
 /**************************************************************
  * Realtime data and object metadata are stored in separate

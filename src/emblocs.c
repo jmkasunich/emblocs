@@ -28,7 +28,9 @@ static void *alloc_from_rt_pool(int32_t size)
         size += 4;
         size &= ~3;
     }
-    assert( rt_pool_avail >= size);
+    if ( rt_pool_avail < size) {
+        return NULL;
+    }
     retval = rt_pool_next;
     rt_pool_next += size/4;
     rt_pool_avail -= size;
@@ -45,7 +47,9 @@ static void *alloc_from_meta_pool(int32_t size)
         size += 4;
         size &= ~3;
     }
-    assert( meta_pool_avail >= size);
+    if ( meta_pool_avail < size) {
+        return NULL;
+    }
     retval = meta_pool_next;
     meta_pool_next += size/4;
     meta_pool_avail -= size;
@@ -181,8 +185,20 @@ bl_sig_meta_t *bl_signal_new(char const *name, bl_type_t type)
 
     // allocate memory for metadata
     meta = alloc_from_meta_pool(sizeof(bl_sig_meta_t));
+    if ( meta == NULL ) {
+        #ifdef BL_ERROR_VERBOSE
+        print_strings(4, "insufficient metadata RAM for ", "signal: ", name, "\n");
+        #endif
+        return NULL;
+    }
     // allocate memory for signal data
     data = alloc_from_rt_pool(sizeof(bl_sig_data_t));
+    if ( data == NULL ) {
+        #ifdef BL_ERROR_VERBOSE
+        print_strings(4, "insufficient realtime RAM for ", "signal: ", name, "\n");
+        #endif
+        return NULL;
+    }
     // initialize signal to zero
     data->u = 0;
     // initialise metadata fields
@@ -191,7 +207,12 @@ bl_sig_meta_t *bl_signal_new(char const *name, bl_type_t type)
     meta->name = name;
     // add metadata to master signal list
     ll_result = ll_insert((void **)(&(signal_root)), (void *)meta, sig_meta_compare_names);
-    assert(ll_result == 0);
+    if ( ll_result != 0 ) {
+        #ifdef BL_ERROR_VERBOSE
+        print_strings(4, "duplicate ", "signal: ", name, "\n");
+        #endif
+        return NULL;
+    }
     return meta;
 }
 
@@ -305,8 +326,20 @@ bl_thread_meta_t *bl_thread_new(char const *name, uint32_t period_ns, bl_nofp_t 
 
     // allocate memory for metadata
     meta = alloc_from_meta_pool(sizeof(bl_thread_meta_t));
+    if ( meta == NULL ) {
+        #ifdef BL_ERROR_VERBOSE
+        print_strings(4, "insufficient metadata RAM for ", "thread: ", name, "\n");
+        #endif
+        return NULL;
+    }
     // allocate memory for RT thread data
     data = alloc_from_rt_pool(sizeof(bl_thread_data_t));
+    if ( data == NULL ) {
+        #ifdef BL_ERROR_VERBOSE
+        print_strings(4, "insufficient realtime RAM for ", "thread: ", name, "\n");
+        #endif
+        return NULL;
+    }
     // initialize data fields
     data->period_ns = period_ns;
     data->start = NULL;
@@ -316,7 +349,12 @@ bl_thread_meta_t *bl_thread_new(char const *name, uint32_t period_ns, bl_nofp_t 
     meta->name = name;
     // add metadata to master thread list
     ll_result = ll_insert((void **)(&(thread_root)), (void *)meta, thread_meta_compare_names);
-    assert(ll_result == 0);
+    if ( ll_result != 0 ) {
+        #ifdef BL_ERROR_VERBOSE
+        print_strings(4, "duplicate ", "thread: ", name, "\n");
+        #endif
+        return NULL;
+    }
     return meta;
 }
 
@@ -332,6 +370,12 @@ bl_retval_t bl_add_funct_to_thread(bl_funct_def_t const *funct, bl_inst_meta_t c
     }
     // allocate memory for thread entry
     new_entry = alloc_from_rt_pool(sizeof(bl_thread_entry_t));
+    if ( new_entry == NULL ) {
+        #ifdef BL_ERROR_VERBOSE
+        print_strings(6, "insufficient realtime RAM for ", "function: ", inst->name, ".", funct->name, "\n");
+        #endif
+        return BL_ERR_NOMEM;
+    }
     // set entry's fields
     new_entry->funct = funct->fp;
     new_entry->inst_data = TO_RT_ADDR(inst->data_index);
@@ -408,8 +452,20 @@ bl_inst_meta_t *bl_inst_create(char const *name, bl_comp_def_t const *comp_def, 
     assert(data_size < BL_INST_DATA_MAX_SIZE);
     // allocate memory for metadata
     meta = alloc_from_meta_pool(sizeof(bl_inst_meta_t));
+    if ( meta == NULL ) {
+        #ifdef BL_ERROR_VERBOSE
+        print_strings(4, "insufficient metadata RAM for ", "instance: ", name, "\n");
+        #endif
+        return NULL;
+    }
     // allocate memory for realtime data
     data = alloc_from_rt_pool(data_size);
+    if ( data == NULL ) {
+        #ifdef BL_ERROR_VERBOSE
+        print_strings(4, "insufficient realtime RAM for ", "instance: ", name, "\n");
+        #endif
+        return NULL;
+    }
     // initialise metadata fields
     meta->comp_def = comp_def;
     meta->data_index = TO_RT_INDEX(data);
@@ -418,7 +474,12 @@ bl_inst_meta_t *bl_inst_create(char const *name, bl_comp_def_t const *comp_def, 
     meta->pin_list = NULL;
     // add metadata to master instance list
     ll_result = ll_insert((void **)(&instance_root), (void *)meta, inst_meta_compare_names);
-    assert(ll_result == 0);
+    if ( ll_result != 0 ) {
+        #ifdef BL_ERROR_VERBOSE
+        print_strings(4, "duplicate ", "instance: ", name, "\n");
+        #endif
+        return NULL;
+    }
     return meta;
 }
 
@@ -431,8 +492,20 @@ bl_pin_meta_t *bl_inst_add_pin(bl_inst_meta_t *inst, bl_pin_def_t const *def)
 
     // allocate memory for metadata
     meta = alloc_from_meta_pool(sizeof(bl_pin_meta_t));
+    if ( meta == NULL ) {
+        #ifdef BL_ERROR_VERBOSE
+        print_strings(6, "insufficient metadata RAM for ", "pin: ", inst->name, ".", def->name, "\n");
+        #endif
+        return NULL;
+    }
     // allocate memory for dummy signal
     data = alloc_from_rt_pool(sizeof(bl_sig_data_t));
+    if ( data == NULL ) {
+        #ifdef BL_ERROR_VERBOSE
+        print_strings(6, "insufficient realtime RAM for ", "pin: ", inst->name, ".", def->name, "\n");
+        #endif
+        return NULL;
+    }
     // determine address of pin pointer
     ptr_addr = (bl_sig_data_t **)((char *)(TO_RT_ADDR(inst->data_index)) + def->data_offset);
     // link pin to dummy signal
@@ -447,7 +520,12 @@ bl_pin_meta_t *bl_inst_add_pin(bl_inst_meta_t *inst, bl_pin_def_t const *def)
     meta->name = def->name;
     // add metadata to instances's pin list
     ll_result = ll_insert((void **)(&(inst->pin_list)), (void *)meta, pin_meta_compare_names);
-    assert(ll_result == 0);
+    if ( ll_result != 0 ) {
+        #ifdef BL_ERROR_VERBOSE
+        print_strings(6, "duplicate ", "pin: ", inst->name, ".", def->name, "\n");
+        #endif
+        return NULL;
+    }
     return meta;
 }
 
