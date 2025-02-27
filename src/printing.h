@@ -140,6 +140,14 @@ void print_char(char c);
 void print_string(const char *string);
 
 /***************************************************************
+ * sends multiple strings to the console
+ * no truncation or padding
+ * just does consecutive calls to print_string()
+ * but allows concatenating strings without printf
+ */
+void print_strings(int num_strings, ...);
+
+/***************************************************************
  * print a string with padding and/or truncation
  *   truncates at maxlen unless maxlen = 0
  *   pads to at least 'width' using spaces
