@@ -64,21 +64,21 @@ static bl_thread_meta_t *thread_root;
 
 
 /* linked list callback functions */
-static int inst_meta_cmp_name_key(void *node, void *key)
+static int inst_meta_compare_name_key(void *node, void *key)
 {
     bl_inst_meta_t *np = node;
     char *kp = key;
     return strcmp(np->name, kp);
 }
 
-static int inst_meta_cmp_index_key(void *node, void *key)
+static int inst_meta_compare_index_key(void *node, void *key)
 {
     bl_inst_meta_t *np = node;
     uint32_t *kp = key;
     return (np->data_index - *kp);
 }
 
-static int inst_meta_cmp_names(void *node1, void *node2)
+static int inst_meta_compare_names(void *node1, void *node2)
 {
     bl_inst_meta_t  *np1 = node1;
     bl_inst_meta_t  *np2 = node2;
@@ -90,14 +90,14 @@ static void inst_meta_print_node(void *node)
     bl_show_instance((bl_inst_meta_t *)node);
 }
 
-static int pin_meta_cmp_name_key(void *node, void *key)
+static int pin_meta_compare_name_key(void *node, void *key)
 {
     bl_pin_meta_t *np = node;
     char *kp = key;
     return strcmp(np->name, kp);
 }
 
-static int pin_meta_cmp_names(void *node1, void *node2)
+static int pin_meta_compare_names(void *node1, void *node2)
 {
     bl_pin_meta_t  *np1 = node1;
     bl_pin_meta_t  *np2 = node2;
@@ -109,21 +109,21 @@ static void pin_meta_print_node(void *node)
     bl_show_pin((bl_pin_meta_t *)node);
 }
 
-static int sig_meta_cmp_name_key(void *node, void *key)
+static int sig_meta_compare_name_key(void *node, void *key)
 {
     bl_sig_meta_t *np = node;
     char *kp = key;
     return strcmp(np->name, kp);
 }
 
-static int sig_meta_cmp_index_key(void *node, void *key)
+static int sig_meta_compare_index_key(void *node, void *key)
 {
     bl_sig_meta_t *np = node;
     uint32_t *kp = key;
     return np->data_index-*kp;
 }
 
-static int sig_meta_cmp_names(void *node1, void *node2)
+static int sig_meta_compare_names(void *node1, void *node2)
 {
     bl_sig_meta_t  *np1 = node1;
     bl_sig_meta_t  *np2 = node2;
@@ -135,14 +135,14 @@ static void sig_meta_print_node(void *node)
     bl_show_signal((bl_sig_meta_t *)node);
 }
 
-static int thread_meta_cmp_name_key(void *node, void *key)
+static int thread_meta_compare_name_key(void *node, void *key)
 {
     bl_thread_meta_t *np = node;
     char *kp = key;
     return strcmp(np->name, kp);
 }
 
-static int thread_meta_cmp_names(void *node1, void *node2)
+static int thread_meta_compare_names(void *node1, void *node2)
 {
     bl_thread_meta_t  *np1 = node1;
     bl_thread_meta_t  *np2 = node2;
@@ -190,7 +190,7 @@ bl_sig_meta_t *bl_signal_new(char const *name, bl_type_t type)
     meta->data_type = type;
     meta->name = name;
     // add metadata to master signal list
-    ll_result = ll_insert((void **)(&(signal_root)), (void *)meta, sig_meta_cmp_names);
+    ll_result = ll_insert((void **)(&(signal_root)), (void *)meta, sig_meta_compare_names);
     assert(ll_result == 0);
     return meta;
 }
@@ -315,7 +315,7 @@ bl_thread_meta_t *bl_thread_new(char const *name, uint32_t period_ns, bl_nofp_t 
     meta->nofp = nofp;
     meta->name = name;
     // add metadata to master thread list
-    ll_result = ll_insert((void **)(&(thread_root)), (void *)meta, thread_meta_cmp_names);
+    ll_result = ll_insert((void **)(&(thread_root)), (void *)meta, thread_meta_compare_names);
     assert(ll_result == 0);
     return meta;
 }
@@ -417,7 +417,7 @@ bl_inst_meta_t *bl_inst_create(char const *name, bl_comp_def_t const *comp_def, 
     meta->name = name;
     meta->pin_list = NULL;
     // add metadata to master instance list
-    ll_result = ll_insert((void **)(&instance_root), (void *)meta, inst_meta_cmp_names);
+    ll_result = ll_insert((void **)(&instance_root), (void *)meta, inst_meta_compare_names);
     assert(ll_result == 0);
     return meta;
 }
@@ -446,7 +446,7 @@ bl_pin_meta_t *bl_inst_add_pin(bl_inst_meta_t *inst, bl_pin_def_t const *def)
     meta->pin_dir = def->pin_dir;
     meta->name = def->name;
     // add metadata to instances's pin list
-    ll_result = ll_insert((void **)(&(inst->pin_list)), (void *)meta, pin_meta_cmp_names);
+    ll_result = ll_insert((void **)(&(inst->pin_list)), (void *)meta, pin_meta_compare_names);
     assert(ll_result == 0);
     return meta;
 }
@@ -454,7 +454,7 @@ bl_pin_meta_t *bl_inst_add_pin(bl_inst_meta_t *inst, bl_pin_def_t const *def)
 
 bl_inst_meta_t *bl_find_instance_by_name(char const *name)
 {
-    return ll_find((void **)(&(instance_root)), (void *)(name), inst_meta_cmp_name_key);
+    return ll_find((void **)(&(instance_root)), (void *)(name), inst_meta_compare_name_key);
 }
 
 bl_inst_meta_t *bl_find_instance_by_data_addr(void *data_addr)
@@ -462,7 +462,7 @@ bl_inst_meta_t *bl_find_instance_by_data_addr(void *data_addr)
     uint32_t index;
 
     index = TO_RT_INDEX(data_addr);
-    return ll_find((void **)(&(instance_root)), (void *)(&index), inst_meta_cmp_index_key);
+    return ll_find((void **)(&(instance_root)), (void *)(&index), inst_meta_compare_index_key);
 }
 
 bl_inst_meta_t *bl_find_instance_from_thread_entry(bl_thread_entry_t const *entry)
@@ -472,7 +472,7 @@ bl_inst_meta_t *bl_find_instance_from_thread_entry(bl_thread_entry_t const *entr
 
 bl_pin_meta_t *bl_find_pin_in_instance_by_name(char const *name, bl_inst_meta_t const *inst)
 {
-    return ll_find((void **)(&(inst->pin_list)), (void *)(name), pin_meta_cmp_name_key);
+    return ll_find((void **)(&(inst->pin_list)), (void *)(name), pin_meta_compare_name_key);
 }
 
 bl_pin_meta_t *bl_find_pin_by_names(char const *inst_name, char const *pin_name)
@@ -488,17 +488,17 @@ bl_pin_meta_t *bl_find_pin_by_names(char const *inst_name, char const *pin_name)
 
 bl_sig_meta_t *bl_find_signal_by_name(char const *name)
 {
-    return ll_find((void **)(&(signal_root)), (void *)(name), sig_meta_cmp_name_key);
+    return ll_find((void **)(&(signal_root)), (void *)(name), sig_meta_compare_name_key);
 }
 
 bl_sig_meta_t *bl_find_signal_by_index(uint32_t index)
 {
-    return ll_find((void **)(&(signal_root)), (void *)(&index), sig_meta_cmp_index_key);
+    return ll_find((void **)(&(signal_root)), (void *)(&index), sig_meta_compare_index_key);
 }
 
 bl_thread_meta_t *bl_find_thread_by_name(char const *name)
 {
-    return ll_find((void **)(&(thread_root)), (void *)(name), thread_meta_cmp_name_key);
+    return ll_find((void **)(&(thread_root)), (void *)(name), thread_meta_compare_name_key);
 }
 
 bl_thread_data_t *bl_find_thread_data_by_name(char const *name)
