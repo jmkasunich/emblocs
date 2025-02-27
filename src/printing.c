@@ -383,6 +383,19 @@ void print_string(const char *string)
     }
 }
 
+
+void print_strings(int num_strings, ...)
+{
+    va_list ap;
+
+    va_start(ap, num_strings);
+    for ( int n = 0 ; n < num_strings ; n++ ) {
+        print_string((char *)va_arg(ap, char *));
+        }
+    va_end(ap);
+}
+
+
 // private helper for printing repeated characters
 // prints 'n' copies of 'c'
 static void print_padding(int n, char c)
