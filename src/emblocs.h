@@ -76,16 +76,15 @@ typedef struct bl_thread_entry_s {
 typedef enum {
     BL_SUCCESS = 0,
     BL_ERR_TYPE_MISMATCH = -1,
-    BL_ERR_INST_NOT_FOUND = -2,
-    BL_ERR_PIN_NOT_FOUND = -3,
-    BL_ERR_SIG_NOT_FOUND = -4,
-    BL_ERR_THREAD_NOT_FOUND = -5,
-    BL_ERR_FUNCT_NOT_FOUND = -6, 
-    BL_ERR_NOMEM = -7
+    BL_ERR_NOT_FOUND = -2,
+    BL_ERR_NOMEM = -3
 } bl_retval_t;
 
 // uncomment this define to print error messages
 #define BL_ERROR_VERBOSE
+
+// uncomment this define to halt on errors
+//#define BL_ERROR_HALT
 
 /**************************************************************
  * Realtime data and object metadata are stored in separate
@@ -497,6 +496,7 @@ bl_sig_meta_t *bl_find_signal_by_index(uint32_t index);
 bl_thread_meta_t *bl_find_thread_by_name(char const *name);
 bl_thread_data_t *bl_find_thread_data_by_name(char const *name);
 bl_funct_def_t *bl_find_funct_def_in_instance_by_name(char const *name, bl_inst_meta_t const *inst);
+bl_funct_def_t *bl_find_funct_def_by_names(char const *inst_name, char const *funct_name);
 bl_funct_def_t *bl_find_funct_def_in_instance_by_address(bl_rt_funct_t *addr, bl_inst_meta_t const *inst);
 bl_funct_def_t *bl_find_funct_def_from_thread_entry(bl_thread_entry_t const *entry);
 
