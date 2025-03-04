@@ -245,7 +245,7 @@ bl_retval_t bl_link_pin_to_signal(bl_pin_meta_t const *pin, bl_sig_meta_t const 
     // check types
     if ( pin->data_type != sig->data_type ) {
         #ifdef BL_ERROR_VERBOSE
-        print_string("type mismatch\n");
+        print_strings(7, "type mismatch: ", "pin: '", pin->name, "' vs ", "signal: '", sig->name, "'\n");
         #endif
         halt_or_return(BL_ERR_TYPE_MISMATCH);
     }
