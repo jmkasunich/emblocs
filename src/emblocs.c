@@ -1110,17 +1110,30 @@ void bl_show_all_threads(void)
  * structs and/or strings in flash.
  */
 
-void bl_init_instances(bl_inst_def_t const instances[])
+bl_retval_t bl_init_instances(bl_inst_def_t const instances[])
 {
     bl_inst_def_t const *idp;  // instance definition pointer
-    bl_inst_meta_t *inst;
+    bl_inst_meta_t *inst __attribute__ ((unused));
+    bl_retval_t retval = BL_SUCCESS;
 
     idp = instances;
     while ( idp->name != NULL ) {
         inst = bl_instance_new(idp->name, idp->comp_def, idp->personality);
-        assert(inst != NULL);
+        #ifndef BL_ERROR_HALT
+        if ( inst == NULL) {
+            retval = BL_ERR_GENERAL;
+        }
+        #endif
         idp++;
     }
+    #ifndef BL_ERROR_HALT
+    if ( retval != BL_SUCCESS ) {
+        #ifdef BL_ERROR_VERBOSE
+        print_strings(2, "error(s) during ", "init_instances()\n");
+        #endif
+    }
+    #endif
+    return retval;
 }
 
 static int is_sig_type_str(char const *str, bl_type_t *result)
@@ -1144,9 +1157,9 @@ static int is_sig_type_str(char const *str, bl_type_t *result)
     return 0;
 }
 
-void bl_init_nets(char const *const nets[])
+bl_retval_t bl_init_nets(char const *const nets[])
 {
-    bl_retval_t retval;
+    bl_retval_t retval __attribute__ ((unused));
     bl_type_t net_type;
     bl_sig_meta_t *sig;
     bl_inst_meta_t *inst;
@@ -1157,6 +1170,7 @@ void bl_init_nets(char const *const nets[])
         GOT_SIG,
         GET_PIN
     } state;
+    int errors = 0;
 
     state = START;
     while ( *nets != NULL ) {
@@ -1165,12 +1179,24 @@ void bl_init_nets(char const *const nets[])
             if ( is_sig_type_str(*nets, &net_type) ) {
                 state = GET_SIG;
             } else {
-                assert(0);
+                #ifdef BL_ERROR_VERBOSE
+                print_strings(3, "expected net type, not '", *nets, "'\n");
+                #endif
+                errors++;
+                #ifdef BL_ERROR_HALT
+                halt();
+                #endif
             }
             break;
         case GET_SIG:
             sig = bl_signal_new(*nets, net_type);
-            assert(sig != NULL);
+            #ifndef BL_ERROR_HALT
+            if ( sig == NULL ) {
+                errors++;
+                state = START;
+                break;
+            }
+            #endif
             state = GOT_SIG;
             break;
         case GOT_SIG:
@@ -1179,15 +1205,31 @@ void bl_init_nets(char const *const nets[])
                 state = GET_SIG;
             } else {
                 inst = bl_find_instance_by_name(*nets);
-                assert(inst != NULL);
+                #ifndef BL_ERROR_HALT
+                if ( inst == NULL ) {
+                    errors++;
+                    state = START;
+                    break;
+                }
+                #endif
                 state = GET_PIN;
             }
             break;
         case GET_PIN:
             pin = bl_find_pin_in_instance_by_name(*nets, inst);
-            assert(pin != NULL);
+            #ifndef BL_ERROR_HALT
+            if ( pin == NULL ) {
+                errors++;
+                state = GOT_SIG;
+                break;
+            }
+            #endif
             retval = bl_link_pin_to_signal(pin, sig);
-            assert(retval == BL_SUCCESS);
+            #ifndef BL_ERROR_HALT
+            if ( retval != BL_SUCCESS ) {
+                errors++;
+            }
+            #endif
             state = GOT_SIG;
             break;
         default:
@@ -1195,32 +1237,73 @@ void bl_init_nets(char const *const nets[])
         }
         nets++;
     }
+    #ifndef BL_ERROR_HALT
+    if ( errors > 0 ) {
+        #ifdef BL_ERROR_VERBOSE
+        print_strings(2, "error(s) during ", "init_nets()\n");
+        #endif
+        return BL_ERR_GENERAL;
+    }
+    #endif
+    return BL_SUCCESS;
 }
 
-void bl_init_setsigs(bl_setsig_def_t const setsigs[])
+bl_retval_t bl_init_setsigs(bl_setsig_def_t const setsigs[])
 {
     bl_setsig_def_t const *sdp;
-    bl_retval_t retval;
+    bl_retval_t retval  __attribute__ ((unused));
+    #ifndef BL_ERROR_HALT
+    int errors = 0;
+    #endif
 
     sdp = setsigs;
     while ( sdp->name != NULL ) {
         retval = bl_set_sig_by_name(sdp->name, &sdp->value);
-        assert(retval == BL_SUCCESS);
+        #ifndef BL_ERROR_HALT
+        if ( retval != BL_SUCCESS ) {
+            errors++;
+        }
+        #endif
         sdp++;
     }
+    #ifndef BL_ERROR_HALT
+    if ( errors > 0 ) {
+        #ifdef BL_ERROR_VERBOSE
+        print_strings(2, "error(s) during ", "init_setsigs()\n");
+        #endif
+        return BL_ERR_GENERAL;
+    }
+    #endif
+    return BL_SUCCESS;
 }
 
-void bl_init_setpins(bl_setpin_def_t const setpins[])
+bl_retval_t bl_init_setpins(bl_setpin_def_t const setpins[])
 {
     bl_setpin_def_t const *sdp;
-    bl_retval_t retval;
+    bl_retval_t retval  __attribute__ ((unused));
+    #ifndef BL_ERROR_HALT
+    int errors = 0;
+    #endif
 
     sdp = setpins;
     while ( sdp->inst_name != NULL ) {
         retval = bl_set_pin_by_name(sdp->inst_name, sdp->pin_name, &sdp->value);
-        assert(retval == BL_SUCCESS);
+        #ifndef BL_ERROR_HALT
+        if ( retval != BL_SUCCESS ) {
+            errors++;
+        }
+        #endif
         sdp++;
     }
+    #ifndef BL_ERROR_HALT
+    if ( errors > 0 ) {
+        #ifdef BL_ERROR_VERBOSE
+        print_strings(2, "error(s) during ", "init_setsigs()\n");
+        #endif
+        return BL_ERR_GENERAL;
+    }
+    #endif
+    return BL_SUCCESS;
 }
 
 static int is_thread_type_str(char const *str, bl_nofp_t *result)
@@ -1252,14 +1335,15 @@ static int is_uint32_str(char const *str, uint32_t *result)
     return 1;
 }
 
-void bl_init_threads(char const * const threads[])
+bl_retval_t bl_init_threads(char const * const threads[])
 {
-    bl_retval_t retval;
+    bl_retval_t retval  __attribute__ ((unused));
     bl_nofp_t thread_type;
     uint32_t period_ns;
     bl_thread_meta_t *thread;
     bl_inst_meta_t *inst;
     bl_funct_def_t const *funct_def;
+    int errors = 0;
 
     enum {
         START,
@@ -1276,18 +1360,38 @@ void bl_init_threads(char const * const threads[])
             if ( is_thread_type_str(*threads, &thread_type) ) {
                 state = GET_PERIOD;
             } else {
-                assert(0);
+                #ifdef BL_ERROR_VERBOSE
+                print_strings(3, "expected thread type, not '", *threads, "'\n");
+                #endif
+                errors++;
+                #ifdef BL_ERROR_HALT
+                halt();
+                #endif
             }
             break;
         case GET_PERIOD:
             if ( ! is_uint32_str(*threads, &period_ns) ) {
-                assert(0);
+                #ifdef BL_ERROR_VERBOSE
+                print_strings(3, "expected thread period, not '", *threads, "'\n");
+                #endif
+                errors++;
+                #ifdef BL_ERROR_HALT
+                halt();
+                #endif
+                state = START;
+                break;
             }
             state = GET_NAME;
             break;
         case GET_NAME:
             thread = bl_thread_new(*threads, period_ns, thread_type);
-            assert(thread != NULL);
+            #ifndef BL_ERROR_HALT
+            if ( thread == NULL ) {
+                errors++;
+                state = START;
+                break;
+            }
+            #endif
             state = GOT_NAME;
             break;
         case GOT_NAME:
@@ -1296,15 +1400,31 @@ void bl_init_threads(char const * const threads[])
                 state = GET_PERIOD;
             } else {
                 inst = bl_find_instance_by_name(*threads);
-                assert(inst != NULL);
+                #ifndef BL_ERROR_HALT
+                if ( inst == NULL ) {
+                    errors++;
+                    state = START;
+                    break;
+                }
+                #endif
                 state = GET_FUNCT;
             }
             break;
         case GET_FUNCT:
             funct_def = bl_find_funct_def_in_instance_by_name(*threads, inst);
-            assert(funct_def != NULL);
+            #ifndef BL_ERROR_HALT
+            if ( funct_def == NULL ) {
+                errors++;
+                state = GOT_NAME;
+                break;
+            }
+            #endif
             retval = bl_add_funct_to_thread(funct_def, inst, thread);
-            assert(retval == BL_SUCCESS);
+            #ifndef BL_ERROR_HALT
+            if ( retval != BL_SUCCESS ) {
+                errors++;
+            }
+            #endif
             state = GOT_NAME;
             break;
         default:
@@ -1312,5 +1432,14 @@ void bl_init_threads(char const * const threads[])
         }
         threads++;
     }
+    #ifndef BL_ERROR_HALT
+    if ( errors > 0 ) {
+        #ifdef BL_ERROR_VERBOSE
+        print_strings(2, "error(s) during ", "init_threads()\n");
+        #endif
+        return BL_ERR_GENERAL;
+    }
+    #endif
+    return BL_SUCCESS;
 }
 

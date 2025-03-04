@@ -75,9 +75,10 @@ typedef struct bl_thread_entry_s {
 /* return values for some API functions */
 typedef enum {
     BL_SUCCESS = 0,
-    BL_ERR_TYPE_MISMATCH = -1,
-    BL_ERR_NOT_FOUND = -2,
-    BL_ERR_NOMEM = -3
+    BL_ERR_GENERAL = -1,
+    BL_ERR_TYPE_MISMATCH = -2,
+    BL_ERR_NOT_FOUND = -3,
+    BL_ERR_NOMEM = -4
 } bl_retval_t;
 
 // uncomment this define to print error messages
@@ -543,7 +544,7 @@ typedef struct inst_def_s {
     void const *personality;
 } bl_inst_def_t;
 
-void bl_init_instances(bl_inst_def_t const instances[]);
+bl_retval_t bl_init_instances(bl_inst_def_t const instances[]);
 
 /**************************************************************
  * A NULL terminated array of strings can be passed to 
@@ -557,7 +558,7 @@ void bl_init_instances(bl_inst_def_t const instances[]);
  * or by NULL to end the array.
  */
 
-void bl_init_nets(char const * const nets[]);
+bl_retval_t bl_init_nets(char const * const nets[]);
 
 /**************************************************************
  * A NULL terminated array of "setsig definitions" (usually
@@ -570,7 +571,7 @@ typedef struct bl_setsig_def_s {
     bl_sig_data_t value;
 } bl_setsig_def_t;
 
-void bl_init_setsigs(bl_setsig_def_t const setsigs[]);
+bl_retval_t bl_init_setsigs(bl_setsig_def_t const setsigs[]);
 
 /**************************************************************
  * A NULL terminated array of "setpin definitions" (usually
@@ -584,7 +585,7 @@ typedef struct bl_setpin_def_s {
     bl_sig_data_t value;
 } bl_setpin_def_t;
 
-void bl_init_setpins(bl_setpin_def_t const setpins[]);
+bl_retval_t bl_init_setpins(bl_setpin_def_t const setpins[]);
 
 /**************************************************************
  * A NULL terminated array of strings can be passed to 
@@ -601,7 +602,7 @@ void bl_init_setpins(bl_setpin_def_t const setpins[]);
  * the array.
  */
 
-void bl_init_threads(char const * const threads[]);
+bl_retval_t bl_init_threads(char const * const threads[]);
 
 
 #endif // EMBLOCS_H
