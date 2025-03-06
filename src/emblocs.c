@@ -184,7 +184,12 @@ bl_inst_meta_t *bl_instance_new(char const *name, bl_comp_def_t const *comp_def,
 
     if ( comp_def->setup == NULL ) {
         // no setup function, cannot support personality
-        assert(personality == NULL);
+        if ( personality != NULL) {
+            #ifdef BL_ERROR_VERBOSE
+            print_strings(3, "component: '", comp_def->name, "' does not support personality\n");
+            #endif
+            halt_or_return(NULL);
+        }
         // call default setup function
         retval = bl_default_setup(name, comp_def);
     } else {
@@ -553,7 +558,12 @@ bl_inst_meta_t *bl_inst_create(char const *name, bl_comp_def_t const *comp_def, 
     if ( data_size == 0 ) {
         data_size = comp_def->data_size;
     }
-    assert(data_size < BL_INST_DATA_MAX_SIZE);
+    if ( data_size >= BL_INST_DATA_MAX_SIZE ) {
+        #ifdef BL_ERROR_VERBOSE
+        print_string("instance data too large\n");
+        #endif
+        goto error;
+    }
     // allocate memory for metadata
     meta = alloc_from_meta_pool(sizeof(bl_inst_meta_t));
     // allocate memory for realtime data
@@ -664,16 +674,7 @@ bl_inst_meta_t *bl_find_instance_by_data_addr(void *data_addr)
 
 bl_inst_meta_t *bl_find_instance_from_thread_entry(bl_thread_entry_t const *entry)
 {
-    bl_inst_meta_t *retval;
-
-    retval = bl_find_instance_by_data_addr(entry->inst_data);
-    if ( retval == NULL ) {
-        #ifdef BL_ERROR_VERBOSE
-        print_string("data corruption\n");
-        #endif
-        halt();
-    }
-    return retval;
+    return bl_find_instance_by_data_addr(entry->inst_data);
 }
 
 bl_pin_meta_t *bl_find_pin_in_instance_by_name(char const *name, bl_inst_meta_t const *inst)
@@ -855,9 +856,7 @@ int bl_find_functions_in_thread(bl_thread_meta_t const *thread, void (*callback)
     matches = 0;
     while ( entry != NULL ) {
         inst = bl_find_instance_by_data_addr(entry->inst_data);
-        assert(inst != NULL);
         funct = bl_find_funct_def_in_instance_by_address(entry->funct, inst);
-        assert(funct != NULL);
         matches++;
         if ( callback != NULL ) {
             callback(inst, funct);
@@ -969,7 +968,6 @@ void bl_show_pin_linkage(bl_pin_meta_t const *pin)
     } else {
         // find the matching signal
         sig = bl_find_signal_by_index(TO_RT_INDEX(ptr_val));
-        assert(sig != NULL);
         printf("%s %-12s", dir, sig->name);
     }
 }
