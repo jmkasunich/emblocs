@@ -11,9 +11,9 @@
 #ifndef EMBLOCS_H
 #define EMBLOCS_H
 
-#include <stdint.h>
-#include <stdbool.h>
-#include <stddef.h>
+#include <stdint.h>    // int32_t, uint32_t
+#include <stdbool.h>   // bool, true, false
+#include <stddef.h>    // offsetof(), NULL
 
 /* some basic assumptions */
 _Static_assert(sizeof(int) == 4, "ints must be 32 bits");

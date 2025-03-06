@@ -1,7 +1,6 @@
 #include "emblocs.h"
 #include "linked_list.h"
-#include <assert.h>
-#include <string.h>
+#include <string.h>         // strcmp
 #include "printing.h"
 
 #define halt()  do {} while (1)
@@ -30,7 +29,7 @@ static void *alloc_from_rt_pool(int32_t size)
 {
     void *retval;
 
-    assert ( size > 0 );
+    if ( size <= 0 ) halt();
     // round size up to multiple of 4
     if ( size & 3 ) {
         size += 4;
@@ -52,7 +51,7 @@ static void *alloc_from_meta_pool(int32_t size)
 {
     void *retval;
 
-    assert ( size > 0 );
+    if ( size <= 0 ) halt();
     // round size up to multiple of 4
     if ( size & 3 ) {
         size += 4;
@@ -1032,7 +1031,7 @@ void bl_show_sig_data_t_value(bl_sig_data_t const *data, bl_type_t type)
         printf("%u", data->u);
         break;
     default:
-        assert(0);
+        halt();
     }
 }
 
@@ -1231,7 +1230,7 @@ bl_retval_t bl_init_nets(char const *const nets[])
             state = GOT_SIG;
             break;
         default:
-            assert(0);
+            halt();
         }
         nets++;
     }
@@ -1426,7 +1425,7 @@ bl_retval_t bl_init_threads(char const * const threads[])
             state = GOT_NAME;
             break;
         default:
-            assert(0);
+            halt();
         }
         threads++;
     }
