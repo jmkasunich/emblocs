@@ -11,9 +11,9 @@
 #ifndef EMBLOCS_H
 #define EMBLOCS_H
 
-#include <stdint.h>
-#include <stdbool.h>
-#include <stddef.h>
+#include <stdint.h>    // int32_t, uint32_t
+#include <stdbool.h>   // bool, true, false
+#include <stddef.h>    // offsetof(), NULL
 
 /* some basic assumptions */
 _Static_assert(sizeof(int) == 4, "ints must be 32 bits");
@@ -75,14 +75,17 @@ typedef struct bl_thread_entry_s {
 /* return values for some API functions */
 typedef enum {
     BL_SUCCESS = 0,
-    BL_ERR_TYPE_MISMATCH = -1,
-    BL_ERR_INST_NOT_FOUND = -2,
-    BL_ERR_PIN_NOT_FOUND = -3,
-    BL_ERR_SIG_NOT_FOUND = -4,
-    BL_ERR_THREAD_NOT_FOUND = -5,
-    BL_ERR_FUNCT_NOT_FOUND = -6
+    BL_ERR_GENERAL = -1,
+    BL_ERR_TYPE_MISMATCH = -2,
+    BL_ERR_NOT_FOUND = -3,
+    BL_ERR_NOMEM = -4
 } bl_retval_t;
 
+// uncomment this define to print error messages
+#define BL_ERROR_VERBOSE
+
+// uncomment this define to halt on errors
+//#define BL_ERROR_HALT
 
 /**************************************************************
  * Realtime data and object metadata are stored in separate
@@ -494,6 +497,7 @@ bl_sig_meta_t *bl_find_signal_by_index(uint32_t index);
 bl_thread_meta_t *bl_find_thread_by_name(char const *name);
 bl_thread_data_t *bl_find_thread_data_by_name(char const *name);
 bl_funct_def_t *bl_find_funct_def_in_instance_by_name(char const *name, bl_inst_meta_t const *inst);
+bl_funct_def_t *bl_find_funct_def_by_names(char const *inst_name, char const *funct_name);
 bl_funct_def_t *bl_find_funct_def_in_instance_by_address(bl_rt_funct_t *addr, bl_inst_meta_t const *inst);
 bl_funct_def_t *bl_find_funct_def_from_thread_entry(bl_thread_entry_t const *entry);
 
@@ -540,7 +544,7 @@ typedef struct inst_def_s {
     void const *personality;
 } bl_inst_def_t;
 
-void bl_init_instances(bl_inst_def_t const instances[]);
+bl_retval_t bl_init_instances(bl_inst_def_t const instances[]);
 
 /**************************************************************
  * A NULL terminated array of strings can be passed to 
@@ -554,7 +558,7 @@ void bl_init_instances(bl_inst_def_t const instances[]);
  * or by NULL to end the array.
  */
 
-void bl_init_nets(char const * const nets[]);
+bl_retval_t bl_init_nets(char const * const nets[]);
 
 /**************************************************************
  * A NULL terminated array of "setsig definitions" (usually
@@ -567,7 +571,7 @@ typedef struct bl_setsig_def_s {
     bl_sig_data_t value;
 } bl_setsig_def_t;
 
-void bl_init_setsigs(bl_setsig_def_t const setsigs[]);
+bl_retval_t bl_init_setsigs(bl_setsig_def_t const setsigs[]);
 
 /**************************************************************
  * A NULL terminated array of "setpin definitions" (usually
@@ -581,7 +585,7 @@ typedef struct bl_setpin_def_s {
     bl_sig_data_t value;
 } bl_setpin_def_t;
 
-void bl_init_setpins(bl_setpin_def_t const setpins[]);
+bl_retval_t bl_init_setpins(bl_setpin_def_t const setpins[]);
 
 /**************************************************************
  * A NULL terminated array of strings can be passed to 
@@ -598,7 +602,7 @@ void bl_init_setpins(bl_setpin_def_t const setpins[]);
  * the array.
  */
 
-void bl_init_threads(char const * const threads[]);
+bl_retval_t bl_init_threads(char const * const threads[]);
 
 
 #endif // EMBLOCS_H
