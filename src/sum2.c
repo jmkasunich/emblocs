@@ -1,6 +1,6 @@
 // EMBLOCS component - two input summer
 
-#include "emblocs.h"
+#include "emblocs_comp.h"
 
 // instance data structure - one copy per instance in RAM
 typedef struct bl_sum2_inst_s {

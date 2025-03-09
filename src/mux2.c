@@ -2,7 +2,7 @@
  * EMBLOCS component - two input multiplexor
  */
 
-#include "emblocs.h"
+#include "emblocs_comp.h"
 
 /* instance data structure - one copy per instance in realtime RAM */
 typedef struct bl_mux2_inst_s {

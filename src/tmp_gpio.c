@@ -1,7 +1,7 @@
 // EMBLOCS component - GPIO driver
 //
 
-#include "emblocs.h"
+#include "emblocs_comp.h"
 #include "platform.h"
 #include "tmp_gpio.h"
 #include "platform_g431.h"
@@ -61,7 +61,7 @@ static bl_funct_def_t const bl_gpio_functs[] = {
 
 
 /* component-specific setup function */
-bl_inst_meta_t * gpio_setup(char const *inst_name, struct bl_comp_def_s const *comp_def, void const *personality);
+bl_retval_t gpio_setup(char const *inst_name, struct bl_comp_def_s const *comp_def, void const *personality);
 
 
 // component definition - one copy in FLASH
@@ -86,7 +86,7 @@ static void write_bitfield(volatile uint32_t *dest, uint32_t value, int field_wi
 
 
 /* component-specific setup function */
-bl_inst_meta_t * gpio_setup(char const *inst_name, struct bl_comp_def_s const *comp_def, void const *personality)
+bl_retval_t gpio_setup(char const *inst_name, struct bl_comp_def_s const *comp_def, void const *personality)
 {
     gpio_port_config_t *p = (gpio_port_config_t *)personality;
     int pins_in, pins_out, pins_oe, pins_total;
@@ -94,7 +94,7 @@ bl_inst_meta_t * gpio_setup(char const *inst_name, struct bl_comp_def_s const *c
     GPIO_TypeDef *base_addr;
     gpio_pin_config_t *pin;
     uint32_t hw_mode;
-    bl_inst_meta_t *meta;
+    struct bl_inst_meta_s *meta;
     bl_gpio_inst_t *data;
     bl_pin_t *next_pin;
     bl_pin_def_t pindef;
@@ -153,7 +153,7 @@ bl_inst_meta_t * gpio_setup(char const *inst_name, struct bl_comp_def_s const *c
     // now the emblocs setup - create an instance of the proper size to include all pins
     pins_total = pins_in + pins_out + pins_oe;
     meta = bl_inst_create(inst_name, comp_def, comp_def->data_size+pins_total*sizeof(bl_pin_t));
-    data = TO_RT_ADDR(meta->data_index);
+    data = bl_inst_data_addr(meta);
     // fill in instance data fields
     data->base_addr = p->base_address;
     data->input_bitmask = input_bitmask;
@@ -203,7 +203,7 @@ bl_inst_meta_t * gpio_setup(char const *inst_name, struct bl_comp_def_s const *c
         }
         active_bit <<= 1;
     }
-    return meta;
+    return BL_SUCCESS;
 }
 
 

@@ -1,4 +1,4 @@
-#include "emblocs.h"
+#include "emblocs_priv.h"
 #include "linked_list.h"
 #include "printing.h"
 
@@ -40,6 +40,16 @@ void bl_show_instance(bl_inst_meta_t const *inst)
     bl_show_all_pins_of_instance(inst);
 }
 
+void bl_show_instance_by_name(char const *name)
+{
+    bl_inst_meta_t *inst;
+
+    inst = bl_find_instance_by_name(name);
+    if ( inst != NULL ) {
+        bl_show_instance(inst);
+    }
+}
+
 static void inst_meta_print_node(void *node)
 {
     bl_show_instance((bl_inst_meta_t *)node);
@@ -77,7 +87,6 @@ void bl_show_pin(bl_pin_meta_t const *pin)
     bl_show_pin_value(pin);
     printf("\n");
 #endif
-
 }
 
 static void pin_meta_print_node(void *node)
@@ -138,6 +147,16 @@ void bl_show_signal(bl_sig_meta_t const *sig)
     printf("\n");
     bl_show_signal_linkage(sig);
 #endif
+}
+
+void bl_show_signal_by_name(char const *name)
+{
+    bl_sig_meta_t *sig;
+
+    sig = bl_find_signal_by_name(name);
+    if ( sig != NULL ) {
+        bl_show_signal(sig);
+    }
 }
 
 void bl_show_signal_value(bl_sig_meta_t const *sig)
@@ -246,6 +265,16 @@ void bl_show_thread(bl_thread_meta_t const *thread)
         entry = entry->next;
     }
 #endif
+}
+
+void bl_show_thread_by_name(char const *name)
+{
+    bl_thread_meta_t *thread;
+
+    thread = bl_find_thread_by_name(name);
+    if ( thread != NULL ) {
+        bl_show_thread(thread);
+    }
 }
 
 static void thread_meta_print_node(void *node)

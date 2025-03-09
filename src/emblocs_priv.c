@@ -1,4 +1,4 @@
-#include "emblocs.h"
+#include "emblocs_priv.h"
 #include "linked_list.h"
 #include <string.h>         // strcmp
 #include "printing.h"
@@ -160,7 +160,7 @@ bl_thread_meta_t *bl_find_thread_by_name(char const *name)
     return retval;
 }
 
-bl_thread_data_t *bl_find_thread_data_by_name(char const *name)
+struct bl_thread_data_s *bl_find_thread_data_by_name(char const *name)
 {
     bl_thread_meta_t *thread;
 

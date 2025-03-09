@@ -3,7 +3,7 @@
 // add 'stop' and 'start' functions at the appropriate points in a thread
 // the 'time' pin outputs the time (in clocks) between calls to 'start' and 'stop'
 
-#include "emblocs.h"
+#include "emblocs_comp.h"
 #include "platform.h"
 
 // instance data structure - one copy per instance in RAM

@@ -1,6 +1,6 @@
 #include "platform_g431.h"
 
-#include "emblocs.h"
+#include "emblocs_api.h"
 #include "printing.h"
 #include <assert.h>
 #include "tmp_gpio.h"
@@ -28,10 +28,10 @@ void delay (unsigned int time) {
 }
 
 
-extern bl_comp_def_t bl_mux2_def;
-extern bl_comp_def_t bl_sum2_def;
-extern bl_comp_def_t bl_perftimer_def;
-extern bl_comp_def_t bl_gpio_def;
+extern struct bl_comp_def_s bl_mux2_def;
+extern struct bl_comp_def_s bl_sum2_def;
+extern struct bl_comp_def_s bl_perftimer_def;
+extern struct bl_comp_def_s bl_gpio_def;
 
 gpio_port_config_t const portA = { GPIOA, {
     { BGPIO_MD_ANA,  BGPIO_OUT_PP, BGPIO_SPD_SLOW, BGPIO_PULL_NONE, BGPIO_AF0 }, // PA0  = VBUS
@@ -152,7 +152,7 @@ char const * const threads[] = {
 int main (void) {
     char *hello = "\nHello, world!\n";
     uint32_t t_start, t_inst, t_nets, t_setsig, t_setpin, t_threads, t_total;
-    bl_thread_data_t *thread;
+    struct bl_thread_data_s *thread;
     char c;
     bl_sig_data_t data;
 
@@ -241,7 +241,7 @@ int main (void) {
         }
         print_string("running...");
         t_start = tsc_read();
-        bl_thread_update(thread, 1);
+        bl_thread_run(thread, 1);
         t_threads = tsc_read();
         print_string("done\n");
         t_threads -= t_start;

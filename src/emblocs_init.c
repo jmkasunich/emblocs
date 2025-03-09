@@ -1,4 +1,4 @@
-#include "emblocs.h"
+#include "emblocs_priv.h"
 #include <string.h>         // strcmp
 #include "printing.h"
 
@@ -13,27 +13,28 @@
 bl_retval_t bl_init_instances(bl_inst_def_t const instances[])
 {
     bl_inst_def_t const *idp;  // instance definition pointer
-    bl_inst_meta_t *inst __attribute__ ((unused));
-    bl_retval_t retval = BL_SUCCESS;
+    bl_retval_t retval;
+    int errors = 0;
 
     idp = instances;
     while ( idp->name != NULL ) {
-        inst = bl_instance_new(idp->name, idp->comp_def, idp->personality);
+        retval = bl_instance_new(idp->name, idp->comp_def, idp->personality);
         #ifndef BL_ERROR_HALT
-        if ( inst == NULL) {
-            retval = BL_ERR_GENERAL;
+        if ( retval != BL_SUCCESS) {
+            errors++;
         }
         #endif
         idp++;
     }
     #ifndef BL_ERROR_HALT
-    if ( retval != BL_SUCCESS ) {
+    if ( errors > 0  ) {
         #ifdef BL_ERROR_VERBOSE
         print_strings(2, "error(s) during ", "init_instances()\n");
         #endif
+        return BL_ERR_GENERAL;
     }
     #endif
-    return retval;
+    return BL_SUCCESS;
 }
 
 static int is_sig_type_str(char const *str, bl_type_t *result)
@@ -89,14 +90,15 @@ bl_retval_t bl_init_nets(char const *const nets[])
             }
             break;
         case GET_SIG:
-            sig = bl_signal_new(*nets, net_type);
+            retval = bl_signal_new(*nets, net_type);
             #ifndef BL_ERROR_HALT
-            if ( sig == NULL ) {
+            if ( retval != BL_SUCCESS ) {
                 errors++;
                 state = START;
                 break;
             }
             #endif
+            sig = bl_find_signal_by_name(*nets);
             state = GOT_SIG;
             break;
         case GOT_SIG:
@@ -284,14 +286,15 @@ bl_retval_t bl_init_threads(char const * const threads[])
             state = GET_NAME;
             break;
         case GET_NAME:
-            thread = bl_thread_new(*threads, period_ns, thread_type);
+            retval = bl_thread_new(*threads, period_ns, thread_type);
             #ifndef BL_ERROR_HALT
-            if ( thread == NULL ) {
+            if ( retval != BL_SUCCESS ) {
                 errors++;
                 state = START;
                 break;
             }
             #endif
+            thread = bl_find_thread_by_name(*threads);
             state = GOT_NAME;
             break;
         case GOT_NAME:

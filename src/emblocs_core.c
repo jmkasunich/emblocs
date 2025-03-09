@@ -1,4 +1,4 @@
-#include "emblocs.h"
+#include "emblocs_priv.h"
 #include "linked_list.h"
 #include <string.h>         // strcmp
 #include "printing.h"
@@ -116,9 +116,9 @@ static int thread_meta_compare_names(void *node1, void *node2)
  * Top-level EMBLOCS API functions used to build a system     *
  **************************************************************/
 
-bl_inst_meta_t *bl_instance_new(char const *name, bl_comp_def_t const *comp_def, void const *personality)
+bl_retval_t bl_instance_new(char const *name, struct bl_comp_def_s const *comp_def, void const *personality)
 {
-    bl_inst_meta_t *retval;
+    bl_retval_t retval;
 
     if ( comp_def->setup == NULL ) {
         // no setup function, cannot support personality
@@ -126,7 +126,7 @@ bl_inst_meta_t *bl_instance_new(char const *name, bl_comp_def_t const *comp_def,
             #ifdef BL_ERROR_VERBOSE
             print_strings(3, "component: '", comp_def->name, "' does not support personality\n");
             #endif
-            halt_or_return(NULL);
+            halt_or_return(BL_ERR_GENERAL);
         }
         // call default setup function
         retval = bl_default_setup(name, comp_def);
@@ -134,16 +134,16 @@ bl_inst_meta_t *bl_instance_new(char const *name, bl_comp_def_t const *comp_def,
         // call component-specific setup function
         retval = comp_def->setup(name, comp_def, personality);
     }
-    if ( retval == NULL ) {
+    if ( retval != BL_SUCCESS ) {
         #ifdef BL_ERROR_VERBOSE
         print_strings(4, "cound not create ", "instance '", name, "'\n");
         #endif
-        halt_or_return(NULL);
+        halt_or_return(retval);
     }
     return retval;
 }
 
-bl_sig_meta_t *bl_signal_new(char const *name, bl_type_t type)
+bl_retval_t bl_signal_new(char const *name, bl_type_t type)
 {
     bl_sig_meta_t *meta;
     bl_sig_data_t *data;
@@ -172,13 +172,13 @@ bl_sig_meta_t *bl_signal_new(char const *name, bl_type_t type)
         #endif
         goto error;
     }
-    return meta;
+    return BL_SUCCESS;
 
     error:
     #ifdef BL_ERROR_VERBOSE
     print_strings(4, "could not create ", "signal: '", name, "'\n");
     #endif
-    halt_or_return(NULL);
+    halt_or_return(BL_ERR_GENERAL);
 }
 
 bl_retval_t bl_link_pin_to_signal(bl_pin_meta_t const *pin, bl_sig_meta_t const *sig )
@@ -332,7 +332,7 @@ bl_retval_t bl_set_pin_by_name(char const *inst_name, char const *pin_name, bl_s
     return retval;
 }
 
-bl_thread_meta_t *bl_thread_new(char const *name, uint32_t period_ns, bl_nofp_t nofp)
+bl_retval_t bl_thread_new(char const *name, uint32_t period_ns, bl_nofp_t nofp)
 {
     bl_thread_meta_t *meta;
     bl_thread_data_t *data;
@@ -362,13 +362,13 @@ bl_thread_meta_t *bl_thread_new(char const *name, uint32_t period_ns, bl_nofp_t 
         #endif
         goto error;
     }
-    return meta;
+    return BL_SUCCESS;
 
     error:
     #ifdef BL_ERROR_VERBOSE
     print_strings(4, "could not create ", "thread: '", name, "'\n");
     #endif
-    halt_or_return(NULL);
+    halt_or_return(BL_ERR_GENERAL);
 }
 
 bl_retval_t bl_add_funct_to_thread(bl_funct_def_t const *funct, bl_inst_meta_t const *inst, bl_thread_meta_t const *thread)
@@ -442,7 +442,7 @@ bl_retval_t bl_add_funct_to_thread_by_names(char const *inst_name, char const *f
     return retval;
 }
 
-void bl_thread_update(bl_thread_data_t const *thread, uint32_t period_ns)
+void bl_thread_run(struct bl_thread_data_s const *thread, uint32_t period_ns)
 {
     bl_thread_entry_t *entry;
 
@@ -457,10 +457,10 @@ void bl_thread_update(bl_thread_data_t const *thread, uint32_t period_ns)
 }
 
 
-bl_inst_meta_t *bl_default_setup(char const *name, bl_comp_def_t const *comp_def)
+bl_retval_t bl_default_setup(char const *name, bl_comp_def_t const *comp_def)
 {
     bl_inst_meta_t *meta;
-    bl_pin_meta_t *pin __attribute__ ((unused));
+    bl_retval_t retval __attribute__ ((unused));
 
     meta = bl_inst_create(name, comp_def, 0);
     #ifndef BL_ERROR_HALT
@@ -469,25 +469,25 @@ bl_inst_meta_t *bl_default_setup(char const *name, bl_comp_def_t const *comp_def
     }
     #endif
     for ( int i = 0 ; i < comp_def->pin_count ; i++ ) {
-        pin = bl_inst_add_pin(meta, &(comp_def->pin_defs[i]));
+        retval = bl_inst_add_pin(meta, &(comp_def->pin_defs[i]));
         #ifndef BL_ERROR_HALT
-        if ( pin == NULL ) {
+        if ( retval != BL_SUCCESS ) {
             goto error;
         }
         #endif
     }
-    return meta;
+    return BL_SUCCESS;
 
     #ifndef BL_ERROR_HALT
     error:
     #ifdef BL_ERROR_VERBOSE
     print_strings(7, "could not set up ", "instance: '", name, "' of ", "component: '", comp_def->name, "'\n");
     #endif
-    halt_or_return(NULL);
+    halt_or_return(BL_ERR_GENERAL);
     #endif
 }
 
-bl_inst_meta_t *bl_inst_create(char const *name, bl_comp_def_t const *comp_def, uint32_t data_size)
+struct bl_inst_meta_s *bl_inst_create(char const *name, bl_comp_def_t const *comp_def, uint32_t data_size)
 {
     bl_inst_meta_t *meta;
     void *data;
@@ -534,7 +534,12 @@ bl_inst_meta_t *bl_inst_create(char const *name, bl_comp_def_t const *comp_def, 
     halt_or_return(NULL);
 }
 
-bl_pin_meta_t *bl_inst_add_pin(bl_inst_meta_t *inst, bl_pin_def_t const *def)
+void *bl_inst_data_addr(struct bl_inst_meta_s *inst)
+{
+    return TO_RT_ADDR(inst->data_index);
+}
+
+bl_retval_t bl_inst_add_pin(struct bl_inst_meta_s *inst, bl_pin_def_t const *def)
 {
     bl_pin_meta_t *meta;
     bl_sig_data_t *data;
@@ -570,12 +575,12 @@ bl_pin_meta_t *bl_inst_add_pin(bl_inst_meta_t *inst, bl_pin_def_t const *def)
         #endif
         goto error;
     }
-    return meta;
+    return BL_SUCCESS;
 
     error:
     #ifdef BL_ERROR_VERBOSE
     print_strings(6, "could not create ", "pin: '", inst->name, ".", def->name, "'\n");
     #endif
-    halt_or_return(NULL);
+    halt_or_return(BL_ERR_GENERAL);
 }
 
