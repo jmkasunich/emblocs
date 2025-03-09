@@ -16,12 +16,14 @@
  */
 
 uint32_t bl_rt_pool[BL_RT_POOL_SIZE >> 2]  __attribute__ ((aligned(4)));
-static uint32_t *rt_pool_next = bl_rt_pool;
-static int32_t rt_pool_avail = sizeof(bl_rt_pool);
+uint32_t *bl_rt_pool_next = bl_rt_pool;
+int32_t bl_rt_pool_avail = sizeof(bl_rt_pool);
+const int32_t bl_rt_pool_size = sizeof(bl_rt_pool);
 
 uint32_t bl_meta_pool[BL_META_POOL_SIZE >> 2]  __attribute__ ((aligned(4)));
-static uint32_t *meta_pool_next = bl_meta_pool;
-static int32_t meta_pool_avail = sizeof(bl_meta_pool);
+uint32_t *bl_meta_pool_next = bl_meta_pool;
+int32_t bl_meta_pool_avail = sizeof(bl_meta_pool);
+const int32_t bl_meta_pool_size = sizeof(bl_meta_pool);
 
 /* memory allocation functions */
 
@@ -35,15 +37,15 @@ static void *alloc_from_rt_pool(int32_t size)
         size += 4;
         size &= ~3;
     }
-    if ( rt_pool_avail < size) {
+    if ( bl_rt_pool_avail < size) {
         #ifdef BL_ERROR_VERBOSE
         print_string("insufficient realtime RAM\n");
         #endif
         halt_or_return(NULL);
     }
-    retval = rt_pool_next;
-    rt_pool_next += size/4;
-    rt_pool_avail -= size;
+    retval = bl_rt_pool_next;
+    bl_rt_pool_next += size/4;
+    bl_rt_pool_avail -= size;
     return retval;
 }
 
@@ -57,27 +59,27 @@ static void *alloc_from_meta_pool(int32_t size)
         size += 4;
         size &= ~3;
     }
-    if ( meta_pool_avail < size) {
+    if ( bl_meta_pool_avail < size) {
         #ifdef BL_ERROR_VERBOSE
         print_string("insufficient metadata RAM\n");
         #endif
         halt_or_return(NULL);
     }
-    retval = meta_pool_next;
-    meta_pool_next += size/4;
-    meta_pool_avail -= size;
+    retval = bl_meta_pool_next;
+    bl_meta_pool_next += size/4;
+    bl_meta_pool_avail -= size;
     return retval;
 }
 
 
 /* root of instance linked list */
-static bl_inst_meta_t *instance_root;
+bl_inst_meta_t *instance_root;
 
 /* root of signal linked list */
-static bl_sig_meta_t *signal_root;
+bl_sig_meta_t *signal_root;
 
 /* root of thread linked list */
-static bl_thread_meta_t *thread_root;
+bl_thread_meta_t *thread_root;
 
 
 /* linked list callback functions */
@@ -102,11 +104,6 @@ static int inst_meta_compare_names(void *node1, void *node2)
     return strcmp(np1->name, np2->name);
 }
 
-static void inst_meta_print_node(void *node)
-{
-    bl_show_instance((bl_inst_meta_t *)node);
-}
-
 static int pin_meta_compare_name_key(void *node, void *key)
 {
     bl_pin_meta_t *np = node;
@@ -119,11 +116,6 @@ static int pin_meta_compare_names(void *node1, void *node2)
     bl_pin_meta_t  *np1 = node1;
     bl_pin_meta_t  *np2 = node2;
     return strcmp(np1->name, np2->name);
-}
-
-static void pin_meta_print_node(void *node)
-{
-    bl_show_pin((bl_pin_meta_t *)node);
 }
 
 static int sig_meta_compare_name_key(void *node, void *key)
@@ -147,11 +139,6 @@ static int sig_meta_compare_names(void *node1, void *node2)
     return strcmp(np1->name, np2->name);
 }
 
-static void sig_meta_print_node(void *node)
-{
-    bl_show_signal((bl_sig_meta_t *)node);
-}
-
 static int thread_meta_compare_name_key(void *node, void *key)
 {
     bl_thread_meta_t *np = node;
@@ -165,12 +152,6 @@ static int thread_meta_compare_names(void *node1, void *node2)
     bl_thread_meta_t  *np2 = node2;
     return strcmp(np1->name, np2->name);
 }
-
-static void thread_meta_print_node(void *node)
-{
-    bl_show_thread((bl_thread_meta_t *)node);
-}
-
 
 
 /**************************************************************
@@ -862,581 +843,5 @@ int bl_find_functions_in_thread(bl_thread_meta_t const *thread, void (*callback)
         }
     }
     return matches;
-}
-
-
-static char const * const types[] = {
-    "float", "bit  ", "s32  ", "u32  "
-};
-
-#ifdef SHOW_VERBOSE
-static char const * const dirs[] = {
-    "xxx", "in ", "out", "i/o"
-};
-#endif
-
-static char const * const dirs_ps[] = {
-    "xxx", "<==", "==>", "<=>"
-};
-
-static char const * const dirs_sp[] = {
-    "xxx", "==>", "<==", "<=>"
-};
-
-void bl_show_memory_status(void)
-{
-    printf("RT pool:   %d/%d, %d free\n", sizeof(bl_rt_pool)-rt_pool_avail, sizeof(bl_rt_pool), rt_pool_avail);
-    printf("Meta pool: %d/%d, %d free\n", sizeof(bl_meta_pool)-meta_pool_avail, sizeof(bl_meta_pool), meta_pool_avail);
-}
-
-void bl_show_instance(bl_inst_meta_t const *inst)
-{
-#ifdef SHOW_VERBOSE
-    printf("INST: %20s <= %20s @ %p, %d RT bytes @ [%3d]=%p\n", inst->name, inst->comp_def->name,
-                    inst, inst->data_size, inst->data_index, TO_RT_ADDR(inst->data_index) );
-#else
-    printf("instance '%s' of component '%s'\n", inst->name, inst->comp_def->name);
-#endif
-    bl_show_all_pins_of_instance(inst);
-}
-
-void bl_show_all_instances(void)
-{
-    int ll_result;
-
-    printf("List of all instances:\n");
-    ll_result = ll_traverse((void **)(&instance_root), inst_meta_print_node);
-    printf("Total of %d instances\n", ll_result);
-}
-
-void bl_show_pin(bl_pin_meta_t const *pin)
-{
-#ifdef SHOW_VERBOSE
-    bl_sig_data_t *dummy_addr, **ptr_addr, *ptr_val;
-
-    dummy_addr = (bl_sig_data_t *)TO_RT_ADDR(pin->dummy_index);
-    ptr_addr = (bl_sig_data_t **)TO_RT_ADDR(pin->ptr_index);
-    ptr_val = *ptr_addr;
-
-    printf(" PIN: %20s  %s, %s @ %p, dummy @ [%3d]=%p, ptr @ [%3d]=%p, points at %p ",
-                            pin->name, types[pin->data_type], dirs[pin->pin_dir], pin,
-                            pin->dummy_index, dummy_addr, pin->ptr_index, ptr_addr, ptr_val );
-    bl_show_pin_linkage(pin);
-    printf(" = ");
-    bl_show_pin_value(pin);
-    printf("\n");
-#else
-    printf("  %-12s ", pin->name);
-    bl_show_pin_linkage(pin);
-    printf(" = %s : ", types[pin->data_type]);
-    bl_show_pin_value(pin);
-    printf("\n");
-#endif
-
-}
-
-void bl_show_all_pins_of_instance(bl_inst_meta_t const *inst)
-{
-    int ll_result;
-
-    ll_result = ll_traverse((void **)(&inst->pin_list), pin_meta_print_node);
-    printf("    %d pins\n", ll_result);
-}
-
-void bl_show_pin_value(bl_pin_meta_t const *pin)
-{
-    bl_sig_data_t **pin_ptr_addr, *data;
-
-    pin_ptr_addr = (bl_sig_data_t **)TO_RT_ADDR(pin->ptr_index);
-    data = *pin_ptr_addr;
-    bl_show_sig_data_t_value(data, pin->data_type);
-}
-
-void bl_show_pin_linkage(bl_pin_meta_t const *pin)
-{
-    bl_sig_data_t *dummy_addr, **ptr_addr, *ptr_val;
-    char const *dir;
-    bl_sig_meta_t *sig;
-
-    dummy_addr = (bl_sig_data_t *)TO_RT_ADDR(pin->dummy_index);
-    ptr_addr = (bl_sig_data_t **)TO_RT_ADDR(pin->ptr_index);
-    ptr_val = *ptr_addr;
-    dir = dirs_ps[pin->pin_dir];
-    if ( ptr_val == dummy_addr ) {
-        printf("%s %-12s", dir, " ");
-    } else {
-        // find the matching signal
-        sig = bl_find_signal_by_index(TO_RT_INDEX(ptr_val));
-        printf("%s %-12s", dir, sig->name);
-    }
-}
-
-void bl_show_signal(bl_sig_meta_t const *sig)
-{
-#ifdef SHOW_VERBOSE
-    bl_sig_data_t *data_addr;
-
-    data_addr = TO_RT_ADDR(sig->data_index);
-    printf("SIG: %20s  %s @ %p, data @ [%3d]=%p = ",
-                            sig->name, types[sig->data_type], sig, sig->data_index, data_addr);
-    bl_show_signal_value(sig);
-    printf("\n");
-    bl_show_signal_linkage(sig);
-#else
-    printf("  %-12s = %s : ", sig->name, types[sig->data_type]);
-    bl_show_signal_value(sig);
-    printf("\n");
-    bl_show_signal_linkage(sig);
-#endif
-}
-
-void bl_show_signal_value(bl_sig_meta_t const *sig)
-{
-    bl_sig_data_t *data;
-
-    data = (bl_sig_data_t *)TO_RT_ADDR(sig->data_index);
-    bl_show_sig_data_t_value(data, sig->data_type);
-}
-
-static void signal_linkage_callback(bl_inst_meta_t *inst, bl_pin_meta_t *pin)
-{
-    char const *dir;
-
-    dir = dirs_sp[pin->pin_dir];
-    printf("     %s %s.%s\n", dir, inst->name, pin->name);
-}
-
-void bl_show_signal_linkage(bl_sig_meta_t const *sig)
-{
-    bl_find_pins_linked_to_signal(sig, signal_linkage_callback);
-}
-
-void bl_show_sig_data_t_value(bl_sig_data_t const *data, bl_type_t type)
-{
-    switch(type) {
-    case BL_TYPE_BIT:
-        if ( data->b ) {
-            printf(" TRUE");
-        } else {
-            printf("FALSE");
-        }
-        break;
-    case BL_TYPE_FLOAT:
-        printf("%f", data->f);
-        break;
-    case BL_TYPE_S32:
-        printf("%d", data->s);
-        break;
-    case BL_TYPE_U32:
-        printf("%u", data->u);
-        break;
-    default:
-        halt();
-    }
-}
-
-void bl_show_all_signals(void)
-{
-    int ll_result;
-
-    printf("List of all signals:\n");
-    ll_result = ll_traverse((void **)(&signal_root), sig_meta_print_node);
-    printf("Total of %d signals\n", ll_result);
-}
-
-void bl_show_thread_entry(bl_thread_entry_t const *entry)
-{
-#ifdef SHOW_VERBOSE
-    printf("  thread_entry @[%d]=%p, calls %p, inst data @%p\n", TO_RT_INDEX(entry), entry, entry->funct, entry->inst_data);
-#else
-    bl_inst_meta_t *inst;
-    bl_funct_def_t *funct;
-
-    inst = bl_find_instance_by_data_addr(entry->inst_data);
-    funct = bl_find_funct_def_in_instance_by_address(entry->funct, inst);
-    printf("     %s.%s\n", inst->name, funct->name);
-#endif
-}
-
-void bl_show_thread(bl_thread_meta_t const *thread)
-{
-#ifdef SHOW_VERBOSE
-    bl_thread_data_t *data;
-    bl_thread_entry_t *entry;
-
-    data = TO_RT_ADDR(thread->data_index);
-    entry = data->start;
-    printf(" thread '%s' @[%d]=%p, no_fp = %d, period_ns = %d, RT data at [%d]=%p\n", thread->name, 
-                                TO_RT_INDEX(thread), thread, thread->nofp, data->period_ns,
-                                thread->data_index, data);
-    while ( entry != NULL ) {
-        bl_show_thread_entry(entry);
-        entry = entry->next;
-    }
-#else
-    bl_thread_data_t *data;
-    bl_thread_entry_t *entry;
-    char *fp_str;
-
-    data = TO_RT_ADDR(thread->data_index);
-    entry = data->start;
-    if ( thread->nofp ) {
-        fp_str = "no fp ";
-    } else {
-        fp_str = "has fp";
-    }
-    printf("  %-12s = %s : %10d nsec\n", thread->name, fp_str, data->period_ns);
-    while ( entry != NULL ) {
-        bl_show_thread_entry(entry);
-        entry = entry->next;
-    }
-#endif
-}
-
-void bl_show_all_threads(void)
-{
-    int ll_result;
-
-    printf("List of all threads:\n");
-    ll_result = ll_traverse((void **)(&thread_root), thread_meta_print_node);
-    printf("Total of %d threads\n", ll_result);
-}
-
-/**************************************************************
- * These functions support building a system from arrays of
- * structs and/or strings in flash.
- */
-
-bl_retval_t bl_init_instances(bl_inst_def_t const instances[])
-{
-    bl_inst_def_t const *idp;  // instance definition pointer
-    bl_inst_meta_t *inst __attribute__ ((unused));
-    bl_retval_t retval = BL_SUCCESS;
-
-    idp = instances;
-    while ( idp->name != NULL ) {
-        inst = bl_instance_new(idp->name, idp->comp_def, idp->personality);
-        #ifndef BL_ERROR_HALT
-        if ( inst == NULL) {
-            retval = BL_ERR_GENERAL;
-        }
-        #endif
-        idp++;
-    }
-    #ifndef BL_ERROR_HALT
-    if ( retval != BL_SUCCESS ) {
-        #ifdef BL_ERROR_VERBOSE
-        print_strings(2, "error(s) during ", "init_instances()\n");
-        #endif
-    }
-    #endif
-    return retval;
-}
-
-static int is_sig_type_str(char const *str, bl_type_t *result)
-{
-    if ( strcmp(str, "BIT") == 0 ) {
-        *result = BL_TYPE_BIT;
-        return 1;
-    }
-    if ( strcmp(str, "FLOAT") == 0 ) {
-        *result = BL_TYPE_FLOAT;
-        return 1;
-    }
-    if ( strcmp(str, "S32") == 0 ) {
-        *result = BL_TYPE_S32;
-        return 1;
-    }
-    if ( strcmp(str, "U32") == 0 ) {
-        *result = BL_TYPE_U32;
-        return 1;
-    }
-    return 0;
-}
-
-bl_retval_t bl_init_nets(char const *const nets[])
-{
-    bl_retval_t retval __attribute__ ((unused));
-    bl_type_t net_type;
-    bl_sig_meta_t *sig;
-    bl_inst_meta_t *inst;
-    bl_pin_meta_t *pin;
-    enum {
-        START,
-        GET_SIG,
-        GOT_SIG,
-        GET_PIN
-    } state;
-    int errors = 0;
-
-    state = START;
-    while ( *nets != NULL ) {
-        switch (state) {
-        case START:
-            if ( is_sig_type_str(*nets, &net_type) ) {
-                state = GET_SIG;
-            } else {
-                #ifdef BL_ERROR_VERBOSE
-                print_strings(3, "expected net type, not '", *nets, "'\n");
-                #endif
-                errors++;
-                #ifdef BL_ERROR_HALT
-                halt();
-                #endif
-            }
-            break;
-        case GET_SIG:
-            sig = bl_signal_new(*nets, net_type);
-            #ifndef BL_ERROR_HALT
-            if ( sig == NULL ) {
-                errors++;
-                state = START;
-                break;
-            }
-            #endif
-            state = GOT_SIG;
-            break;
-        case GOT_SIG:
-            if ( is_sig_type_str(*nets, &net_type) ) {
-                // done with previous net, start a new one
-                state = GET_SIG;
-            } else {
-                inst = bl_find_instance_by_name(*nets);
-                #ifndef BL_ERROR_HALT
-                if ( inst == NULL ) {
-                    errors++;
-                    state = START;
-                    break;
-                }
-                #endif
-                state = GET_PIN;
-            }
-            break;
-        case GET_PIN:
-            pin = bl_find_pin_in_instance_by_name(*nets, inst);
-            #ifndef BL_ERROR_HALT
-            if ( pin == NULL ) {
-                errors++;
-                state = GOT_SIG;
-                break;
-            }
-            #endif
-            retval = bl_link_pin_to_signal(pin, sig);
-            #ifndef BL_ERROR_HALT
-            if ( retval != BL_SUCCESS ) {
-                errors++;
-            }
-            #endif
-            state = GOT_SIG;
-            break;
-        default:
-            halt();
-        }
-        nets++;
-    }
-    #ifndef BL_ERROR_HALT
-    if ( errors > 0 ) {
-        #ifdef BL_ERROR_VERBOSE
-        print_strings(2, "error(s) during ", "init_nets()\n");
-        #endif
-        return BL_ERR_GENERAL;
-    }
-    #endif
-    return BL_SUCCESS;
-}
-
-bl_retval_t bl_init_setsigs(bl_setsig_def_t const setsigs[])
-{
-    bl_setsig_def_t const *sdp;
-    bl_retval_t retval  __attribute__ ((unused));
-    #ifndef BL_ERROR_HALT
-    int errors = 0;
-    #endif
-
-    sdp = setsigs;
-    while ( sdp->name != NULL ) {
-        retval = bl_set_sig_by_name(sdp->name, &sdp->value);
-        #ifndef BL_ERROR_HALT
-        if ( retval != BL_SUCCESS ) {
-            errors++;
-        }
-        #endif
-        sdp++;
-    }
-    #ifndef BL_ERROR_HALT
-    if ( errors > 0 ) {
-        #ifdef BL_ERROR_VERBOSE
-        print_strings(2, "error(s) during ", "init_setsigs()\n");
-        #endif
-        return BL_ERR_GENERAL;
-    }
-    #endif
-    return BL_SUCCESS;
-}
-
-bl_retval_t bl_init_setpins(bl_setpin_def_t const setpins[])
-{
-    bl_setpin_def_t const *sdp;
-    bl_retval_t retval  __attribute__ ((unused));
-    #ifndef BL_ERROR_HALT
-    int errors = 0;
-    #endif
-
-    sdp = setpins;
-    while ( sdp->inst_name != NULL ) {
-        retval = bl_set_pin_by_name(sdp->inst_name, sdp->pin_name, &sdp->value);
-        #ifndef BL_ERROR_HALT
-        if ( retval != BL_SUCCESS ) {
-            errors++;
-        }
-        #endif
-        sdp++;
-    }
-    #ifndef BL_ERROR_HALT
-    if ( errors > 0 ) {
-        #ifdef BL_ERROR_VERBOSE
-        print_strings(2, "error(s) during ", "init_setsigs()\n");
-        #endif
-        return BL_ERR_GENERAL;
-    }
-    #endif
-    return BL_SUCCESS;
-}
-
-static int is_thread_type_str(char const *str, bl_nofp_t *result)
-{
-    if ( strcmp(str, "HAS_FP") == 0 ) {
-        *result = BL_HAS_FP;
-        return 1;
-    }
-    if ( strcmp(str, "NO_FP") == 0 ) {
-        *result = BL_NO_FP;
-        return 1;
-    }
-    return 0;
-}
-
-static int is_uint32_str(char const *str, uint32_t *result)
-{
-    uint32_t r = 0;
-
-    do {
-        if ( ( *str < '0' ) || ( *str > '9' )  ) {
-            return 0;
-        }
-        r *= 10;
-        r += *str - '0';
-        str++;
-    } while ( *str != '\0' );
-    *result = r;
-    return 1;
-}
-
-bl_retval_t bl_init_threads(char const * const threads[])
-{
-    bl_retval_t retval  __attribute__ ((unused));
-    bl_nofp_t thread_type;
-    uint32_t period_ns;
-    bl_thread_meta_t *thread;
-    bl_inst_meta_t *inst;
-    bl_funct_def_t const *funct_def;
-    int errors = 0;
-
-    enum {
-        START,
-        GET_PERIOD,
-        GET_NAME,
-        GOT_NAME,
-        GET_FUNCT
-    } state;
-
-    state = START;
-    while ( *threads != NULL ) {
-        switch (state) {
-        case START:
-            if ( is_thread_type_str(*threads, &thread_type) ) {
-                state = GET_PERIOD;
-            } else {
-                #ifdef BL_ERROR_VERBOSE
-                print_strings(3, "expected thread type, not '", *threads, "'\n");
-                #endif
-                errors++;
-                #ifdef BL_ERROR_HALT
-                halt();
-                #endif
-            }
-            break;
-        case GET_PERIOD:
-            if ( ! is_uint32_str(*threads, &period_ns) ) {
-                #ifdef BL_ERROR_VERBOSE
-                print_strings(3, "expected thread period, not '", *threads, "'\n");
-                #endif
-                errors++;
-                #ifdef BL_ERROR_HALT
-                halt();
-                #endif
-                state = START;
-                break;
-            }
-            state = GET_NAME;
-            break;
-        case GET_NAME:
-            thread = bl_thread_new(*threads, period_ns, thread_type);
-            #ifndef BL_ERROR_HALT
-            if ( thread == NULL ) {
-                errors++;
-                state = START;
-                break;
-            }
-            #endif
-            state = GOT_NAME;
-            break;
-        case GOT_NAME:
-            if ( is_thread_type_str(*threads, &thread_type) ) {
-                // done with previous thread, start a new one
-                state = GET_PERIOD;
-            } else {
-                inst = bl_find_instance_by_name(*threads);
-                #ifndef BL_ERROR_HALT
-                if ( inst == NULL ) {
-                    errors++;
-                    state = START;
-                    break;
-                }
-                #endif
-                state = GET_FUNCT;
-            }
-            break;
-        case GET_FUNCT:
-            funct_def = bl_find_funct_def_in_instance_by_name(*threads, inst);
-            #ifndef BL_ERROR_HALT
-            if ( funct_def == NULL ) {
-                errors++;
-                state = GOT_NAME;
-                break;
-            }
-            #endif
-            retval = bl_add_funct_to_thread(funct_def, inst, thread);
-            #ifndef BL_ERROR_HALT
-            if ( retval != BL_SUCCESS ) {
-                errors++;
-            }
-            #endif
-            state = GOT_NAME;
-            break;
-        default:
-            halt();
-        }
-        threads++;
-    }
-    #ifndef BL_ERROR_HALT
-    if ( errors > 0 ) {
-        #ifdef BL_ERROR_VERBOSE
-        print_strings(2, "error(s) during ", "init_threads()\n");
-        #endif
-        return BL_ERR_GENERAL;
-    }
-    #endif
-    return BL_SUCCESS;
 }
 

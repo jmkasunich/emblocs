@@ -122,7 +122,14 @@ typedef enum {
 
 /* the memory pools */
 extern uint32_t bl_rt_pool[];
+extern uint32_t *bl_rt_pool_next;
+extern int32_t bl_rt_pool_avail;
+extern const int32_t bl_rt_pool_size;
+
 extern uint32_t bl_meta_pool[];
+extern uint32_t *bl_meta_pool_next;
+extern int32_t bl_meta_pool_avail;
+extern const int32_t bl_meta_pool_size;
 
 /* These asserts verify that the specified number of bits can 
    be used to address the specified pool size. */
@@ -299,6 +306,15 @@ typedef struct bl_thread_meta_s {
 _Static_assert((BL_RT_INDEX_BITS+BL_NOFP_BITS) <= 32, "thread bitfields too big");
 
 
+/* root of instance linked list */
+extern bl_inst_meta_t *instance_root;
+
+/* root of signal linked list */
+extern bl_sig_meta_t *signal_root;
+
+/* root of thread linked list */
+extern bl_thread_meta_t *thread_root;
+
 /**************************************************************
  * The following data structures are used by components to    *
  * describe themselves and allow component instances to be    *
@@ -373,6 +389,8 @@ _Static_assert((BL_NOFP_BITS) <= 32, "funct_def bitfields too big");
 
 /**************************************************************
  * Top-level EMBLOCS API functions used to build a system     *
+ *                                                            *
+ * These functions are implemented in emblocs_core.c          *
  *                                                            *
  **************************************************************/
 
@@ -506,8 +524,11 @@ int bl_find_functions_in_thread(bl_thread_meta_t const *thread, void (*callback)
 
 
 /**************************************************************
- * Helper functions for viewing things in the metadata
- */
+ * Helper functions for viewing things in the metadata        *
+ *                                                            *
+ * These functions are defined in emblocs_show.c              *
+ *                                                            *
+ **************************************************************/
 
 void bl_show_memory_status(void);
 void bl_show_instance(bl_inst_meta_t const *inst);
@@ -530,6 +551,9 @@ void bl_show_all_threads(void);
  * For convenience, a system can be built by using compact    *
  * representations of multiple EMBLOCS commands.  These       *
  * structures and functions support that.                     *
+ *                                                            *
+ * They functions are defined in emblocs_init.c               *
+ *                                                            *
  **************************************************************/
 
 /**************************************************************

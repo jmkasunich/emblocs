@@ -28,6 +28,8 @@ TEMP_DIR 				:= $(BUILD_DIR)/temp
 ALL_SRCS := 
 ALL_TARGETS :=
 
+EMBLOCS_SRCS := emblocs_core.c emblocs_show.c emblocs_init.c
+
 # target definitions
 PRINT_TEST_TARGET := printing-test.hex
 PRINT_TEST_SRCS := printing-test.c G431/startup_stm32g431kbtx.s G431/system_stm32g4xx.c G431/platform_g431.c printing.c
@@ -43,7 +45,7 @@ ALL_TARGETS += $(PRINT_TEST_TARGET)
 
 
 FOO_TARGET := main.hex
-FOO_SRCS := G431/main.c G431/startup_stm32g431kbtx.s G431/system_stm32g4xx.c G431/platform_g431.c printing.c emblocs.c
+FOO_SRCS := G431/main.c G431/startup_stm32g431kbtx.s G431/system_stm32g4xx.c G431/platform_g431.c printing.c $(EMBLOCS_SRCS)
 FOO_SRCS += mux2.c sum2.c perftimer.c tmp_gpio.c
 FOO_SRCS += linked_list.c
 FOO_LIBS :=
