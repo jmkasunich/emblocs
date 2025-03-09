@@ -500,6 +500,8 @@ bl_pin_meta_t *bl_inst_add_pin(bl_inst_meta_t *inst, bl_pin_def_t const *def);
 /**************************************************************
  * Helper functions for finding things in the metadata
  * 
+ * These functions are implemented in emblocs_priv.c
+ * 
  * The first group finds the single matching item.
  * The second group finds the zero or more matching items,
  * calls a callback functions for each match (if 'callback'
