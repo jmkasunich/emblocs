@@ -74,9 +74,9 @@ bl_inst_meta_t * watch_setup(char const *inst_name, struct bl_comp_def_s const *
     pins = 0;
     types = 0;
     while ( pin_info->name != NULL ) {
-        types |= pin_info->type;
-        types <<= BL_TYPE_BITS;
+        types |= pin_info->type << (pins * BL_TYPE_BITS);
         pins++;
+        pin_info++;
     }
     if ( pins > WATCH_MAX_PINS ) {
         #ifdef BL_ERROR_VERBOSE
@@ -121,32 +121,32 @@ static void bl_watch_update_funct(void *ptr, uint32_t period_ns)
     int pins;
     uint32_t types;
     bl_type_t type;
-    bl_watch_pin_rt_data_t *pin;
+    bl_watch_pin_rt_data_t *watch_pin;
 
     pins = p->pin_count;
     types = p->pin_types;
     // pin data immediately follows the instance structure
-    pin = (bl_watch_pin_rt_data_t *)(p+1);
+    watch_pin = (bl_watch_pin_rt_data_t *)(p+1);
     while ( pins > 0 ) {
         type = types & ((1<<(BL_TYPE_BITS))-1);
         switch(type) {
         case BL_TYPE_BIT:
-            printf(pin->format, *(pin->pin.b));
+            printf(watch_pin->format, watch_pin->pin->b);
             break;
         case BL_TYPE_FLOAT:
-            printf(pin->format, *(pin->pin.f));
+            printf(watch_pin->format, watch_pin->pin->f);
             break;
         case BL_TYPE_S32:
-            printf(pin->format, *(pin->pin.s));
+            printf(watch_pin->format, watch_pin->pin->s);
             break;
         case BL_TYPE_U32:
-            printf(pin->format, *(pin->pin.u));
+            printf(watch_pin->format, watch_pin->pin->u);
             break;
         default:
             break;
         }
         types >>= BL_TYPE_BITS;
-        pin++;
+        watch_pin++;
         pins--;
     }
 }
