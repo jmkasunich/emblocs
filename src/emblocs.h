@@ -44,13 +44,8 @@ typedef union bl_sig_data_u {
     bl_u32_t u;
 } bl_sig_data_t;
 
-/* "generic" pin; implemented as a union of the four pin types */
-typedef union bl_pin_u {
-    bl_pin_bit_t b;
-    bl_pin_float_t f;
-    bl_pin_s32_t s;
-    bl_pin_u32_t u;
-} bl_pin_t;
+/* "generic" pin is a pointer to a generic signal */
+typedef bl_sig_data_t *bl_pin_t;
 
 /* realtime data needed for a thread */
 typedef struct bl_thread_data_s {
@@ -86,6 +81,9 @@ typedef enum {
 
 // uncomment this define to halt on errors
 //#define BL_ERROR_HALT
+
+// uncomment this to print lots of detail in 'show' commands
+//#define SHOW_VERBOSE
 
 /**************************************************************
  * Realtime data and object metadata are stored in separate
