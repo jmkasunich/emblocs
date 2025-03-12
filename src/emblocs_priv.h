@@ -11,7 +11,8 @@
 #ifndef EMBLOCS_PRIV_H
 #define EMBLOCS_PRIV_H
 
-#include "emblocs_comp.h" 
+#include "emblocs_api.h"
+#include "emblocs_comp.h"
 
 /* the memory pools */
 extern uint32_t bl_rt_pool[];

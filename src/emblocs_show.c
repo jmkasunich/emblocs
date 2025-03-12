@@ -9,7 +9,7 @@ static char const * const types[] = {
     "float", "bit  ", "s32  ", "u32  "
 };
 
-#ifdef SHOW_VERBOSE
+#ifdef BL_SHOW_VERBOSE
 static char const * const dirs[] = {
     "xxx", "in ", "out", "i/o"
 };
@@ -31,7 +31,7 @@ void bl_show_memory_status(void)
 
 void bl_show_instance(bl_inst_meta_t const *inst)
 {
-#ifdef SHOW_VERBOSE
+#ifdef BL_SHOW_VERBOSE
     printf("INST: %20s <= %20s @ %p, %d RT bytes @ [%3d]=%p\n", inst->name, inst->comp_def->name,
                     inst, inst->data_size, inst->data_index, TO_RT_ADDR(inst->data_index) );
 #else
@@ -66,7 +66,7 @@ void bl_show_all_instances(void)
 
 void bl_show_pin(bl_pin_meta_t const *pin)
 {
-#ifdef SHOW_VERBOSE
+#ifdef BL_SHOW_VERBOSE
     bl_sig_data_t *dummy_addr, **ptr_addr, *ptr_val;
 
     dummy_addr = (bl_sig_data_t *)TO_RT_ADDR(pin->dummy_index);
@@ -132,7 +132,7 @@ void bl_show_pin_linkage(bl_pin_meta_t const *pin)
 
 void bl_show_signal(bl_sig_meta_t const *sig)
 {
-#ifdef SHOW_VERBOSE
+#ifdef BL_SHOW_VERBOSE
     bl_sig_data_t *data_addr;
 
     data_addr = TO_RT_ADDR(sig->data_index);
@@ -220,7 +220,7 @@ void bl_show_all_signals(void)
 
 void bl_show_thread_entry(bl_thread_entry_t const *entry)
 {
-#ifdef SHOW_VERBOSE
+#ifdef BL_SHOW_VERBOSE
     printf("  thread_entry @[%d]=%p, calls %p, inst data @%p\n", TO_RT_INDEX(entry), entry, entry->funct, entry->inst_data);
 #else
     bl_inst_meta_t *inst;
@@ -234,7 +234,7 @@ void bl_show_thread_entry(bl_thread_entry_t const *entry)
 
 void bl_show_thread(bl_thread_meta_t const *thread)
 {
-#ifdef SHOW_VERBOSE
+#ifdef BL_SHOW_VERBOSE
     bl_thread_data_t *data;
     bl_thread_entry_t *entry;
 

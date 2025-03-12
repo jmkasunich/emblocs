@@ -1,17 +1,17 @@
 /***************************************************************
- * 
+ *
  * emblocs_comp.h - header for EMBLOCS components
- * 
+ *
  * Embedded Block-Oriented Control System
- * 
- * 
- * 
+ *
+ *
+ *
  **************************************************************/
 
 #ifndef EMBLOCS_COMP_H
 #define EMBLOCS_COMP_H
 
-#include "emblocs_api.h" 
+#include "emblocs_core.h"
 
 #ifndef _countof
 #define _countof(array) (sizeof(array)/sizeof(array[0]))
