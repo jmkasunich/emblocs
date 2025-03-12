@@ -54,7 +54,7 @@ static int thread_meta_compare_name_key(void *node, void *key)
     return strcmp(np->name, kp);
 }
 
-
+/* "find" functions */
 
 bl_inst_meta_t *bl_find_instance_by_name(char const *name)
 {

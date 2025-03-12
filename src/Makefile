@@ -46,7 +46,7 @@ ALL_TARGETS += $(PRINT_TEST_TARGET)
 
 FOO_TARGET := main.hex
 FOO_SRCS := G431/main.c G431/startup_stm32g431kbtx.s G431/system_stm32g4xx.c G431/platform_g431.c printing.c $(EMBLOCS_SRCS)
-FOO_SRCS += mux2.c sum2.c perftimer.c tmp_gpio.c
+FOO_SRCS += mux2.c sum2.c perftimer.c tmp_gpio.c watch.c
 FOO_SRCS += linked_list.c
 FOO_LIBS :=
 FOO_C_SRC := $(filter %.c, $(FOO_SRCS))

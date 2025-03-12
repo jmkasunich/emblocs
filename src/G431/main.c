@@ -4,6 +4,7 @@
 #include "printing.h"
 #include <assert.h>
 #include "tmp_gpio.h"
+#include "watch.h"
 
 void __assert_func (const char * file, int line, const char * funct, const char *expr)
 {
@@ -32,6 +33,8 @@ extern struct bl_comp_def_s bl_mux2_def;
 extern struct bl_comp_def_s bl_sum2_def;
 extern struct bl_comp_def_s bl_perftimer_def;
 extern struct bl_comp_def_s bl_gpio_def;
+extern struct bl_comp_def_s bl_watch_def;
+
 
 gpio_port_config_t const portA = { GPIOA, {
     { BGPIO_MD_ANA,  BGPIO_OUT_PP, BGPIO_SPD_SLOW, BGPIO_PULL_NONE, BGPIO_AF0 }, // PA0  = VBUS
@@ -91,10 +94,19 @@ gpio_port_config_t const portC = { GPIOC, {
 }};
 
 
+watch_pin_config_t watch_pers[] = {
+    { BL_TYPE_BIT, "in", "in: %1b " },
+    { BL_TYPE_BIT, "oe", "oe: %1b " },
+    { BL_TYPE_BIT, "out", "out: %1b " },
+    { BL_TYPE_FLOAT, "output", "output: %6.3f\n" },
+    { BL_TYPE_BIT, NULL, NULL }
+};
+
 bl_inst_def_t const instances[] = {
     { "PortA", &bl_gpio_def, &portA},
     { "PortB", &bl_gpio_def, &portB},
     { "PortC", &bl_gpio_def, &portC},
+    { "watcher", &bl_watch_def, &watch_pers},
     { "ramp_sum", &bl_sum2_def, NULL },
     { "inv_sum", &bl_sum2_def, NULL },
     { "timer", &bl_perftimer_def, NULL },
@@ -110,12 +122,12 @@ char const * const nets[] = {
     "BIT", "ramp", "ramp_mux", "sel",
     "FLOAT", "slope", "dir_mux", "out", "ramp_sum", "in1",
     "FLOAT", "ramp_gain", "ramp_mux", "out", "ramp_sum", "gain1",
-    "FLOAT", "output", "ramp_sum", "out", "ramp_sum", "in0",
+    "FLOAT", "output", "ramp_sum", "out", "ramp_sum", "in0", "watcher", "output",
     "U32", "clocks", "timer", "time",
     "BIT", "LED", "PortC", "10_in", "PortC", "06_out",
-    "BIT", "oe", "PortB", "08_oe",
-    "BIT", "out", "PortB", "08_out",
-    "BIT", "in", "PortB", "08_in",
+    "BIT", "oe", "PortB", "08_oe", "watcher", "oe",
+    "BIT", "out", "PortB", "08_out", "watcher", "out",
+    "BIT", "in", "PortB", "08_in", "watcher", "in",
     NULL
 };
 
@@ -144,6 +156,8 @@ char const * const threads[] = {
     "PortB", "write",
     "PortC", "write",
     "timer", "stop",
+    "HAS_FP", "1000000000", "watch_thread",
+    "watcher", "update",
     NULL
 };
 
@@ -152,7 +166,8 @@ char const * const threads[] = {
 int main (void) {
     char *hello = "\nHello, world!\n";
     uint32_t t_start, t_inst, t_nets, t_setsig, t_setpin, t_threads, t_total;
-    struct bl_thread_data_s *thread;
+    struct bl_thread_data_s *main_thread;
+    struct bl_thread_data_s *watch_thread;
     char c;
     bl_sig_data_t data;
 
@@ -195,8 +210,10 @@ int main (void) {
     bl_show_all_threads();
 
     
-    thread = bl_find_thread_data_by_name("main_thread");
-    assert(thread != NULL);
+    main_thread = bl_find_thread_data_by_name("main_thread");
+    watch_thread = bl_find_thread_data_by_name("watch_thread");
+    assert(main_thread != NULL);
+    assert(watch_thread != NULL);
     while (1) {
         print_string("ready... ");
         // wait for key pressed
@@ -241,11 +258,12 @@ int main (void) {
         }
         print_string("running...");
         t_start = tsc_read();
-        bl_thread_run(thread, 1);
+        bl_thread_run(main_thread, 1);
         t_threads = tsc_read();
         print_string("done\n");
         t_threads -= t_start;
         printf("execution time: %d\n", t_threads);
+        bl_thread_run(watch_thread,0);
         bl_show_all_signals();
     }
     // Return 0 to satisfy compiler

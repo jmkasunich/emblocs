@@ -40,19 +40,15 @@ typedef union bl_sig_data_u {
     bl_u32_t u;
 } bl_sig_data_t;
 
-/* "generic" pin; implemented as a union of the four pin types */
-typedef union bl_pin_u {
-    bl_pin_bit_t b;
-    bl_pin_float_t f;
-    bl_pin_s32_t s;
-    bl_pin_u32_t u;
-} bl_pin_t;
+/* "generic" pin is a pointer to a generic signal */
+typedef bl_sig_data_t *bl_pin_t;
+
 
 /**************************************************************
  * A structure that defines a component.
  * The component creates the structure, an application merely
  * refers to it when creating an instance of the component.
- * So its internals are unimportant and not declared here.
+ * Its internals are unimportant and not declared here.
  */
 struct bl_comp_def_s;
 
@@ -64,7 +60,7 @@ struct bl_comp_def_s;
  */
 struct bl_thread_data_s;
 
-/* return values for some API functions */
+/* return values for API functions */
 typedef enum {
     BL_SUCCESS = 0,
     BL_ERR_GENERAL = -1,
@@ -252,10 +248,9 @@ bl_retval_t bl_add_funct_to_thread_by_names(char const *inst_name, char const *f
  */
 void bl_thread_run(struct bl_thread_data_s const *thread, uint32_t period_ns);
 
-
 /**************************************************************
  * Helper function to get the address of thread data; this is
- * passed to bl_thread_update() to run the thread
+ * passed to bl_thread_run() to run the thread
  */  
 struct bl_thread_data_s *bl_find_thread_data_by_name(char const *name);
 

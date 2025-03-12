@@ -17,7 +17,7 @@
  */
 
 #ifndef GPIO_H
-#define GPIO_H PB
+#define GPIO_H
 
 #include <stdint.h>
 #include "platform_g431.h"
