@@ -14,28 +14,19 @@
 #include "emblocs_core.h"
 
 /**************************************************************
- * A structure that defines a component.
- * The component creates the structure, an application merely
- * refers to it when creating an instance of the component.
- * Its internals are unimportant and not declared here.
- */
-struct bl_comp_def_s;
-
-/**************************************************************
- * A structure that defines a thread.
- * An application passes it to bl_thread_update() to execute
- * the thread.
- * Its internals are unimportant and not declared here.
- */
-struct bl_thread_data_s;
-
-/**************************************************************
  * Top-level EMBLOCS API functions used to build a system     *
  *                                                            *
  * These functions are implemented in emblocs_core.c          *
  *                                                            *
  **************************************************************/
 
+/**************************************************************
+ * A structure that defines a component.
+ * The component creates the structure, an application merely
+ * refers to it when creating an instance of the component.
+ * Its internals are unimportant and not declared here.
+ */
+struct bl_comp_def_s;
 
 /**************************************************************
  * Create an instance of a component, using a component 
@@ -89,6 +80,14 @@ bl_retval_t bl_pin_set(struct bl_pin_meta_s const *pin, bl_sig_data_t const *val
  * Add the specified function to the end of the specified thread
  */
 bl_retval_t bl_thread_add_function(struct bl_thread_meta_s const *thread, struct bl_instance_meta_s const *inst, struct bl_function_def_s const *funct);
+
+/**************************************************************
+ * A structure that carries the realtime data for a thread.
+ * An application passes it to bl_thread_run() to execute
+ * the thread.
+ * Its internals are unimportant and not declared here.
+ */
+struct bl_thread_data_s;
 
 /**************************************************************
  * Runs a thread once by calling all of the functions that have
