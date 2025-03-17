@@ -102,9 +102,9 @@ typedef enum {
  * API functions pass and return pointers to these structures,
  * but the internal data is private and not declared here.
  */
-struct bl_inst_meta_s;
+struct bl_instance_meta_s;
 struct bl_pin_meta_s;
-struct bl_funct_def_s;
+struct bl_function_def_s;
 struct bl_signal_meta_s;
 struct bl_thread_meta_s;
 struct bl_thread_data_s;
@@ -115,15 +115,15 @@ struct bl_thread_data_s;
  * in bytes, and the size is stored in a bitfield.
  */
 
-#ifndef BL_INST_DATA_SIZE_BITS
-#define BL_INST_DATA_SIZE_BITS  10
+#ifndef BL_INSTANCE_DATA_SIZE_BITS
+#define BL_INSTANCE_DATA_SIZE_BITS  10
 #endif
 
-#define BL_INST_DATA_MAX_SIZE (1<<(BL_INST_DATA_SIZE_BITS))
-#define BL_INST_DATA_SIZE_MASK ((BL_INST_DATA_MAX_SIZE)-1)
+#define BL_INSTANCE_DATA_MAX_SIZE (1<<(BL_INSTANCE_DATA_SIZE_BITS))
+#define BL_INSTANCE_DATA_SIZE_MASK ((BL_INSTANCE_DATA_MAX_SIZE)-1)
 
 /* masks 'size' so it can go into a bit field without a conversion warning */
-#define TO_INST_SIZE(size) ((size) & BL_INST_DATA_SIZE_MASK)
+#define TO_INSTANCE_SIZE(size) ((size) & BL_INSTANCE_DATA_SIZE_MASK)
 
 
 /* pin count (number of pins in a component instance)
@@ -138,10 +138,10 @@ struct bl_thread_data_s;
 /* the number of functions provided by a component
  * is stored in bitfields, need to specify the size
  */
-#ifndef BL_FUNCT_COUNT_BITS
-#define BL_FUNCT_COUNT_BITS 3
+#ifndef BL_FUNCTION_COUNT_BITS
+#define BL_FUNCTION_COUNT_BITS 3
 #endif
 
-#define BL_FUNCT_COUNT_MAX (1<<(BL_FUNCT_COUNT_BITS))
+#define BL_FUNCTION_COUNT_MAX (1<<(BL_FUNCTION_COUNT_BITS))
 
 #endif // EMBLOCS_CORE_H

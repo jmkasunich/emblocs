@@ -81,17 +81,17 @@ _Static_assert((4<<(BL_META_INDEX_BITS)) >= (BL_META_POOL_SIZE), "not enough met
  * that belong to this specific instance.
  */
 
-typedef struct bl_inst_meta_s {
-    struct bl_inst_meta_s *next;
+typedef struct bl_instance_meta_s {
+    struct bl_instance_meta_s *next;
     struct bl_comp_def_s const *comp_def;
     uint32_t data_index  : BL_RT_INDEX_BITS;
-    uint32_t data_size   : BL_INST_DATA_SIZE_BITS;
+    uint32_t data_size   : BL_INSTANCE_DATA_SIZE_BITS;
     char const *name;
     struct bl_pin_meta_s *pin_list;
-} bl_inst_meta_t;
+} bl_instance_meta_t;
 
 /* Verify that bitfields fit in one uint32_t */
-_Static_assert((BL_RT_INDEX_BITS+BL_INST_DATA_SIZE_BITS) <= 32, "instance bitfields too big");
+_Static_assert((BL_RT_INDEX_BITS+BL_INSTANCE_DATA_SIZE_BITS) <= 32, "instance bitfields too big");
 
 /**************************************************************
  * Data structure that describes a pin.  Each instance has a
@@ -148,8 +148,8 @@ typedef struct bl_thread_data_s {
 
 /* bl_thread_run() traverses a list of these structures */
 typedef struct bl_thread_entry_s {
-    bl_rt_funct_t *funct;
-    void *inst_data;
+    bl_rt_function_t *funct;
+    void *instance_data;
     struct bl_thread_entry_s *next;
 } bl_thread_entry_t;
 
@@ -157,7 +157,7 @@ typedef struct bl_thread_entry_s {
 _Static_assert((BL_RT_INDEX_BITS+BL_NOFP_BITS) <= 32, "thread bitfields too big");
 
 /* root of instance linked list */
-extern bl_inst_meta_t *instance_root;
+extern bl_instance_meta_t *instance_root;
 
 /* root of signal linked list */
 extern bl_signal_meta_t *signal_root;
@@ -175,7 +175,7 @@ extern bl_thread_meta_t *thread_root;
  * Helper function for bl_instance_new(); creates an instance
  * of a component using only the component definition.
  */
-struct bl_inst_meta_s *bl_default_setup(char const *name, bl_comp_def_t const *comp_def);
+struct bl_instance_meta_s *bl_default_setup(char const *name, bl_comp_def_t const *comp_def);
 
 /**************************************************************
  * Helper functions for finding things in the metadata
@@ -187,14 +187,14 @@ struct bl_inst_meta_s *bl_default_setup(char const *name, bl_comp_def_t const *c
  * calls a callback functions for each match (if 'callback'
  * is not NULL), and returns the number of matches.
  */
-bl_inst_meta_t *bl_find_instance_by_data_addr(void *data_addr);
-bl_inst_meta_t *bl_find_instance_from_thread_entry(bl_thread_entry_t const *entry);
+bl_instance_meta_t *bl_find_instance_by_data_addr(void *data_addr);
+bl_instance_meta_t *bl_find_instance_from_thread_entry(bl_thread_entry_t const *entry);
 bl_signal_meta_t *bl_find_signal_by_index(uint32_t index);
-bl_funct_def_t *bl_find_funct_def_in_instance_by_address(bl_rt_funct_t *addr, bl_inst_meta_t const *inst);
-bl_funct_def_t *bl_find_funct_def_from_thread_entry(bl_thread_entry_t const *entry);
+bl_function_def_t *bl_find_function_def_in_instance_by_address(bl_rt_function_t *addr, bl_instance_meta_t const *inst);
+bl_function_def_t *bl_find_function_def_from_thread_entry(bl_thread_entry_t const *entry);
 
-int bl_find_pins_linked_to_signal(bl_signal_meta_t const *sig, void (*callback)(bl_inst_meta_t *inst, bl_pin_meta_t *pin));
-int bl_find_functions_in_thread(bl_thread_meta_t const *thread, void (*callback)(bl_inst_meta_t *inst, bl_funct_def_t *funct));
+int bl_find_pins_linked_to_signal(bl_signal_meta_t const *sig, void (*callback)(bl_instance_meta_t *inst, bl_pin_meta_t *pin));
+int bl_find_functions_in_thread(bl_thread_meta_t const *thread, void (*callback)(bl_instance_meta_t *inst, bl_function_def_t *funct));
 
 /**************************************************************
  * Helper functions for viewing things in the metadata        *
@@ -203,9 +203,9 @@ int bl_find_functions_in_thread(bl_thread_meta_t const *thread, void (*callback)
  *                                                            *
  **************************************************************/
 
-void bl_show_instance(bl_inst_meta_t const *inst);
+void bl_show_instance(bl_instance_meta_t const *inst);
 void bl_show_pin(bl_pin_meta_t const *pin);
-void bl_show_all_pins_of_instance(bl_inst_meta_t const *inst);
+void bl_show_all_pins_of_instance(bl_instance_meta_t const *inst);
 void bl_show_pin_value(bl_pin_meta_t const *pin);
 void bl_show_pin_linkage(bl_pin_meta_t const *pin);
 void bl_show_signal(bl_signal_meta_t const *sig);

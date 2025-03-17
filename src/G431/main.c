@@ -102,7 +102,7 @@ watch_pin_config_t watch_pers[] = {
     { BL_TYPE_BIT, NULL, NULL }
 };
 
-bl_inst_def_t const instances[] = {
+bl_instance_def_t const instances[] = {
     { "PortA", &bl_gpio_def, &portA},
     { "PortB", &bl_gpio_def, &portB},
     { "PortC", &bl_gpio_def, &portC},

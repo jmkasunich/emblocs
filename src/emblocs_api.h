@@ -41,7 +41,7 @@ struct bl_thread_data_s;
  * Create an instance of a component, using a component 
  * definition (typically in flash) and an optional personality.
  */
-struct bl_inst_meta_s *bl_instance_new(char const *name, struct bl_comp_def_s const *comp_def, void const *personality);
+struct bl_instance_meta_s *bl_instance_new(char const *name, struct bl_comp_def_s const *comp_def, void const *personality);
 
 /**************************************************************
  * Create a signal of the specified name and type
@@ -59,11 +59,11 @@ struct bl_thread_meta_s *bl_thread_new(char const *name, uint32_t period_ns, bl_
 /**************************************************************
  * Functions to find object metadata by name
  */
-struct bl_inst_meta_s *bl_instance_find(char const *name);
+struct bl_instance_meta_s *bl_instance_find(char const *name);
 struct bl_signal_meta_s *bl_signal_find(char const *name);
 struct bl_thread_meta_s *bl_thread_find(char const *name);
-struct bl_pin_meta_s *bl_pin_find_in_inst(char const *name, struct bl_inst_meta_s *inst);
-struct bl_funct_def_s *bl_funct_find_in_inst(char const *name, struct bl_inst_meta_s *inst);
+struct bl_pin_meta_s *bl_pin_find_in_instance(char const *name, struct bl_instance_meta_s *inst);
+struct bl_function_def_s *bl_function_find_in_instance(char const *name, struct bl_instance_meta_s *inst);
 
 /**************************************************************
  * Link the specified pin to the specified signal
@@ -88,7 +88,7 @@ bl_retval_t bl_pin_set(struct bl_pin_meta_s const *pin, bl_sig_data_t const *val
 /**************************************************************
  * Add the specified function to the end of the specified thread
  */
-bl_retval_t bl_thread_add_funct(struct bl_thread_meta_s const *thread, struct bl_inst_meta_s const *inst, struct bl_funct_def_s const *funct);
+bl_retval_t bl_thread_add_function(struct bl_thread_meta_s const *thread, struct bl_instance_meta_s const *inst, struct bl_function_def_s const *funct);
 
 /**************************************************************
  * Runs a thread once by calling all of the functions that have
@@ -136,13 +136,13 @@ void bl_show_thread_by_name(char const *name);
  * all of the component instances needed for a system.
  */
 
-typedef struct inst_def_s {
+typedef struct instance_def_s {
     char const *name;
     struct bl_comp_def_s const *comp_def;
     void const *personality;
-} bl_inst_def_t;
+} bl_instance_def_t;
 
-bl_retval_t bl_init_instances(bl_inst_def_t const instances[]);
+bl_retval_t bl_init_instances(bl_instance_def_t const instances[]);
 
 /**************************************************************
  * A NULL terminated array of strings can be passed to 
@@ -178,7 +178,7 @@ bl_retval_t bl_init_setsigs(bl_setsig_def_t const setsigs[]);
  */
 
 typedef struct bl_setpin_def_s {
-    char const *inst_name;
+    char const *instance_name;
     char const *pin_name;
     bl_sig_data_t value;
 } bl_setpin_def_t;

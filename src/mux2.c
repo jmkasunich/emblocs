@@ -12,7 +12,7 @@ typedef struct bl_mux2_inst_s {
 	bl_pin_bit_t sel;
 } bl_mux2_inst_t;
 
-_Static_assert((sizeof(bl_mux2_inst_t) < BL_INST_DATA_MAX_SIZE), "instance structure too large");
+_Static_assert((sizeof(bl_mux2_inst_t) < BL_INSTANCE_DATA_MAX_SIZE), "instance structure too large");
 
 
 /* array of pin definitions - one copy in FLASH */
@@ -26,14 +26,14 @@ static bl_pin_def_t const bl_mux2_pins[] = {
 _Static_assert((_countof(bl_mux2_pins) < BL_PIN_COUNT_MAX), "too many pins");
 
 
-static void bl_mux2_funct(void *ptr, uint32_t period_ns);
+static void bl_mux2_function(void *ptr, uint32_t period_ns);
 
 // array of function definitions - one copy in FLASH
-static bl_funct_def_t const bl_mux2_functs[] = {
-    { "update", BL_HAS_FP, &bl_mux2_funct }
+static bl_function_def_t const bl_mux2_functions[] = {
+    { "update", BL_HAS_FP, &bl_mux2_function }
 };
 
-_Static_assert((_countof(bl_mux2_functs) < BL_FUNCT_COUNT_MAX), "too many functions");
+_Static_assert((_countof(bl_mux2_functions) < BL_FUNCTION_COUNT_MAX), "too many functions");
 
 
 // component definition - one copy in FLASH
@@ -42,13 +42,13 @@ bl_comp_def_t const bl_mux2_def = {
     NULL,
     sizeof(bl_mux2_inst_t),
     _countof(bl_mux2_pins),
-    _countof(bl_mux2_functs),
+    _countof(bl_mux2_functions),
     bl_mux2_pins,
-    bl_mux2_functs
+    bl_mux2_functions
 };
 
 // realtime code - one copy in FLASH
-static void bl_mux2_funct(void *ptr, uint32_t period_ns)
+static void bl_mux2_function(void *ptr, uint32_t period_ns)
 {
     (void)period_ns;  // unused in this component
 

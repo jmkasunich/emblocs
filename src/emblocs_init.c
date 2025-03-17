@@ -10,10 +10,10 @@
  * structs and/or strings in flash.
  */
 
-bl_retval_t bl_init_instances(bl_inst_def_t const instances[])
+bl_retval_t bl_init_instances(bl_instance_def_t const instances[])
 {
-    bl_inst_def_t const *idp;  // instance definition pointer
-    bl_inst_meta_t *inst;
+    bl_instance_def_t const *idp;  // instance definition pointer
+    bl_instance_meta_t *inst;
     int errors = 0;
 
     idp = instances;
@@ -63,7 +63,7 @@ bl_retval_t bl_init_nets(char const *const nets[])
     bl_retval_t retval __attribute__ ((unused));
     bl_type_t net_type;
     bl_signal_meta_t *sig;
-    bl_inst_meta_t *inst;
+    bl_instance_meta_t *inst;
     bl_pin_meta_t *pin;
     enum {
         START,
@@ -117,7 +117,7 @@ bl_retval_t bl_init_nets(char const *const nets[])
             }
             break;
         case GET_PIN:
-            pin = bl_pin_find_in_inst(*nets, inst);
+            pin = bl_pin_find_in_instance(*nets, inst);
             #ifndef BL_ERROR_HALT
             if ( pin == NULL ) {
                 errors++;
@@ -181,7 +181,7 @@ bl_retval_t bl_init_setsigs(bl_setsig_def_t const setsigs[])
 bl_retval_t bl_init_setpins(bl_setpin_def_t const setpins[])
 {
     bl_setpin_def_t const *sdp;
-    bl_inst_meta_t *inst;
+    bl_instance_meta_t *inst;
     bl_pin_meta_t *pin;
     bl_retval_t retval  __attribute__ ((unused));
     #ifndef BL_ERROR_HALT
@@ -189,15 +189,15 @@ bl_retval_t bl_init_setpins(bl_setpin_def_t const setpins[])
     #endif
 
     sdp = setpins;
-    while ( sdp->inst_name != NULL ) {
-        inst = bl_instance_find(sdp->inst_name);
+    while ( sdp->instance_name != NULL ) {
+        inst = bl_instance_find(sdp->instance_name);
         #ifndef BL_ERROR_HALT
         if ( inst ==NULL ) {
             errors++;
             goto next;
         }
         #endif
-        pin = bl_pin_find_in_inst(sdp->pin_name, inst);
+        pin = bl_pin_find_in_instance(sdp->pin_name, inst);
         #ifndef BL_ERROR_HALT
         if ( pin ==NULL ) {
             errors++;
@@ -259,8 +259,8 @@ bl_retval_t bl_init_threads(char const * const threads[])
     bl_nofp_t thread_type;
     uint32_t period_ns;
     bl_thread_meta_t *thread;
-    bl_inst_meta_t *inst;
-    bl_funct_def_t const *funct_def;
+    bl_instance_meta_t *inst;
+    bl_function_def_t const *function_def;
     int errors = 0;
 
     enum {
@@ -329,15 +329,15 @@ bl_retval_t bl_init_threads(char const * const threads[])
             }
             break;
         case GET_FUNCT:
-            funct_def = bl_funct_find_in_inst(*threads, inst);
+            function_def = bl_function_find_in_instance(*threads, inst);
             #ifndef BL_ERROR_HALT
-            if ( funct_def == NULL ) {
+            if ( function_def == NULL ) {
                 errors++;
                 state = GOT_NAME;
                 break;
             }
             #endif
-            retval = bl_thread_add_funct(thread, inst, funct_def);
+            retval = bl_thread_add_function(thread, inst, function_def);
             #ifndef BL_ERROR_HALT
             if ( retval != BL_SUCCESS ) {
                 errors++;

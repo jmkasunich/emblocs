@@ -29,7 +29,7 @@ void bl_show_memory_status(void)
     printf("Meta pool: %d/%d, %d free\n", bl_meta_pool_size-bl_meta_pool_avail, bl_meta_pool_size, bl_meta_pool_avail);
 }
 
-void bl_show_instance(bl_inst_meta_t const *inst)
+void bl_show_instance(bl_instance_meta_t const *inst)
 {
 #ifdef BL_SHOW_VERBOSE
     printf("INST: %20s <= %20s @ %p, %d RT bytes @ [%3d]=%p\n", inst->name, inst->comp_def->name,
@@ -42,7 +42,7 @@ void bl_show_instance(bl_inst_meta_t const *inst)
 
 void bl_show_instance_by_name(char const *name)
 {
-    bl_inst_meta_t *inst;
+    bl_instance_meta_t *inst;
 
     inst = bl_instance_find(name);
     if ( inst != NULL ) {
@@ -50,9 +50,9 @@ void bl_show_instance_by_name(char const *name)
     }
 }
 
-static void inst_meta_print_node(void *node)
+static void instance_meta_print_node(void *node)
 {
-    bl_show_instance((bl_inst_meta_t *)node);
+    bl_show_instance((bl_instance_meta_t *)node);
 }
 
 void bl_show_all_instances(void)
@@ -60,7 +60,7 @@ void bl_show_all_instances(void)
     int ll_result;
 
     printf("List of all instances:\n");
-    ll_result = ll_traverse((void **)(&instance_root), inst_meta_print_node);
+    ll_result = ll_traverse((void **)(&instance_root), instance_meta_print_node);
     printf("Total of %d instances\n", ll_result);
 }
 
@@ -94,7 +94,7 @@ static void pin_meta_print_node(void *node)
     bl_show_pin((bl_pin_meta_t *)node);
 }
 
-void bl_show_all_pins_of_instance(bl_inst_meta_t const *inst)
+void bl_show_all_pins_of_instance(bl_instance_meta_t const *inst)
 {
     int ll_result;
 
@@ -167,7 +167,7 @@ void bl_show_signal_value(bl_signal_meta_t const *sig)
     bl_show_sig_data_t_value(data, sig->data_type);
 }
 
-static void signal_linkage_callback(bl_inst_meta_t *inst, bl_pin_meta_t *pin)
+static void signal_linkage_callback(bl_instance_meta_t *inst, bl_pin_meta_t *pin)
 {
     char const *dir;
 
@@ -221,13 +221,13 @@ void bl_show_all_signals(void)
 void bl_show_thread_entry(bl_thread_entry_t const *entry)
 {
 #ifdef BL_SHOW_VERBOSE
-    printf("  thread_entry @[%d]=%p, calls %p, inst data @%p\n", TO_RT_INDEX(entry), entry, entry->funct, entry->inst_data);
+    printf("  thread_entry @[%d]=%p, calls %p, inst data @%p\n", TO_RT_INDEX(entry), entry, entry->funct, entry->instance_data);
 #else
-    bl_inst_meta_t *inst;
-    bl_funct_def_t *funct;
+    bl_instance_meta_t *inst;
+    bl_function_def_t *funct;
 
-    inst = bl_find_instance_by_data_addr(entry->inst_data);
-    funct = bl_find_funct_def_in_instance_by_address(entry->funct, inst);
+    inst = bl_find_instance_by_data_addr(entry->instance_data);
+    funct = bl_find_function_def_in_instance_by_address(entry->funct, inst);
     printf("     %s.%s\n", inst->name, funct->name);
 #endif
 }

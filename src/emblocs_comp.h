@@ -39,16 +39,16 @@
 
 typedef struct bl_comp_def_s {
     char const *name;
-    struct bl_inst_meta_s * (*setup) (char const *inst_name, struct bl_comp_def_s const *comp_def, void const *personality);
-    uint32_t data_size   : BL_INST_DATA_SIZE_BITS;
+    struct bl_instance_meta_s * (*setup) (char const *instance_name, struct bl_comp_def_s const *comp_def, void const *personality);
+    uint32_t data_size   : BL_INSTANCE_DATA_SIZE_BITS;
     uint32_t pin_count   : BL_PIN_COUNT_BITS;
-    uint32_t funct_count : BL_FUNCT_COUNT_BITS;
+    uint32_t function_count : BL_FUNCTION_COUNT_BITS;
     struct bl_pin_def_s const *pin_defs;
-    struct bl_funct_def_s const *funct_defs;
+    struct bl_function_def_s const *function_defs;
 } bl_comp_def_t;
 
 /* Verify that bitfields fit in one uint32_t */
-_Static_assert((BL_INST_DATA_SIZE_BITS+BL_PIN_COUNT_BITS+BL_FUNCT_COUNT_BITS) <= 32, "comp_def bitfields too big");
+_Static_assert((BL_INSTANCE_DATA_SIZE_BITS+BL_PIN_COUNT_BITS+BL_FUNCTION_COUNT_BITS) <= 32, "comp_def bitfields too big");
 
 /**************************************************************
  * Data structure that defines a pin.  These can exist in flash
@@ -66,18 +66,18 @@ typedef struct bl_pin_def_s {
     char const *name;
     uint32_t data_type    : BL_TYPE_BITS;
     uint32_t pin_dir      : BL_DIR_BITS;
-    uint32_t data_offset  : BL_INST_DATA_SIZE_BITS;
+    uint32_t data_offset  : BL_INSTANCE_DATA_SIZE_BITS;
 } bl_pin_def_t;
 
 /* Verify that bitfields fit in one uint32_t */
-_Static_assert((BL_INST_DATA_SIZE_BITS+BL_TYPE_BITS+BL_DIR_BITS) <= 32, "pin_def bitfields too big");
+_Static_assert((BL_INSTANCE_DATA_SIZE_BITS+BL_TYPE_BITS+BL_DIR_BITS) <= 32, "pin_def bitfields too big");
 
 /**************************************************************
  * A realtime function to be called from a thread.
  * The function is passed a pointer to the instance data
  * and the calling period in nano-seconds.
  */
-typedef void (bl_rt_funct_t)(void *inst_data, uint32_t period_ns);
+typedef void (bl_rt_function_t)(void *instance_data, uint32_t period_ns);
 
 /**************************************************************
  * Data structure that defines a realtime function.
@@ -85,14 +85,14 @@ typedef void (bl_rt_funct_t)(void *inst_data, uint32_t period_ns);
  * these structures in flash is pointed to by the component
  * definition.
  */
-typedef struct bl_funct_def_s {
+typedef struct bl_function_def_s {
     char const *name;
     uint32_t nofp         : BL_NOFP_BITS;
-    bl_rt_funct_t *fp;
-} bl_funct_def_t;
+    bl_rt_function_t *fp;
+} bl_function_def_t;
 
 /* Verify that bitfields fit in one uint32_t */
-_Static_assert((BL_NOFP_BITS) <= 32, "funct_def bitfields too big");
+_Static_assert((BL_NOFP_BITS) <= 32, "function_def bitfields too big");
 
 /**************************************************************
  * Helper functions for bl_instance_new()
@@ -112,13 +112,13 @@ _Static_assert((BL_NOFP_BITS) <= 32, "funct_def bitfields too big");
  * allows a component-specific setup function to modify the
  * size based on the instance personality.
  */
-struct bl_inst_meta_s *bl_inst_create(char const *name, bl_comp_def_t const *comp_def, uint32_t data_size);
+struct bl_instance_meta_s *bl_instance_create(char const *name, bl_comp_def_t const *comp_def, uint32_t data_size);
 
 /**************************************************************
  * Helper function to get the address of the instance data
  * for a particular instance
  */  
-void *bl_inst_data_addr(struct bl_inst_meta_s *inst);
+void *bl_instance_data_addr(struct bl_instance_meta_s *inst);
 
 /**************************************************************
  * helper function for new instance:
@@ -129,6 +129,6 @@ void *bl_inst_data_addr(struct bl_inst_meta_s *inst);
  * links the pin to the dummy signal
  * adds the meta struct to 'inst' pin list
  */
-bl_retval_t bl_inst_add_pin(struct bl_inst_meta_s *inst, bl_pin_def_t const *def);
+bl_retval_t bl_instance_add_pin(struct bl_instance_meta_s *inst, bl_pin_def_t const *def);
 
 #endif // EMBLOCS_COMP_H
