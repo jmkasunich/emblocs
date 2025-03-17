@@ -13,14 +13,14 @@
 bl_retval_t bl_init_instances(bl_inst_def_t const instances[])
 {
     bl_inst_def_t const *idp;  // instance definition pointer
-    bl_retval_t retval;
+    bl_inst_meta_t *inst;
     int errors = 0;
 
     idp = instances;
     while ( idp->name != NULL ) {
-        retval = bl_instance_new(idp->name, idp->comp_def, idp->personality);
+        inst = bl_instance_new(idp->name, idp->comp_def, idp->personality);
         #ifndef BL_ERROR_HALT
-        if ( retval != BL_SUCCESS) {
+        if ( inst == NULL) {
             errors++;
         }
         #endif
@@ -62,7 +62,7 @@ bl_retval_t bl_init_nets(char const *const nets[])
 {
     bl_retval_t retval __attribute__ ((unused));
     bl_type_t net_type;
-    bl_sig_meta_t *sig;
+    bl_signal_meta_t *sig;
     bl_inst_meta_t *inst;
     bl_pin_meta_t *pin;
     enum {
@@ -90,15 +90,14 @@ bl_retval_t bl_init_nets(char const *const nets[])
             }
             break;
         case GET_SIG:
-            retval = bl_signal_new(*nets, net_type);
+            sig = bl_signal_new(*nets, net_type);
             #ifndef BL_ERROR_HALT
-            if ( retval != BL_SUCCESS ) {
+            if ( sig == NULL ) {
                 errors++;
                 state = START;
                 break;
             }
             #endif
-            sig = bl_find_signal_by_name(*nets);
             state = GOT_SIG;
             break;
         case GOT_SIG:
@@ -106,7 +105,7 @@ bl_retval_t bl_init_nets(char const *const nets[])
                 // done with previous net, start a new one
                 state = GET_SIG;
             } else {
-                inst = bl_find_instance_by_name(*nets);
+                inst = bl_instance_find(*nets);
                 #ifndef BL_ERROR_HALT
                 if ( inst == NULL ) {
                     errors++;
@@ -118,7 +117,7 @@ bl_retval_t bl_init_nets(char const *const nets[])
             }
             break;
         case GET_PIN:
-            pin = bl_find_pin_in_instance_by_name(*nets, inst);
+            pin = bl_pin_find_in_inst(*nets, inst);
             #ifndef BL_ERROR_HALT
             if ( pin == NULL ) {
                 errors++;
@@ -126,7 +125,7 @@ bl_retval_t bl_init_nets(char const *const nets[])
                 break;
             }
             #endif
-            retval = bl_link_pin_to_signal(pin, sig);
+            retval = bl_pin_linkto_signal(pin, sig);
             #ifndef BL_ERROR_HALT
             if ( retval != BL_SUCCESS ) {
                 errors++;
@@ -160,7 +159,7 @@ bl_retval_t bl_init_setsigs(bl_setsig_def_t const setsigs[])
 
     sdp = setsigs;
     while ( sdp->name != NULL ) {
-        retval = bl_set_sig_by_name(sdp->name, &sdp->value);
+        retval = bl_signal_set(bl_signal_find(sdp->name), &sdp->value);
         #ifndef BL_ERROR_HALT
         if ( retval != BL_SUCCESS ) {
             errors++;
@@ -182,6 +181,8 @@ bl_retval_t bl_init_setsigs(bl_setsig_def_t const setsigs[])
 bl_retval_t bl_init_setpins(bl_setpin_def_t const setpins[])
 {
     bl_setpin_def_t const *sdp;
+    bl_inst_meta_t *inst;
+    bl_pin_meta_t *pin;
     bl_retval_t retval  __attribute__ ((unused));
     #ifndef BL_ERROR_HALT
     int errors = 0;
@@ -189,12 +190,27 @@ bl_retval_t bl_init_setpins(bl_setpin_def_t const setpins[])
 
     sdp = setpins;
     while ( sdp->inst_name != NULL ) {
-        retval = bl_set_pin_by_name(sdp->inst_name, sdp->pin_name, &sdp->value);
+        inst = bl_instance_find(sdp->inst_name);
+        #ifndef BL_ERROR_HALT
+        if ( inst ==NULL ) {
+            errors++;
+            goto next;
+        }
+        #endif
+        pin = bl_pin_find_in_inst(sdp->pin_name, inst);
+        #ifndef BL_ERROR_HALT
+        if ( pin ==NULL ) {
+            errors++;
+            goto next;
+        }
+        #endif
+        retval = bl_pin_set(pin, &sdp->value);
         #ifndef BL_ERROR_HALT
         if ( retval != BL_SUCCESS ) {
             errors++;
         }
         #endif
+        next:
         sdp++;
     }
     #ifndef BL_ERROR_HALT
@@ -286,15 +302,14 @@ bl_retval_t bl_init_threads(char const * const threads[])
             state = GET_NAME;
             break;
         case GET_NAME:
-            retval = bl_thread_new(*threads, period_ns, thread_type);
+            thread = bl_thread_new(*threads, period_ns, thread_type);
             #ifndef BL_ERROR_HALT
-            if ( retval != BL_SUCCESS ) {
+            if ( thread == NULL ) {
                 errors++;
                 state = START;
                 break;
             }
             #endif
-            thread = bl_find_thread_by_name(*threads);
             state = GOT_NAME;
             break;
         case GOT_NAME:
@@ -302,7 +317,7 @@ bl_retval_t bl_init_threads(char const * const threads[])
                 // done with previous thread, start a new one
                 state = GET_PERIOD;
             } else {
-                inst = bl_find_instance_by_name(*threads);
+                inst = bl_instance_find(*threads);
                 #ifndef BL_ERROR_HALT
                 if ( inst == NULL ) {
                     errors++;
@@ -314,7 +329,7 @@ bl_retval_t bl_init_threads(char const * const threads[])
             }
             break;
         case GET_FUNCT:
-            funct_def = bl_find_funct_def_in_instance_by_name(*threads, inst);
+            funct_def = bl_funct_find_in_inst(*threads, inst);
             #ifndef BL_ERROR_HALT
             if ( funct_def == NULL ) {
                 errors++;
@@ -322,7 +337,7 @@ bl_retval_t bl_init_threads(char const * const threads[])
                 break;
             }
             #endif
-            retval = bl_add_funct_to_thread(funct_def, inst, thread);
+            retval = bl_thread_add_funct(thread, inst, funct_def);
             #ifndef BL_ERROR_HALT
             if ( retval != BL_SUCCESS ) {
                 errors++;

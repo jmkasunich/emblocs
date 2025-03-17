@@ -53,12 +53,11 @@ typedef enum {
     BL_ERR_NOMEM = -4
 } bl_retval_t;
 
+/* macro to calculate the size of bitfield needed to store 'n' */
 #define BITS2STORE(n) (32-(__builtin_clz((n))))
 
 /**************************************************************
- * Data types for pins and signals.  Type is sometimes stored
- * in a bitfield, so we need to specify the bitfield length
- * as well as the enum.
+ * Data types for pins and signals. 
  */
 
  typedef enum {
@@ -68,12 +67,11 @@ typedef enum {
 	BL_TYPE_U32      = 3
 } bl_type_t;
 
+/* type is sometimes stored in a bitfield; declare its size */
 #define BL_TYPE_BITS   (BITS2STORE(BL_TYPE_U32))
 
 /**************************************************************
- * Data directions for pins.  Direction is sometimes stored
- * in a bitfield, so we need to specify the bitfield length
- * as well as the enum.
+ * Data directions for pins.
  */
 
 typedef enum {
@@ -82,13 +80,13 @@ typedef enum {
 	BL_DIR_IO        = 3,
 } bl_dir_t;
 
+/* dir is sometimes stored in a bitfield; declare its size */
 #define BL_DIR_BITS   (BITS2STORE(BL_DIR_IO))
 
 /**************************************************************
  * Floating point info for threads and functions.  Threads
  * defined as "no_fp" can contain only functions which are
- * also defined as "no_fp".  This flag is stored in a bitfield,
- * so we need to specify the bitfield length as well.
+ * also defined as "no_fp".
  */
 
 typedef enum {
@@ -96,33 +94,20 @@ typedef enum {
 	BL_NO_FP         = 1
 } bl_nofp_t;
 
+/* nofp is sometimes stored in a bitfield; declare its size */
 #define BL_NOFP_BITS   (BITS2STORE(BL_NO_FP))
 
 /**************************************************************
- * Realtime data and object metadata are stored in separate
- * memory pools, the RT pool and the META pool.  Each pool is
- * an array of uint32_t, and in the metadata, pool addresses
- * are stored as array indexes in bitfields.  As an example,
- * if a pool is 4K bytes, indexes range from 0 to 1023, and
- * they can be stored in a 10 bit field.
+ * Structures that store object metadata.
+ * API functions pass and return pointers to these structures,
+ * but the internal data is private and not declared here.
  */
-
-/* default sizes if not defined elsewhere */
-#ifndef BL_RT_POOL_SIZE
-#define BL_RT_POOL_SIZE     (2048)
-#endif
-
-#ifndef BL_META_POOL_SIZE
-#define BL_META_POOL_SIZE   (4096)
-#endif
-
-/* compute related values */
-#define BL_RT_MAX_INDEX     ((BL_RT_POOL_SIZE>>2)-1)
-#define BL_META_MAX_INDEX   ((BL_META_POOL_SIZE>>2)-1)
-
-#define BL_RT_INDEX_BITS    (BITS2STORE(BL_RT_MAX_INDEX))
-#define BL_META_INDEX_BITS  (BITS2STORE(BL_META_MAX_INDEX))
-
+struct bl_inst_meta_s;
+struct bl_pin_meta_s;
+struct bl_funct_def_s;
+struct bl_signal_meta_s;
+struct bl_thread_meta_s;
+struct bl_thread_data_s;
 
 /**************************************************************
  * Each instance of a component has "instance data" which is

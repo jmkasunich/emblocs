@@ -39,7 +39,7 @@
 
 typedef struct bl_comp_def_s {
     char const *name;
-    bl_retval_t (*setup) (char const *inst_name, struct bl_comp_def_s const *comp_def, void const *personality);
+    struct bl_inst_meta_s * (*setup) (char const *inst_name, struct bl_comp_def_s const *comp_def, void const *personality);
     uint32_t data_size   : BL_INST_DATA_SIZE_BITS;
     uint32_t pin_count   : BL_PIN_COUNT_BITS;
     uint32_t funct_count : BL_FUNCT_COUNT_BITS;

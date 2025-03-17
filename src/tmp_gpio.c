@@ -61,7 +61,7 @@ static bl_funct_def_t const bl_gpio_functs[] = {
 
 
 /* component-specific setup function */
-bl_retval_t gpio_setup(char const *inst_name, struct bl_comp_def_s const *comp_def, void const *personality);
+struct bl_inst_meta_s *gpio_setup(char const *inst_name, struct bl_comp_def_s const *comp_def, void const *personality);
 
 
 // component definition - one copy in FLASH
@@ -86,7 +86,7 @@ static void write_bitfield(volatile uint32_t *dest, uint32_t value, int field_wi
 
 
 /* component-specific setup function */
-bl_retval_t gpio_setup(char const *inst_name, struct bl_comp_def_s const *comp_def, void const *personality)
+struct bl_inst_meta_s *gpio_setup(char const *inst_name, struct bl_comp_def_s const *comp_def, void const *personality)
 {
     gpio_port_config_t *p = (gpio_port_config_t *)personality;
     int pins_in, pins_out, pins_oe, pins_total;
@@ -203,7 +203,7 @@ bl_retval_t gpio_setup(char const *inst_name, struct bl_comp_def_s const *comp_d
         }
         active_bit <<= 1;
     }
-    return BL_SUCCESS;
+    return meta;
 }
 
 

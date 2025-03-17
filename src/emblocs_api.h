@@ -13,8 +13,6 @@
 
 #include "emblocs_core.h"
 
-
-
 /**************************************************************
  * A structure that defines a component.
  * The component creates the structure, an application merely
@@ -38,36 +36,17 @@ struct bl_thread_data_s;
  *                                                            *
  **************************************************************/
 
+
 /**************************************************************
  * Create an instance of a component, using a component 
  * definition (typically in flash) and an optional personality.
  */
-bl_retval_t bl_instance_new(char const *name, struct bl_comp_def_s const *comp_def, void const *personality);
+struct bl_inst_meta_s *bl_instance_new(char const *name, struct bl_comp_def_s const *comp_def, void const *personality);
 
 /**************************************************************
  * Create a signal of the specified name and type
  */
-bl_retval_t bl_signal_new(char const *name, bl_type_t type);
-
-/**************************************************************
- * Link the specified pin to the specified signal
- */
-bl_retval_t bl_link_pin_to_signal_by_names(char const *inst_name, char const *pin_name, char const *sig_name );
-
-/**************************************************************
- * Disconnect the specified pin from any signal
- */
-bl_retval_t bl_unlink_pin_by_name(char const *inst_name, char const *pin_name);
-
-/**************************************************************
- * Set the specified signal to a value
- */
-bl_retval_t bl_set_sig_by_name(char const *sig_name, bl_sig_data_t const *value);
-
-/**************************************************************
- * Set the specified pin to a value
- */
-bl_retval_t bl_set_pin_by_name(char const *inst_name, char const *pin_name, bl_sig_data_t const *value);
+struct bl_signal_meta_s *bl_signal_new(char const *name, bl_type_t type);
 
 /**************************************************************
  * Create a thread to which functions can be added.
@@ -75,12 +54,41 @@ bl_retval_t bl_set_pin_by_name(char const *inst_name, char const *pin_name, bl_s
  * This API does not directly control the period of the thread;
  * see 'run_thread()' below.
  */
-bl_retval_t bl_thread_new(char const *name, uint32_t period_ns, bl_nofp_t nofp);
+struct bl_thread_meta_s *bl_thread_new(char const *name, uint32_t period_ns, bl_nofp_t nofp);
+
+/**************************************************************
+ * Functions to find object metadata by name
+ */
+struct bl_inst_meta_s *bl_instance_find(char const *name);
+struct bl_signal_meta_s *bl_signal_find(char const *name);
+struct bl_thread_meta_s *bl_thread_find(char const *name);
+struct bl_pin_meta_s *bl_pin_find_in_inst(char const *name, struct bl_inst_meta_s *inst);
+struct bl_funct_def_s *bl_funct_find_in_inst(char const *name, struct bl_inst_meta_s *inst);
+
+/**************************************************************
+ * Link the specified pin to the specified signal
+ */
+bl_retval_t bl_pin_linkto_signal(struct bl_pin_meta_s const *pin, struct bl_signal_meta_s const *sig);
+
+/**************************************************************
+ * Disconnect the specified pin from any signal
+ */
+bl_retval_t bl_pin_unlink(struct bl_pin_meta_s const *pin);
+
+/**************************************************************
+ * Set the specified signal to a value
+ */
+bl_retval_t bl_signal_set(struct bl_signal_meta_s const *sig, bl_sig_data_t const *value);
+
+/**************************************************************
+ * Set the specified pin to a value
+ */
+bl_retval_t bl_pin_set(struct bl_pin_meta_s const *pin, bl_sig_data_t const *value);
 
 /**************************************************************
  * Add the specified function to the end of the specified thread
  */
-bl_retval_t bl_add_funct_to_thread_by_names(char const *inst_name, char const *funct_name, char const *thread_name);
+bl_retval_t bl_thread_add_funct(struct bl_thread_meta_s const *thread, struct bl_inst_meta_s const *inst, struct bl_funct_def_s const *funct);
 
 /**************************************************************
  * Runs a thread once by calling all of the functions that have
@@ -96,7 +104,7 @@ void bl_thread_run(struct bl_thread_data_s const *thread, uint32_t period_ns);
  * Helper function to get the address of thread data; this is
  * passed to bl_thread_run() to run the thread
  */  
-struct bl_thread_data_s *bl_find_thread_data_by_name(char const *name);
+struct bl_thread_data_s *bl_thread_get_data(struct bl_thread_meta_s *thread);
 
 /**************************************************************
  * Helper functions for viewing things in the metadata        *

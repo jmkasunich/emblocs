@@ -210,8 +210,8 @@ int main (void) {
     bl_show_all_threads();
 
     
-    main_thread = bl_find_thread_data_by_name("main_thread");
-    watch_thread = bl_find_thread_data_by_name("watch_thread");
+    main_thread = bl_thread_get_data(bl_thread_find("main_thread"));
+    watch_thread = bl_thread_get_data(bl_thread_find("watch_thread"));
     assert(main_thread != NULL);
     assert(watch_thread != NULL);
     while (1) {
@@ -223,35 +223,35 @@ int main (void) {
         switch(c) {
         case '+':
             data.b = 0;
-            bl_set_sig_by_name("dir", &data);
+            bl_signal_set(bl_signal_find("dir"), &data);
             break;
         case '-':
             data.b = 1;
-            bl_set_sig_by_name("dir", &data);
+            bl_signal_set(bl_signal_find("dir"), &data);
             break;
         case 'g':
             data.b = 1;
-            bl_set_sig_by_name("ramp", &data);
+            bl_signal_set(bl_signal_find("ramp"), &data);
             break;
         case 's':
             data.b = 0;
-            bl_set_sig_by_name("ramp", &data);
+            bl_signal_set(bl_signal_find("ramp"), &data);
             break;
         case 'Z':
             data.b = 0;
-            bl_set_sig_by_name("oe", &data);
+            bl_signal_set(bl_signal_find("oe"), &data);
             break;
         case 'z':
             data.b = 1;
-            bl_set_sig_by_name("oe", &data);
+            bl_signal_set(bl_signal_find("oe"), &data);
             break;
         case 'O':
             data.b = 1;
-            bl_set_sig_by_name("out", &data);
+            bl_signal_set(bl_signal_find("out"), &data);
             break;
         case 'o':
             data.b = 0;
-            bl_set_sig_by_name("out", &data);
+            bl_signal_set(bl_signal_find("out"), &data);
             break;
         default:
             break;

@@ -45,7 +45,7 @@ static bl_funct_def_t const bl_watch_functs[] = {
 
 
 /* component-specific setup function */
-bl_retval_t watch_setup(char const *inst_name, struct bl_comp_def_s const *comp_def, void const *personality);
+struct bl_inst_meta_s *watch_setup(char const *inst_name, struct bl_comp_def_s const *comp_def, void const *personality);
 
 
 // component definition - one copy in FLASH
@@ -60,7 +60,7 @@ bl_comp_def_t const bl_watch_def = {
 };
 
 /* component-specific setup function */
-bl_retval_t watch_setup(char const *inst_name, struct bl_comp_def_s const *comp_def, void const *personality)
+struct bl_inst_meta_s *watch_setup(char const *inst_name, struct bl_comp_def_s const *comp_def, void const *personality)
 {
     watch_pin_config_t *pin_info;
     bl_watch_pin_rt_data_t *pin_data;
@@ -82,7 +82,7 @@ bl_retval_t watch_setup(char const *inst_name, struct bl_comp_def_s const *comp_
         #ifdef BL_ERROR_VERBOSE
         print_string("too many pins in personality\n");
         #endif
-        return BL_ERR_GENERAL;
+        return NULL;
     }
     // now the emblocs setup - create an instance of the proper size to include all the pin data
     meta = bl_inst_create(inst_name, comp_def, comp_def->data_size + (pins * sizeof(bl_watch_pin_rt_data_t)));
@@ -109,7 +109,7 @@ bl_retval_t watch_setup(char const *inst_name, struct bl_comp_def_s const *comp_
         pin_info++;
         pins--;
     }
-    return BL_SUCCESS;
+    return meta;
 }
 
 

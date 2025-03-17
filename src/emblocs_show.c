@@ -44,7 +44,7 @@ void bl_show_instance_by_name(char const *name)
 {
     bl_inst_meta_t *inst;
 
-    inst = bl_find_instance_by_name(name);
+    inst = bl_instance_find(name);
     if ( inst != NULL ) {
         bl_show_instance(inst);
     }
@@ -115,7 +115,7 @@ void bl_show_pin_linkage(bl_pin_meta_t const *pin)
 {
     bl_sig_data_t *dummy_addr, **ptr_addr, *ptr_val;
     char const *dir;
-    bl_sig_meta_t *sig;
+    bl_signal_meta_t *sig;
 
     dummy_addr = (bl_sig_data_t *)TO_RT_ADDR(pin->dummy_index);
     ptr_addr = (bl_sig_data_t **)TO_RT_ADDR(pin->ptr_index);
@@ -130,7 +130,7 @@ void bl_show_pin_linkage(bl_pin_meta_t const *pin)
     }
 }
 
-void bl_show_signal(bl_sig_meta_t const *sig)
+void bl_show_signal(bl_signal_meta_t const *sig)
 {
 #ifdef BL_SHOW_VERBOSE
     bl_sig_data_t *data_addr;
@@ -151,15 +151,15 @@ void bl_show_signal(bl_sig_meta_t const *sig)
 
 void bl_show_signal_by_name(char const *name)
 {
-    bl_sig_meta_t *sig;
+    bl_signal_meta_t *sig;
 
-    sig = bl_find_signal_by_name(name);
+    sig = bl_signal_find(name);
     if ( sig != NULL ) {
         bl_show_signal(sig);
     }
 }
 
-void bl_show_signal_value(bl_sig_meta_t const *sig)
+void bl_show_signal_value(bl_signal_meta_t const *sig)
 {
     bl_sig_data_t *data;
 
@@ -175,7 +175,7 @@ static void signal_linkage_callback(bl_inst_meta_t *inst, bl_pin_meta_t *pin)
     printf("     %s %s.%s\n", dir, inst->name, pin->name);
 }
 
-void bl_show_signal_linkage(bl_sig_meta_t const *sig)
+void bl_show_signal_linkage(bl_signal_meta_t const *sig)
 {
     bl_find_pins_linked_to_signal(sig, signal_linkage_callback);
 }
@@ -206,7 +206,7 @@ void bl_show_sig_data_t_value(bl_sig_data_t const *data, bl_type_t type)
 
 static void sig_meta_print_node(void *node)
 {
-    bl_show_signal((bl_sig_meta_t *)node);
+    bl_show_signal((bl_signal_meta_t *)node);
 }
 
 void bl_show_all_signals(void)
@@ -271,7 +271,7 @@ void bl_show_thread_by_name(char const *name)
 {
     bl_thread_meta_t *thread;
 
-    thread = bl_find_thread_by_name(name);
+    thread = bl_thread_find(name);
     if ( thread != NULL ) {
         bl_show_thread(thread);
     }

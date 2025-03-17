@@ -76,7 +76,7 @@ static void *alloc_from_meta_pool(int32_t size)
 bl_inst_meta_t *instance_root;
 
 /* root of signal linked list */
-bl_sig_meta_t *signal_root;
+bl_signal_meta_t *signal_root;
 
 /* root of thread linked list */
 bl_thread_meta_t *thread_root;
@@ -99,8 +99,8 @@ static int pin_meta_compare_names(void *node1, void *node2)
 
 static int sig_meta_compare_names(void *node1, void *node2)
 {
-    bl_sig_meta_t  *np1 = node1;
-    bl_sig_meta_t  *np2 = node2;
+    bl_signal_meta_t  *np1 = node1;
+    bl_signal_meta_t  *np2 = node2;
     return strcmp(np1->name, np2->name);
 }
 
@@ -116,9 +116,9 @@ static int thread_meta_compare_names(void *node1, void *node2)
  * Top-level EMBLOCS API functions used to build a system     *
  **************************************************************/
 
-bl_retval_t bl_instance_new(char const *name, struct bl_comp_def_s const *comp_def, void const *personality)
+struct bl_inst_meta_s *bl_instance_new(char const *name, struct bl_comp_def_s const *comp_def, void const *personality)
 {
-    bl_retval_t retval;
+    struct bl_inst_meta_s *retval;
 
     if ( comp_def->setup == NULL ) {
         // no setup function, cannot support personality
@@ -126,7 +126,7 @@ bl_retval_t bl_instance_new(char const *name, struct bl_comp_def_s const *comp_d
             #ifdef BL_ERROR_VERBOSE
             print_strings(3, "component: '", comp_def->name, "' does not support personality\n");
             #endif
-            halt_or_return(BL_ERR_GENERAL);
+            halt_or_return(NULL);
         }
         // call default setup function
         retval = bl_default_setup(name, comp_def);
@@ -134,7 +134,7 @@ bl_retval_t bl_instance_new(char const *name, struct bl_comp_def_s const *comp_d
         // call component-specific setup function
         retval = comp_def->setup(name, comp_def, personality);
     }
-    if ( retval != BL_SUCCESS ) {
+    if ( retval == NULL ) {
         #ifdef BL_ERROR_VERBOSE
         print_strings(4, "cound not create ", "instance '", name, "'\n");
         #endif
@@ -143,14 +143,14 @@ bl_retval_t bl_instance_new(char const *name, struct bl_comp_def_s const *comp_d
     return retval;
 }
 
-bl_retval_t bl_signal_new(char const *name, bl_type_t type)
+struct bl_signal_meta_s *bl_signal_new(char const *name, bl_type_t type)
 {
-    bl_sig_meta_t *meta;
+    struct bl_signal_meta_s *meta;
     bl_sig_data_t *data;
     int ll_result;
 
     // allocate memory for metadata
-    meta = alloc_from_meta_pool(sizeof(bl_sig_meta_t));
+    meta = alloc_from_meta_pool(sizeof(bl_signal_meta_t));
     // allocate memory for signal data
     data = alloc_from_rt_pool(sizeof(bl_sig_data_t));
     #ifndef BL_ERROR_HALT
@@ -172,16 +172,16 @@ bl_retval_t bl_signal_new(char const *name, bl_type_t type)
         #endif
         goto error;
     }
-    return BL_SUCCESS;
+    return meta;
 
     error:
     #ifdef BL_ERROR_VERBOSE
     print_strings(4, "could not create ", "signal: '", name, "'\n");
     #endif
-    halt_or_return(BL_ERR_GENERAL);
+    halt_or_return(NULL);
 }
 
-bl_retval_t bl_link_pin_to_signal(bl_pin_meta_t const *pin, bl_sig_meta_t const *sig )
+bl_retval_t bl_pin_linkto_signal(bl_pin_meta_t const *pin, bl_signal_meta_t const *sig )
 {
     bl_sig_data_t *sig_data_addr, **pin_ptr_addr;
 
@@ -200,33 +200,7 @@ bl_retval_t bl_link_pin_to_signal(bl_pin_meta_t const *pin, bl_sig_meta_t const 
     return BL_SUCCESS;
 }
 
-bl_retval_t bl_link_pin_to_signal_by_names(char const *inst_name, char const *pin_name, char const *sig_name )
-{
-    bl_retval_t retval;
-    bl_pin_meta_t *pin;
-    bl_sig_meta_t *sig;
-
-    pin = bl_find_pin_by_names(inst_name, pin_name);
-    sig = bl_find_signal_by_name(sig_name);
-    #ifndef BL_ERROR_HALT
-    if ( ( pin == NULL ) || ( sig == NULL ) ) {
-        retval = BL_ERR_NOT_FOUND;
-        goto done;
-    }
-    #endif
-    retval = bl_link_pin_to_signal(pin, sig);
-    #ifndef BL_ERROR_HALT
-    done:
-    if ( retval != BL_SUCCESS ) {
-        #ifdef BL_ERROR_VERBOSE
-        print_strings(9, "could not link ", "pin: '", inst_name, ".", pin_name, "' to ", "signal: '", sig_name, "'\n");
-        #endif
-    }
-    #endif
-    return retval;
-}
-
-bl_retval_t bl_unlink_pin(bl_pin_meta_t const *pin)
+bl_retval_t bl_pin_unlink(bl_pin_meta_t const *pin)
 {
     bl_sig_data_t *pin_dummy_addr, **pin_ptr_addr, *pin_ptr_value;
 
@@ -241,31 +215,7 @@ bl_retval_t bl_unlink_pin(bl_pin_meta_t const *pin)
     return BL_SUCCESS;
 }
 
-bl_retval_t bl_unlink_pin_by_name(char const *inst_name, char const *pin_name)
-{
-    bl_retval_t retval;
-    bl_pin_meta_t *pin;
-
-    pin = bl_find_pin_by_names(inst_name, pin_name);
-    #ifndef BL_ERROR_HALT
-    if ( pin == NULL ) {
-        retval = BL_ERR_NOT_FOUND;
-        goto done;
-    }
-    #endif
-    retval = bl_unlink_pin(pin);
-    #ifndef BL_ERROR_HALT
-    done:
-    if ( retval != BL_SUCCESS ) {
-        #ifdef BL_ERROR_VERBOSE
-        print_strings(6, "could not unlink ", "pin: '", inst_name, ".", pin_name, "'\n");
-        #endif
-    }
-    #endif
-    return retval;
-}
-
-bl_retval_t bl_set_sig(bl_sig_meta_t const *sig, bl_sig_data_t const *value)
+bl_retval_t bl_signal_set(bl_signal_meta_t const *sig, bl_sig_data_t const *value)
 {
     bl_sig_data_t *sig_data;
 
@@ -274,31 +224,7 @@ bl_retval_t bl_set_sig(bl_sig_meta_t const *sig, bl_sig_data_t const *value)
     return BL_SUCCESS;
 }
 
-bl_retval_t bl_set_sig_by_name(char const *sig_name, bl_sig_data_t const *value)
-{
-    bl_retval_t retval;
-    bl_sig_meta_t *sig;
-
-    sig = bl_find_signal_by_name(sig_name);
-    #ifndef BL_ERROR_HALT
-    if ( sig == NULL ) {
-        retval = BL_ERR_NOT_FOUND;
-        goto done;
-    }
-    #endif
-    retval = bl_set_sig(sig, value);
-    #ifndef BL_ERROR_HALT
-    done:
-    if ( retval != BL_SUCCESS ) {
-        #ifdef BL_ERROR_VERBOSE
-        print_strings(4, "could not set ", "signal: '", sig_name, "'\n");
-        #endif
-    }
-    #endif
-    return retval;
-}
-
-bl_retval_t bl_set_pin(bl_pin_meta_t const *pin, bl_sig_data_t const *value)
+bl_retval_t bl_pin_set(bl_pin_meta_t const *pin, bl_sig_data_t const *value)
 {
     bl_sig_data_t **pin_ptr, *sig_data;
 
@@ -308,31 +234,7 @@ bl_retval_t bl_set_pin(bl_pin_meta_t const *pin, bl_sig_data_t const *value)
     return BL_SUCCESS;
 }
 
-bl_retval_t bl_set_pin_by_name(char const *inst_name, char const *pin_name, bl_sig_data_t const *value)
-{
-    bl_retval_t retval;
-    bl_pin_meta_t *pin;
-
-    pin = bl_find_pin_by_names(inst_name, pin_name);
-    #ifndef BL_ERROR_HALT
-    if ( pin == NULL ) {
-        retval = BL_ERR_NOT_FOUND;
-        goto done;
-    }
-    #endif
-    retval = bl_set_pin(pin, value);
-    #ifndef BL_ERROR_HALT
-    done:
-    if ( retval != BL_SUCCESS ) {
-        #ifdef BL_ERROR_VERBOSE
-        print_strings(6, "could not set ", "pin: '", inst_name, ".", pin_name, "'\n");
-        #endif
-    }
-    #endif
-    return retval;
-}
-
-bl_retval_t bl_thread_new(char const *name, uint32_t period_ns, bl_nofp_t nofp)
+struct bl_thread_meta_s *bl_thread_new(char const *name, uint32_t period_ns, bl_nofp_t nofp)
 {
     bl_thread_meta_t *meta;
     bl_thread_data_t *data;
@@ -362,16 +264,16 @@ bl_retval_t bl_thread_new(char const *name, uint32_t period_ns, bl_nofp_t nofp)
         #endif
         goto error;
     }
-    return BL_SUCCESS;
+    return meta;
 
     error:
     #ifdef BL_ERROR_VERBOSE
     print_strings(4, "could not create ", "thread: '", name, "'\n");
     #endif
-    halt_or_return(BL_ERR_GENERAL);
+    halt_or_return(NULL);
 }
 
-bl_retval_t bl_add_funct_to_thread(bl_funct_def_t const *funct, bl_inst_meta_t const *inst, bl_thread_meta_t const *thread)
+bl_retval_t bl_thread_add_funct(bl_thread_meta_t const *thread, bl_inst_meta_t const *inst, bl_funct_def_t const *funct)
 {
     bl_thread_entry_t *new_entry;
     bl_thread_data_t *thread_data;
@@ -408,39 +310,6 @@ bl_retval_t bl_add_funct_to_thread(bl_funct_def_t const *funct, bl_inst_meta_t c
     return BL_SUCCESS;
 }
 
-bl_retval_t bl_add_funct_to_thread_by_names(char const *inst_name, char const *funct_name, char const *thread_name)
-{
-    bl_retval_t retval;
-    bl_inst_meta_t *inst;
-    bl_funct_def_t const *funct;
-    bl_thread_meta_t *thread;
-
-    inst = bl_find_instance_by_name(inst_name);
-    #ifndef BL_ERROR_HALT
-    if ( inst == NULL ) {
-        retval = BL_ERR_NOT_FOUND;
-        goto done;
-    }
-    #endif
-    funct = bl_find_funct_def_in_instance_by_name(funct_name, inst);
-    thread = bl_find_thread_by_name(thread_name);
-    #ifndef BL_ERROR_HALT
-    if ( ( funct == NULL ) || ( thread == NULL ) ) {
-        retval = BL_ERR_NOT_FOUND;
-        goto done;
-    }
-    #endif
-    retval = bl_add_funct_to_thread(funct, inst, thread);
-    #ifndef BL_ERROR_HALT
-    done:
-    if ( retval != BL_SUCCESS ) {
-        #ifdef BL_ERROR_VERBOSE
-        print_strings(9, "could not link ", "function: '", inst_name, ".", funct_name, "' to ", "thread: '", thread_name, "'\n");
-        #endif
-    }
-    #endif
-    return retval;
-}
 
 void bl_thread_run(struct bl_thread_data_s const *thread, uint32_t period_ns)
 {
@@ -456,8 +325,118 @@ void bl_thread_run(struct bl_thread_data_s const *thread, uint32_t period_ns)
     }
 }
 
+struct bl_thread_data_s *bl_thread_get_data(struct bl_thread_meta_s *thread)
+{
+    return TO_RT_ADDR(thread->data_index);
+}
 
-bl_retval_t bl_default_setup(char const *name, bl_comp_def_t const *comp_def)
+/* linked list callback functions */
+static int inst_meta_compare_name_key(void *node, void *key)
+{
+    bl_inst_meta_t *np = node;
+    char *kp = key;
+    return strcmp(np->name, kp);
+}
+
+static int sig_meta_compare_name_key(void *node, void *key)
+{
+    bl_signal_meta_t *np = node;
+    char *kp = key;
+    return strcmp(np->name, kp);
+}
+
+static int thread_meta_compare_name_key(void *node, void *key)
+{
+    bl_thread_meta_t *np = node;
+    char *kp = key;
+    return strcmp(np->name, kp);
+}
+
+static int pin_meta_compare_name_key(void *node, void *key)
+{
+    bl_pin_meta_t *np = node;
+    char *kp = key;
+    return strcmp(np->name, kp);
+}
+
+
+
+
+struct bl_inst_meta_s *bl_instance_find(char const *name)
+{
+    bl_inst_meta_t *retval;
+
+    retval = ll_find((void **)(&(instance_root)), (void *)(name), inst_meta_compare_name_key);
+    if ( retval == NULL ) {
+        #ifdef BL_ERROR_VERBOSE
+        print_strings(4, "not found: ", "instance: '", name, "'\n");
+        #endif
+        halt_or_return(NULL);
+    }
+    return retval;
+}
+
+struct bl_signal_meta_s *bl_signal_find(char const *name)
+{
+    bl_signal_meta_t *retval;
+
+    retval = ll_find((void **)(&(signal_root)), (void *)(name), sig_meta_compare_name_key);
+    if ( retval == NULL ) {
+        #ifdef BL_ERROR_VERBOSE
+        print_strings(4, "not found: ", "signal: '", name, "'\n");
+        #endif
+        halt_or_return(NULL);
+    }
+    return retval;
+}
+
+struct bl_thread_meta_s *bl_thread_find(char const *name)
+{
+    bl_thread_meta_t *retval;
+
+    retval = ll_find((void **)(&(thread_root)), (void *)(name), thread_meta_compare_name_key);
+    if ( retval == NULL ) {
+        #ifdef BL_ERROR_VERBOSE
+        print_strings(4, "not found: ", "thread: '", name, "'\n");
+        #endif
+        halt_or_return(NULL);
+    }
+    return retval;
+}
+
+struct bl_pin_meta_s *bl_pin_find_in_inst(char const *name, struct bl_inst_meta_s *inst)
+{
+    bl_pin_meta_t *retval;
+
+    retval = ll_find((void **)(&(inst->pin_list)), (void *)(name), pin_meta_compare_name_key);
+    if ( retval == NULL ) {
+        #ifdef BL_ERROR_VERBOSE
+        print_strings(7, "not found: ", "pin: '", name, "' in ", "instance: '", inst->name, "'\n");
+        #endif
+        halt_or_return(NULL);
+    }
+    return retval;
+}
+
+struct bl_funct_def_s *bl_funct_find_in_inst(char const *name, struct bl_inst_meta_s *inst)
+{
+    bl_comp_def_t const *comp;
+    bl_funct_def_t const *fdef;
+
+    comp = inst->comp_def;
+    for ( int n = 0 ; n < comp->funct_count ; n++ ) {
+        fdef = &(comp->funct_defs[n]);
+        if ( strcmp(name, fdef->name ) == 0 ) {
+            return (bl_funct_def_t *)fdef;
+        }
+    }
+    #ifdef BL_ERROR_VERBOSE
+    print_strings(7, "not found: ", "function: '", name, "' in ", "instance: '", inst->name, "'\n");
+    #endif
+    halt_or_return(NULL);
+}
+
+struct bl_inst_meta_s *bl_default_setup(char const *name, bl_comp_def_t const *comp_def)
 {
     bl_inst_meta_t *meta;
     bl_retval_t retval __attribute__ ((unused));
@@ -476,14 +455,14 @@ bl_retval_t bl_default_setup(char const *name, bl_comp_def_t const *comp_def)
         }
         #endif
     }
-    return BL_SUCCESS;
+    return meta;
 
     #ifndef BL_ERROR_HALT
     error:
     #ifdef BL_ERROR_VERBOSE
     print_strings(7, "could not set up ", "instance: '", name, "' of ", "component: '", comp_def->name, "'\n");
     #endif
-    halt_or_return(BL_ERR_GENERAL);
+    halt_or_return(NULL);
     #endif
 }
 

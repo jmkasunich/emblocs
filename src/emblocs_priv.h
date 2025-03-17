@@ -14,6 +14,30 @@
 #include "emblocs_api.h"
 #include "emblocs_comp.h"
 
+/**************************************************************
+ * Realtime data and object metadata are stored in separate
+ * memory pools, the RT pool and the META pool.  Each pool is
+ * an array of uint32_t, and in the metadata, pool addresses
+ * are stored as array indexes in bitfields.  As an example,
+ * if a pool is 4K bytes, indexes range from 0 to 1023, and
+ * they can be stored in a 10 bit field.
+ */
+
+/* default sizes if not defined elsewhere */
+#ifndef BL_RT_POOL_SIZE
+#define BL_RT_POOL_SIZE     (2048)
+#endif
+#ifndef BL_META_POOL_SIZE
+#define BL_META_POOL_SIZE   (4096)
+#endif
+
+/* compute related values */
+#define BL_RT_MAX_INDEX     ((BL_RT_POOL_SIZE>>2)-1)
+#define BL_RT_INDEX_BITS    (BITS2STORE(BL_RT_MAX_INDEX))
+
+#define BL_META_MAX_INDEX   ((BL_META_POOL_SIZE>>2)-1)
+#define BL_META_INDEX_BITS  (BITS2STORE(BL_META_MAX_INDEX))
+
 /* the memory pools */
 extern uint32_t bl_rt_pool[];
 extern uint32_t *bl_rt_pool_next;
@@ -93,12 +117,12 @@ _Static_assert((BL_RT_INDEX_BITS*2+BL_TYPE_BITS+BL_DIR_BITS) <= 32, "pin bitfiel
  * data in the realtime pool.
  */
 
-typedef struct bl_sig_meta_s {
-    struct bl_sig_meta_s *next;
+typedef struct bl_signal_meta_s {
+    struct bl_signal_meta_s *next;
     uint32_t data_index   : BL_RT_INDEX_BITS;
     uint32_t data_type    : BL_TYPE_BITS;
     char const *name;
-} bl_sig_meta_t;
+} bl_signal_meta_t;
 
 /* Verify that bitfields fit in one uint32_t */
 _Static_assert((BL_RT_INDEX_BITS+BL_TYPE_BITS) <= 32, "sig bitfields too big");
@@ -129,7 +153,6 @@ typedef struct bl_thread_entry_s {
     struct bl_thread_entry_s *next;
 } bl_thread_entry_t;
 
-
 /* Verify that bitfields fit in one uint32_t */
 _Static_assert((BL_RT_INDEX_BITS+BL_NOFP_BITS) <= 32, "thread bitfields too big");
 
@@ -137,36 +160,10 @@ _Static_assert((BL_RT_INDEX_BITS+BL_NOFP_BITS) <= 32, "thread bitfields too big"
 extern bl_inst_meta_t *instance_root;
 
 /* root of signal linked list */
-extern bl_sig_meta_t *signal_root;
+extern bl_signal_meta_t *signal_root;
 
 /* root of thread linked list */
 extern bl_thread_meta_t *thread_root;
-
-/**************************************************************
- * Link the specified pin to the specified signal
- */
-bl_retval_t bl_link_pin_to_signal(bl_pin_meta_t const *pin, bl_sig_meta_t const *sig );
-
-/**************************************************************
- * Disconnect the specified pin from any signal
- */
-bl_retval_t bl_unlink_pin(bl_pin_meta_t const *pin);
-
-/**************************************************************
- * Set the specified signal to a value
- */
-bl_retval_t bl_set_sig(bl_sig_meta_t const *sig, bl_sig_data_t const *value);
-
-/**************************************************************
- * Set the specified pin to a value
- */
-bl_retval_t bl_set_pin(bl_pin_meta_t const *pin, bl_sig_data_t const *value);
-
-/**************************************************************
- * Add the specified function to the end of the specified thread
- */
-bl_retval_t bl_add_funct_to_thread(bl_funct_def_t const *funct, bl_inst_meta_t const *inst, bl_thread_meta_t const *thread);
-
 
 /**************************************************************
  * Lower-level EMBLOCS API functions; typically helpers used  *
@@ -178,7 +175,7 @@ bl_retval_t bl_add_funct_to_thread(bl_funct_def_t const *funct, bl_inst_meta_t c
  * Helper function for bl_instance_new(); creates an instance
  * of a component using only the component definition.
  */
-bl_retval_t bl_default_setup(char const *name, bl_comp_def_t const *comp_def);
+struct bl_inst_meta_s *bl_default_setup(char const *name, bl_comp_def_t const *comp_def);
 
 /**************************************************************
  * Helper functions for finding things in the metadata
@@ -190,20 +187,13 @@ bl_retval_t bl_default_setup(char const *name, bl_comp_def_t const *comp_def);
  * calls a callback functions for each match (if 'callback'
  * is not NULL), and returns the number of matches.
  */
-bl_inst_meta_t *bl_find_instance_by_name(char const *name);
 bl_inst_meta_t *bl_find_instance_by_data_addr(void *data_addr);
 bl_inst_meta_t *bl_find_instance_from_thread_entry(bl_thread_entry_t const *entry);
-bl_pin_meta_t *bl_find_pin_in_instance_by_name(char const *name, bl_inst_meta_t const *inst);
-bl_pin_meta_t *bl_find_pin_by_names(char const *inst_name, char const *pin_name);
-bl_sig_meta_t *bl_find_signal_by_name(char const *name);
-bl_sig_meta_t *bl_find_signal_by_index(uint32_t index);
-bl_thread_meta_t *bl_find_thread_by_name(char const *name);
-bl_funct_def_t *bl_find_funct_def_in_instance_by_name(char const *name, bl_inst_meta_t const *inst);
-bl_funct_def_t *bl_find_funct_def_by_names(char const *inst_name, char const *funct_name);
+bl_signal_meta_t *bl_find_signal_by_index(uint32_t index);
 bl_funct_def_t *bl_find_funct_def_in_instance_by_address(bl_rt_funct_t *addr, bl_inst_meta_t const *inst);
 bl_funct_def_t *bl_find_funct_def_from_thread_entry(bl_thread_entry_t const *entry);
 
-int bl_find_pins_linked_to_signal(bl_sig_meta_t const *sig, void (*callback)(bl_inst_meta_t *inst, bl_pin_meta_t *pin));
+int bl_find_pins_linked_to_signal(bl_signal_meta_t const *sig, void (*callback)(bl_inst_meta_t *inst, bl_pin_meta_t *pin));
 int bl_find_functions_in_thread(bl_thread_meta_t const *thread, void (*callback)(bl_inst_meta_t *inst, bl_funct_def_t *funct));
 
 /**************************************************************
@@ -218,9 +208,9 @@ void bl_show_pin(bl_pin_meta_t const *pin);
 void bl_show_all_pins_of_instance(bl_inst_meta_t const *inst);
 void bl_show_pin_value(bl_pin_meta_t const *pin);
 void bl_show_pin_linkage(bl_pin_meta_t const *pin);
-void bl_show_signal(bl_sig_meta_t const *sig);
-void bl_show_signal_value(bl_sig_meta_t const *sig);
-void bl_show_signal_linkage(bl_sig_meta_t const *sig);
+void bl_show_signal(bl_signal_meta_t const *sig);
+void bl_show_signal_value(bl_signal_meta_t const *sig);
+void bl_show_signal_linkage(bl_signal_meta_t const *sig);
 void bl_show_sig_data_t_value(bl_sig_data_t const *data, bl_type_t type);
 void bl_show_thread_entry(bl_thread_entry_t const *entry);
 void bl_show_thread(bl_thread_meta_t const *thread);
