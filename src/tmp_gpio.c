@@ -1,14 +1,14 @@
 // EMBLOCS component - GPIO driver
 //
 
-#include "emblocs.h"
+#include "emblocs_comp.h"
 #include "platform.h"
 #include "tmp_gpio.h"
 #include "platform_g431.h"
 #include "printing.h"
 
 // instance data structure - one copy per instance in RAM
-typedef struct bl_gpio_inst_s {
+typedef struct bl_gpio_instance_s {
     GPIO_TypeDef *base_addr;
     bl_pin_bit_t *output_pins;
     bl_pin_bit_t *out_ena_pins;
@@ -16,15 +16,15 @@ typedef struct bl_gpio_inst_s {
     uint16_t out_ena_bitmask;
     bl_pin_bit_t *input_pins;
     uint16_t input_bitmask;
-} bl_gpio_inst_t;
+} bl_gpio_instance_t;
 
 // we can have up to 3 blocs pins (in, out, output enable) per hardware pin
 // and 16 hardware pins per port
 #define GPIO_MAX_PINS (3*16)
-#define GPIO_MAX_INST_SIZE (sizeof(bl_gpio_inst_t)+GPIO_MAX_PINS*sizeof(bl_pin_t))
+#define GPIO_MAX_INSTANCE_SIZE (sizeof(bl_gpio_instance_t)+GPIO_MAX_PINS*sizeof(bl_pin_t))
 
 _Static_assert((GPIO_MAX_PINS < BL_PIN_COUNT_MAX), "too many pins");
-_Static_assert((GPIO_MAX_INST_SIZE < BL_INST_DATA_MAX_SIZE), "instance structure too large");
+_Static_assert((GPIO_MAX_INSTANCE_SIZE < BL_INSTANCE_DATA_MAX_SIZE), "instance structure too large");
 
 // pin name strings
 // (pin definitions are created dynamically, but the strings must exist in flash)
@@ -50,29 +50,29 @@ char const pin_names_oe[16][6] = {
 };
 
 
-static void bl_gpio_read_funct(void *ptr, uint32_t period_ns);
-static void bl_gpio_write_funct(void *ptr, uint32_t period_ns);
+static void bl_gpio_read_function(void *ptr, uint32_t period_ns);
+static void bl_gpio_write_function(void *ptr, uint32_t period_ns);
 
 // array of function definitions - one copy in FLASH
-static bl_funct_def_t const bl_gpio_functs[] = {
-    { "read", BL_NO_FP, &bl_gpio_read_funct },
-    { "write", BL_NO_FP, &bl_gpio_write_funct }
+static bl_function_def_t const bl_gpio_functions[] = {
+    { "read", BL_NO_FP, &bl_gpio_read_function },
+    { "write", BL_NO_FP, &bl_gpio_write_function }
 };
 
 
 /* component-specific setup function */
-bl_inst_meta_t * gpio_setup(char const *inst_name, struct bl_comp_def_s const *comp_def, void const *personality);
+struct bl_instance_meta_s *gpio_setup(char const *instance_name, struct bl_comp_def_s const *comp_def, void const *personality);
 
 
 // component definition - one copy in FLASH
 bl_comp_def_t const bl_gpio_def = { 
     "gpio",
     gpio_setup,
-    sizeof(bl_gpio_inst_t),
+    sizeof(bl_gpio_instance_t),
     0,
-    _countof(bl_gpio_functs),
+    _countof(bl_gpio_functions),
     NULL,
-    bl_gpio_functs
+    bl_gpio_functions
 };
 
 static void write_bitfield(volatile uint32_t *dest, uint32_t value, int field_width, int field_num)
@@ -86,7 +86,7 @@ static void write_bitfield(volatile uint32_t *dest, uint32_t value, int field_wi
 
 
 /* component-specific setup function */
-bl_inst_meta_t * gpio_setup(char const *inst_name, struct bl_comp_def_s const *comp_def, void const *personality)
+struct bl_instance_meta_s *gpio_setup(char const *instance_name, struct bl_comp_def_s const *comp_def, void const *personality)
 {
     gpio_port_config_t *p = (gpio_port_config_t *)personality;
     int pins_in, pins_out, pins_oe, pins_total;
@@ -94,8 +94,8 @@ bl_inst_meta_t * gpio_setup(char const *inst_name, struct bl_comp_def_s const *c
     GPIO_TypeDef *base_addr;
     gpio_pin_config_t *pin;
     uint32_t hw_mode;
-    bl_inst_meta_t *meta;
-    bl_gpio_inst_t *data;
+    struct bl_instance_meta_s *meta;
+    bl_gpio_instance_t *data;
     bl_pin_t *next_pin;
     bl_pin_def_t pindef;
 
@@ -152,8 +152,8 @@ bl_inst_meta_t * gpio_setup(char const *inst_name, struct bl_comp_def_s const *c
     }
     // now the emblocs setup - create an instance of the proper size to include all pins
     pins_total = pins_in + pins_out + pins_oe;
-    meta = bl_inst_create(inst_name, comp_def, comp_def->data_size+pins_total*sizeof(bl_pin_t));
-    data = TO_RT_ADDR(meta->data_index);
+    meta = bl_instance_create(instance_name, comp_def, comp_def->data_size+pins_total*sizeof(bl_pin_t));
+    data = bl_instance_data_addr(meta);
     // fill in instance data fields
     data->base_addr = p->base_address;
     data->input_bitmask = input_bitmask;
@@ -161,7 +161,7 @@ bl_inst_meta_t * gpio_setup(char const *inst_name, struct bl_comp_def_s const *c
     data->out_ena_bitmask = out_ena_bitmask;
     // prepare for pin creation
     // dynamic pins follow the main instance data structure
-    next_pin = (bl_pin_t *)((char *)data + sizeof(bl_gpio_inst_t));
+    next_pin = (bl_pin_t *)((char *)data + sizeof(bl_gpio_instance_t));
     pindef.data_type = BL_TYPE_BIT;
     // hardware input pins result in data flow out of the driver
     pindef.pin_dir = BL_DIR_OUT;
@@ -171,8 +171,8 @@ bl_inst_meta_t * gpio_setup(char const *inst_name, struct bl_comp_def_s const *c
         if ( input_bitmask & active_bit ) {
             // create a pin
             pindef.name = &(pin_names_in[n][0]);
-            pindef.data_offset = TO_INST_SIZE((uint32_t)((char *)next_pin - (char *)data));
-            bl_inst_add_pin(meta, &pindef);
+            pindef.data_offset = TO_INSTANCE_SIZE((uint32_t)((char *)next_pin - (char *)data));
+            bl_instance_add_pin(meta, &pindef);
             next_pin++;
         }
         active_bit <<= 1;
@@ -185,8 +185,8 @@ bl_inst_meta_t * gpio_setup(char const *inst_name, struct bl_comp_def_s const *c
         if ( output_bitmask & active_bit ) {
             // create a pin
             pindef.name = &(pin_names_out[n][0]);
-            pindef.data_offset = TO_INST_SIZE((uint32_t)((char *)next_pin - (char *)data));
-            bl_inst_add_pin(meta, &pindef);
+            pindef.data_offset = TO_INSTANCE_SIZE((uint32_t)((char *)next_pin - (char *)data));
+            bl_instance_add_pin(meta, &pindef);
             next_pin++;
         }
         active_bit <<= 1;
@@ -197,8 +197,8 @@ bl_inst_meta_t * gpio_setup(char const *inst_name, struct bl_comp_def_s const *c
         if ( out_ena_bitmask & active_bit ) {
             // create a pin
             pindef.name = &(pin_names_oe[n][0]);
-            pindef.data_offset = TO_INST_SIZE((uint32_t)((char *)next_pin - (char *)data));
-            bl_inst_add_pin(meta, &pindef);
+            pindef.data_offset = TO_INSTANCE_SIZE((uint32_t)((char *)next_pin - (char *)data));
+            bl_instance_add_pin(meta, &pindef);
             next_pin++;
         }
         active_bit <<= 1;
@@ -208,10 +208,10 @@ bl_inst_meta_t * gpio_setup(char const *inst_name, struct bl_comp_def_s const *c
 
 
 // realtime code - one copy in FLASH
-static void bl_gpio_read_funct(void *ptr, uint32_t period_ns)
+static void bl_gpio_read_function(void *ptr, uint32_t period_ns)
 {
     (void)period_ns;  // not used
-    bl_gpio_inst_t *p = (bl_gpio_inst_t *)ptr;
+    bl_gpio_instance_t *p = (bl_gpio_instance_t *)ptr;
     uint32_t shifter;
     bl_pin_bit_t *pin;
 
@@ -230,10 +230,10 @@ static void bl_gpio_read_funct(void *ptr, uint32_t period_ns)
     }
 }
 
-static void bl_gpio_write_funct(void *ptr, uint32_t period_ns)
+static void bl_gpio_write_function(void *ptr, uint32_t period_ns)
 {
     (void)period_ns;  // not used
-    bl_gpio_inst_t *p = (bl_gpio_inst_t *)ptr;
+    bl_gpio_instance_t *p = (bl_gpio_instance_t *)ptr;
     uint32_t bitmask, active_bit, bsrr, mode;
     bl_pin_bit_t *pin;
 

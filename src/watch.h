@@ -20,8 +20,6 @@
 #ifndef WATCH_H
 #define WATCH_H
 
-#include "emblocs.h"
-
 typedef struct watch_pin_config_s {
     bl_type_t type;
     char const *name;

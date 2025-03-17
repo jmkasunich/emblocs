@@ -1,7 +1,7 @@
 // EMBLOCS component - 'watch' for watching signals
 //
 
-#include "emblocs.h"
+#include "emblocs_comp.h"
 #include "watch.h"
 #include "printing.h"
 
@@ -19,10 +19,10 @@ _Static_assert(((WATCH_PIN_COUNT_BITS+WATCH_PIN_TYPES_BITS) <= 32), "watch bitfi
 // instance data structure - one copy per instance in RAM
 // multiple watch_pin_rt_data_t structs are appended to this
 // based on the personality
-typedef struct bl_watch_inst_s {
+typedef struct bl_watch_instance_s {
     uint32_t pin_count          : WATCH_PIN_COUNT_BITS;
     uint32_t pin_types          : WATCH_PIN_TYPES_BITS;
-} bl_watch_inst_t;
+} bl_watch_instance_t;
 
 // pin data structure
 typedef struct bl_watch_pin_s {
@@ -30,43 +30,43 @@ typedef struct bl_watch_pin_s {
     char const *format;
 } bl_watch_pin_rt_data_t;
 
-#define WATCH_MAX_INST_SIZE (sizeof(bl_watch_inst_t)+WATCH_MAX_PINS*sizeof(bl_watch_pin_rt_data_t))
+#define WATCH_MAX_INSTANCE_SIZE (sizeof(bl_watch_instance_t)+WATCH_MAX_PINS*sizeof(bl_watch_pin_rt_data_t))
 
 _Static_assert((WATCH_MAX_PINS < BL_PIN_COUNT_MAX), "too many pins");
-_Static_assert((WATCH_MAX_INST_SIZE < BL_INST_DATA_MAX_SIZE), "instance structure too large");
+_Static_assert((WATCH_MAX_INSTANCE_SIZE < BL_INSTANCE_DATA_MAX_SIZE), "instance structure too large");
 
 
-static void bl_watch_update_funct(void *ptr, uint32_t period_ns);
+static void bl_watch_update_function(void *ptr, uint32_t period_ns);
 
 // array of function definitions - one copy in FLASH
-static bl_funct_def_t const bl_watch_functs[] = {
-    { "update", BL_HAS_FP, &bl_watch_update_funct }
+static bl_function_def_t const bl_watch_functions[] = {
+    { "update", BL_HAS_FP, &bl_watch_update_function }
 };
 
 
 /* component-specific setup function */
-bl_inst_meta_t * watch_setup(char const *inst_name, struct bl_comp_def_s const *comp_def, void const *personality);
+struct bl_instance_meta_s *watch_setup(char const *instance_name, struct bl_comp_def_s const *comp_def, void const *personality);
 
 
 // component definition - one copy in FLASH
 bl_comp_def_t const bl_watch_def = {
     "watch",
     watch_setup,
-    sizeof(bl_watch_inst_t),
+    sizeof(bl_watch_instance_t),
     0,
-    _countof(bl_watch_functs),
+    _countof(bl_watch_functions),
     NULL,
-    bl_watch_functs
+    bl_watch_functions
 };
 
 /* component-specific setup function */
-bl_inst_meta_t * watch_setup(char const *inst_name, struct bl_comp_def_s const *comp_def, void const *personality)
+struct bl_instance_meta_s *watch_setup(char const *instance_name, struct bl_comp_def_s const *comp_def, void const *personality)
 {
     watch_pin_config_t *pin_info;
     bl_watch_pin_rt_data_t *pin_data;
     uint32_t pins, types;
-    bl_inst_meta_t *meta;
-    bl_watch_inst_t *data;
+    struct bl_instance_meta_s *meta;
+    bl_watch_instance_t *data;
     bl_pin_def_t pindef;
 
     // count pins in personality
@@ -85,8 +85,8 @@ bl_inst_meta_t * watch_setup(char const *inst_name, struct bl_comp_def_s const *
         return NULL;
     }
     // now the emblocs setup - create an instance of the proper size to include all the pin data
-    meta = bl_inst_create(inst_name, comp_def, comp_def->data_size + (pins * sizeof(bl_watch_pin_rt_data_t)));
-    data = TO_RT_ADDR(meta->data_index);
+    meta = bl_instance_create(instance_name, comp_def, comp_def->data_size + (pins * sizeof(bl_watch_pin_rt_data_t)));
+    data = bl_instance_data_addr(meta);
     // fill in instance data fields
     data->pin_count = pins & WATCH_PIN_COUNT_MASK;
     data->pin_types = types & WATCH_PIN_TYPES_MASK;
@@ -99,9 +99,9 @@ bl_inst_meta_t * watch_setup(char const *inst_name, struct bl_comp_def_s const *
         pindef.name = pin_info->name;
         pindef.data_type = pin_info->type;
         pindef.pin_dir = BL_DIR_IN;
-        pindef.data_offset = TO_INST_SIZE((uint32_t)((char *)&(pin_data->pin) - (char *)data));
+        pindef.data_offset = TO_INSTANCE_SIZE((uint32_t)((char *)&(pin_data->pin) - (char *)data));
         // create the pin
-        bl_inst_add_pin(meta, &pindef);
+        bl_instance_add_pin(meta, &pindef);
         // save the format string
         pin_data->format = pin_info->format;
         // next pin
@@ -114,10 +114,10 @@ bl_inst_meta_t * watch_setup(char const *inst_name, struct bl_comp_def_s const *
 
 
 // realtime code - one copy in FLASH
-static void bl_watch_update_funct(void *ptr, uint32_t period_ns)
+static void bl_watch_update_function(void *ptr, uint32_t period_ns)
 {
     (void)period_ns;  // not used
-    bl_watch_inst_t *p = (bl_watch_inst_t *)ptr;
+    bl_watch_instance_t *p = (bl_watch_instance_t *)ptr;
     int pins;
     uint32_t types;
     bl_type_t type;

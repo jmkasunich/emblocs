@@ -1,6 +1,6 @@
 #include "platform_g431.h"
 
-#include "emblocs.h"
+#include "emblocs_api.h"
 #include "printing.h"
 #include <assert.h>
 #include "tmp_gpio.h"
@@ -29,11 +29,12 @@ void delay (unsigned int time) {
 }
 
 
-extern bl_comp_def_t bl_mux2_def;
-extern bl_comp_def_t bl_sum2_def;
-extern bl_comp_def_t bl_perftimer_def;
-extern bl_comp_def_t bl_gpio_def;
-extern bl_comp_def_t bl_watch_def;
+extern struct bl_comp_def_s bl_mux2_def;
+extern struct bl_comp_def_s bl_sum2_def;
+extern struct bl_comp_def_s bl_perftimer_def;
+extern struct bl_comp_def_s bl_gpio_def;
+extern struct bl_comp_def_s bl_watch_def;
+
 
 gpio_port_config_t const portA = { GPIOA, {
     { BGPIO_MD_ANA,  BGPIO_OUT_PP, BGPIO_SPD_SLOW, BGPIO_PULL_NONE, BGPIO_AF0 }, // PA0  = VBUS
@@ -101,7 +102,7 @@ watch_pin_config_t watch_pers[] = {
     { BL_TYPE_BIT, NULL, NULL }
 };
 
-bl_inst_def_t const instances[] = {
+bl_instance_def_t const instances[] = {
     { "PortA", &bl_gpio_def, &portA},
     { "PortB", &bl_gpio_def, &portB},
     { "PortC", &bl_gpio_def, &portC},
@@ -165,8 +166,8 @@ char const * const threads[] = {
 int main (void) {
     char *hello = "\nHello, world!\n";
     uint32_t t_start, t_inst, t_nets, t_setsig, t_setpin, t_threads, t_total;
-    bl_thread_data_t *main_thread;
-    bl_thread_data_t *watch_thread;
+    struct bl_thread_data_s *main_thread;
+    struct bl_thread_data_s *watch_thread;
     char c;
     bl_sig_data_t data;
 
@@ -209,8 +210,8 @@ int main (void) {
     bl_show_all_threads();
 
     
-    main_thread = bl_find_thread_data_by_name("main_thread");
-    watch_thread = bl_find_thread_data_by_name("watch_thread");
+    main_thread = bl_thread_get_data(bl_thread_find("main_thread"));
+    watch_thread = bl_thread_get_data(bl_thread_find("watch_thread"));
     assert(main_thread != NULL);
     assert(watch_thread != NULL);
     while (1) {
@@ -222,47 +223,47 @@ int main (void) {
         switch(c) {
         case '+':
             data.b = 0;
-            bl_set_sig_by_name("dir", &data);
+            bl_signal_set(bl_signal_find("dir"), &data);
             break;
         case '-':
             data.b = 1;
-            bl_set_sig_by_name("dir", &data);
+            bl_signal_set(bl_signal_find("dir"), &data);
             break;
         case 'g':
             data.b = 1;
-            bl_set_sig_by_name("ramp", &data);
+            bl_signal_set(bl_signal_find("ramp"), &data);
             break;
         case 's':
             data.b = 0;
-            bl_set_sig_by_name("ramp", &data);
+            bl_signal_set(bl_signal_find("ramp"), &data);
             break;
         case 'Z':
             data.b = 0;
-            bl_set_sig_by_name("oe", &data);
+            bl_signal_set(bl_signal_find("oe"), &data);
             break;
         case 'z':
             data.b = 1;
-            bl_set_sig_by_name("oe", &data);
+            bl_signal_set(bl_signal_find("oe"), &data);
             break;
         case 'O':
             data.b = 1;
-            bl_set_sig_by_name("out", &data);
+            bl_signal_set(bl_signal_find("out"), &data);
             break;
         case 'o':
             data.b = 0;
-            bl_set_sig_by_name("out", &data);
+            bl_signal_set(bl_signal_find("out"), &data);
             break;
         default:
             break;
         }
         print_string("running...");
         t_start = tsc_read();
-        bl_thread_update(main_thread, 1);
+        bl_thread_run(main_thread, 1);
         t_threads = tsc_read();
         print_string("done\n");
         t_threads -= t_start;
         printf("execution time: %d\n", t_threads);
-        bl_thread_update(watch_thread,0);
+        bl_thread_run(watch_thread,0);
         bl_show_all_signals();
     }
     // Return 0 to satisfy compiler
