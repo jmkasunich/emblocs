@@ -117,9 +117,9 @@ void bl_show_memory_status(void);
 void bl_show_all_instances(void);
 void bl_show_all_signals(void);
 void bl_show_all_threads(void);
-void bl_show_instance_by_name(char const *name);
-void bl_show_signal_by_name(char const *name);
-void bl_show_thread_by_name(char const *name);
+void bl_show_instance(struct bl_instance_meta_s const *inst);
+void bl_show_signal(struct bl_signal_meta_s const *sig);
+void bl_show_thread(struct bl_thread_meta_s const *thread);
 
 /**************************************************************
  * For convenience, a system can be built by using compact    *

@@ -330,6 +330,7 @@ struct bl_thread_data_s *bl_thread_get_data(struct bl_thread_meta_s *thread)
     return TO_RT_ADDR(thread->data_index);
 }
 
+
 /* linked list callback functions */
 static int instance_meta_compare_name_key(void *node, void *key)
 {
@@ -358,9 +359,6 @@ static int pin_meta_compare_name_key(void *node, void *key)
     char *kp = key;
     return strcmp(np->name, kp);
 }
-
-
-
 
 struct bl_instance_meta_s *bl_instance_find(char const *name)
 {

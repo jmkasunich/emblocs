@@ -177,43 +177,4 @@ extern bl_thread_meta_t *thread_root;
  */
 struct bl_instance_meta_s *bl_default_setup(char const *name, bl_comp_def_t const *comp_def);
 
-/**************************************************************
- * Helper functions for finding things in the metadata
- * 
- * These functions are implemented in emblocs_priv.c
- * 
- * The first group finds the single matching item.
- * The second group finds the zero or more matching items,
- * calls a callback functions for each match (if 'callback'
- * is not NULL), and returns the number of matches.
- */
-bl_instance_meta_t *bl_find_instance_by_data_addr(void *data_addr);
-bl_instance_meta_t *bl_find_instance_from_thread_entry(bl_thread_entry_t const *entry);
-bl_signal_meta_t *bl_find_signal_by_index(uint32_t index);
-bl_function_def_t *bl_find_function_def_in_instance_by_address(bl_rt_function_t *addr, bl_instance_meta_t const *inst);
-bl_function_def_t *bl_find_function_def_from_thread_entry(bl_thread_entry_t const *entry);
-
-int bl_find_pins_linked_to_signal(bl_signal_meta_t const *sig, void (*callback)(bl_instance_meta_t *inst, bl_pin_meta_t *pin));
-int bl_find_functions_in_thread(bl_thread_meta_t const *thread, void (*callback)(bl_instance_meta_t *inst, bl_function_def_t *funct));
-
-/**************************************************************
- * Helper functions for viewing things in the metadata        *
- *                                                            *
- * These functions are defined in emblocs_show.c              *
- *                                                            *
- **************************************************************/
-
-void bl_show_instance(bl_instance_meta_t const *inst);
-void bl_show_pin(bl_pin_meta_t const *pin);
-void bl_show_all_pins_of_instance(bl_instance_meta_t const *inst);
-void bl_show_pin_value(bl_pin_meta_t const *pin);
-void bl_show_pin_linkage(bl_pin_meta_t const *pin);
-void bl_show_signal(bl_signal_meta_t const *sig);
-void bl_show_signal_value(bl_signal_meta_t const *sig);
-void bl_show_signal_linkage(bl_signal_meta_t const *sig);
-void bl_show_sig_data_t_value(bl_sig_data_t const *data, bl_type_t type);
-void bl_show_thread_entry(bl_thread_entry_t const *entry);
-void bl_show_thread(bl_thread_meta_t const *thread);
-
-
 #endif // EMBLOCS_PRIV_H

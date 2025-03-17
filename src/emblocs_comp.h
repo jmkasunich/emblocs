@@ -18,6 +18,39 @@
 #endif
 
 /**************************************************************
+ * Each instance of a component has "instance data" which is
+ * in the RT memory pool.  The instance data size is specified
+ * in bytes, and the size is stored in a bitfield.
+ */
+#ifndef BL_INSTANCE_DATA_SIZE_BITS
+#define BL_INSTANCE_DATA_SIZE_BITS  10
+#endif
+
+#define BL_INSTANCE_DATA_MAX_SIZE (1<<(BL_INSTANCE_DATA_SIZE_BITS))
+#define BL_INSTANCE_DATA_SIZE_MASK ((BL_INSTANCE_DATA_MAX_SIZE)-1)
+
+/* masks 'size' so it can go into a bit field without a conversion warning */
+#define TO_INSTANCE_SIZE(size) ((size) & BL_INSTANCE_DATA_SIZE_MASK)
+
+/* pin count (number of pins in a component instance)
+ * is stored in bitfields, need to specify the size
+ */
+#ifndef BL_PIN_COUNT_BITS
+#define BL_PIN_COUNT_BITS 8
+#endif
+
+#define BL_PIN_COUNT_MAX (1<<(BL_PIN_COUNT_BITS))
+
+/* the number of functions provided by a component
+ * is stored in bitfields, need to specify the size
+ */
+#ifndef BL_FUNCTION_COUNT_BITS
+#define BL_FUNCTION_COUNT_BITS 3
+#endif
+
+#define BL_FUNCTION_COUNT_MAX (1<<(BL_FUNCTION_COUNT_BITS))
+
+/**************************************************************
  * The following data structures are used by components to    *
  * describe themselves and allow component instances to be    *
  * created.  Most of them typically live in FLASH memory.     *
