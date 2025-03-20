@@ -364,7 +364,14 @@ struct bl_instance_meta_s *bl_instance_find(char const *name)
 {
     bl_instance_meta_t *retval;
 
-    retval = ll_find((void **)(&(instance_root)), (void *)(name), instance_meta_compare_name_key);
+    if ( name != NULL ) {
+        retval = ll_find((void **)(&(instance_root)), (void *)(name), instance_meta_compare_name_key);
+    } else {
+        retval = NULL;
+        #ifdef BL_ERROR_VERBOSE
+        name = "<NULL>";
+        #endif
+    }
     if ( retval == NULL ) {
         #ifdef BL_ERROR_VERBOSE
         print_strings(4, "not found: ", "instance: '", name, "'\n");
@@ -378,7 +385,14 @@ struct bl_signal_meta_s *bl_signal_find(char const *name)
 {
     bl_signal_meta_t *retval;
 
-    retval = ll_find((void **)(&(signal_root)), (void *)(name), sig_meta_compare_name_key);
+    if ( name != NULL ) {
+        retval = ll_find((void **)(&(signal_root)), (void *)(name), sig_meta_compare_name_key);
+    } else {
+        retval = NULL;
+        #ifdef BL_ERROR_VERBOSE
+        name = "<NULL>";
+        #endif
+    }
     if ( retval == NULL ) {
         #ifdef BL_ERROR_VERBOSE
         print_strings(4, "not found: ", "signal: '", name, "'\n");
@@ -392,7 +406,14 @@ struct bl_thread_meta_s *bl_thread_find(char const *name)
 {
     bl_thread_meta_t *retval;
 
-    retval = ll_find((void **)(&(thread_root)), (void *)(name), thread_meta_compare_name_key);
+    if ( name != NULL ) {
+        retval = ll_find((void **)(&(thread_root)), (void *)(name), thread_meta_compare_name_key);
+    } else {
+        retval = NULL;
+        #ifdef BL_ERROR_VERBOSE
+        name = "<NULL>";
+        #endif
+    }
     if ( retval == NULL ) {
         #ifdef BL_ERROR_VERBOSE
         print_strings(4, "not found: ", "thread: '", name, "'\n");
@@ -405,11 +426,29 @@ struct bl_thread_meta_s *bl_thread_find(char const *name)
 struct bl_pin_meta_s *bl_pin_find_in_instance(char const *name, struct bl_instance_meta_s *inst)
 {
     bl_pin_meta_t *retval;
+    #ifdef BL_ERROR_VERBOSE
+    char const *instname;
+    #endif
 
-    retval = ll_find((void **)(&(inst->pin_list)), (void *)(name), pin_meta_compare_name_key);
+    if ( ( inst != NULL ) && ( name != NULL ) ) {
+        retval = ll_find((void **)(&(inst->pin_list)), (void *)(name), pin_meta_compare_name_key);
+        #ifdef BL_ERROR_VERBOSE
+        instname = inst->name;
+        #endif
+    } else {
+        retval = NULL;
+        #ifdef BL_ERROR_VERBOSE
+        if ( inst == NULL ) {
+            instname = "<NULL>";
+        }
+        if ( name == NULL ) {
+            name = "<NULL>";
+        }
+        #endif
+    }
     if ( retval == NULL ) {
         #ifdef BL_ERROR_VERBOSE
-        print_strings(7, "not found: ", "pin: '", name, "' in ", "instance: '", inst->name, "'\n");
+        print_strings(7, "not found: ", "pin: '", name, "' in ", "instance: '", instname, "'\n");
         #endif
         halt_or_return(NULL);
     }
