@@ -260,7 +260,7 @@ bl_retval_t bl_init_threads(char const * const threads[])
     uint32_t period_ns;
     bl_thread_meta_t *thread;
     bl_instance_meta_t *inst;
-    bl_function_def_t const *function_def;
+    bl_function_meta_t *function;
     int errors = 0;
 
     enum {
@@ -329,15 +329,15 @@ bl_retval_t bl_init_threads(char const * const threads[])
             }
             break;
         case GET_FUNCT:
-            function_def = bl_function_find_in_instance(*threads, inst);
+            function = bl_function_find_in_instance(*threads, inst);
             #ifndef BL_ERROR_HALT
-            if ( function_def == NULL ) {
+            if ( function == NULL ) {
                 errors++;
                 state = GOT_NAME;
                 break;
             }
             #endif
-            retval = bl_thread_add_function(thread, inst, function_def);
+            retval = bl_function_linkto_thread(function, thread);
             #ifndef BL_ERROR_HALT
             if ( retval != BL_SUCCESS ) {
                 errors++;

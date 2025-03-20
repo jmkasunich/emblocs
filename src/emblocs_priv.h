@@ -88,6 +88,7 @@ typedef struct bl_instance_meta_s {
     uint32_t data_size   : BL_INSTANCE_DATA_SIZE_BITS;
     char const *name;
     struct bl_pin_meta_s *pin_list;
+    struct bl_function_meta_s *function_list;
 } bl_instance_meta_t;
 
 /* Verify that bitfields fit in one uint32_t */
@@ -110,6 +111,37 @@ typedef struct bl_pin_meta_s {
 
 /* Verify that bitfields fit in one uint32_t */
 _Static_assert((BL_RT_INDEX_BITS*2+BL_TYPE_BITS+BL_DIR_BITS) <= 32, "pin bitfields too big");
+
+/**************************************************************
+ * Data structure that describes a function.  Each instance
+ * has a list of functions.  These structures live in the
+ * metadata pool, but point to data in the realtime pool.
+ */
+
+ typedef struct bl_function_meta_s {
+    struct bl_function_meta_s *next;
+    uint32_t rtdata_index  : BL_RT_INDEX_BITS;
+    uint32_t nofp          : BL_NOFP_BITS;
+    char const *name;
+} bl_function_meta_t;
+
+/* Verify that bitfields fit in one uint32_t */
+_Static_assert((BL_RT_INDEX_BITS+BL_NOFP_BITS) <= 32, "function bitfields too big");
+
+/**************************************************************
+ * Realtime data for a function.  These structures are created
+ * when the instance is created.  Later, when the function is
+ * added to a realtime thread, this structure is linked into
+ * the list that corresponds to the thread.
+ * The 'next' pointer is used to link functions into a thread.
+ * If it points to itself, the function is not currently part
+ * of a thread.
+ */
+typedef struct bl_function_rtdata_s {
+    bl_rt_function_t *funct;
+    void *instance_data;
+    struct bl_function_rtdata_s *next;
+} bl_function_rtdata_t;
 
 /**************************************************************
  * Data structure that describes a signal.  There is one list
@@ -140,21 +172,14 @@ typedef struct bl_thread_meta_s {
     char const *name;
 } bl_thread_meta_t;
 
+/* Verify that bitfields fit in one uint32_t */
+_Static_assert((BL_RT_INDEX_BITS+BL_NOFP_BITS) <= 32, "thread bitfields too big");
+
 /* realtime data needed for a thread */
 typedef struct bl_thread_data_s {
     uint32_t period_ns;
-    struct bl_thread_entry_s *start;
+    struct bl_function_rtdata_s *start;
 } bl_thread_data_t;
-
-/* bl_thread_run() traverses a list of these structures */
-typedef struct bl_thread_entry_s {
-    bl_rt_function_t *funct;
-    void *instance_data;
-    struct bl_thread_entry_s *next;
-} bl_thread_entry_t;
-
-/* Verify that bitfields fit in one uint32_t */
-_Static_assert((BL_RT_INDEX_BITS+BL_NOFP_BITS) <= 32, "thread bitfields too big");
 
 /* root of instance linked list */
 extern bl_instance_meta_t *instance_root;

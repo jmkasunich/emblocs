@@ -104,7 +104,7 @@ typedef enum {
  */
 struct bl_instance_meta_s;
 struct bl_pin_meta_s;
-struct bl_function_def_s;
+struct bl_function_meta_s;
 struct bl_signal_meta_s;
 struct bl_thread_meta_s;
 struct bl_thread_data_s;
