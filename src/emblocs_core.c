@@ -195,18 +195,29 @@ bl_retval_t bl_pin_linkto_signal(bl_pin_meta_t const *pin, bl_signal_meta_t cons
     // check types
     if ( pin->data_type != sig->data_type ) {
         #ifdef BL_ERROR_VERBOSE
-        print_strings(7, "type mismatch: ", "pin: '", pin->name, "' vs ", "signal: '", sig->name, "'\n");
+        print_strings(7, "cannot link ", "pin: '", pin->name, "' to ", "signal: '", sig->name, "'; type mismatch\n");
         #endif
         halt_or_return(BL_ERR_TYPE_MISMATCH);
     }
     // convert indexes to addresses
     pin_ptr_addr = TO_RT_ADDR(pin->ptr_index);
     sig_data_addr = TO_RT_ADDR(sig->data_index);
-    // make the link
+    #ifndef BL_ENABLE_IMPLICIT_UNLINK
+    bl_sig_data_t *dummy_addr = TO_RT_ADDR(pin->dummy_index);
+    if ( *pin_ptr_addr != dummy_addr ) {
+        #ifdef BL_ERROR_VERBOSE
+        print_strings(7, "cannot link ",  "pin: '", pin->name, "' to ", "signal: '", sig->name, "'; already linked\n" );
+        #endif
+        halt_or_return(BL_ERR_GENERAL);
+    }
+    #endif
+    // make the link (this automatically undoes any previous linkage)
     *pin_ptr_addr = sig_data_addr;
     return BL_SUCCESS;
+
 }
 
+#ifdef BL_ENABLE_UNLINK
 bl_retval_t bl_pin_unlink(bl_pin_meta_t const *pin)
 {
     bl_sig_data_t *pin_dummy_addr, **pin_ptr_addr, *pin_ptr_value;
@@ -221,6 +232,7 @@ bl_retval_t bl_pin_unlink(bl_pin_meta_t const *pin)
     *pin_ptr_addr = pin_dummy_addr;
     return BL_SUCCESS;
 }
+#endif
 
 bl_retval_t bl_signal_set(bl_signal_meta_t const *sig, bl_sig_data_t const *value)
 {
@@ -280,7 +292,7 @@ struct bl_thread_meta_s *bl_thread_new(char const *name, uint32_t period_ns, bl_
     halt_or_return(NULL);
 }
 
-bl_retval_t bl_function_linkto_thread(struct bl_function_meta_s const *funct, struct bl_thread_meta_s const *thread)
+bl_retval_t bl_function_linkto_thread(struct bl_function_meta_s *funct, struct bl_thread_meta_s const *thread)
 {
     bl_function_rtdata_t *funct_data;
     bl_thread_data_t *thread_data;
@@ -289,18 +301,25 @@ bl_retval_t bl_function_linkto_thread(struct bl_function_meta_s const *funct, st
     // validate floating point
     if ( ( thread->nofp == BL_NO_FP) && ( funct->nofp == BL_HAS_FP ) ) {
         #ifdef BL_ERROR_VERBOSE
-        print_strings(5, "cannot put FP function '", funct->name, "' in non-FP thread '", thread->name, "'\n");
+        print_strings(7, "cannot link ", "function: '", funct->name, "' to ", "thread: '", thread->name, "'; type mismatch\n");
         #endif
         halt_or_return(BL_ERR_TYPE_MISMATCH);
     }
-    thread_data = TO_RT_ADDR(thread->data_index);
-    funct_data = TO_RT_ADDR(funct->rtdata_index);
-    if ( funct_data->next != funct_data ) {
+    if ( funct->thread_index != BL_META_MAX_INDEX ) {
+        #ifdef BL_ENABLE_IMPLICIT_UNLINK
+        bl_function_unlink(funct);
+        #else
         #ifdef BL_ERROR_VERBOSE
-        print_strings(3, "function '", funct->name, "' is already in a thread\n");
+        print_strings(7, "cannot link ",  "function: '", funct->name, "' to ", "thread: '", thread->name, "'; already linked\n" );
         #endif
         halt_or_return(BL_ERR_GENERAL);
+        #endif
     }
+    // link function metadata back to the thread
+    funct->thread_index = TO_META_INDEX(thread);
+    // get pointers to realtime data
+    funct_data = TO_RT_ADDR(funct->rtdata_index);
+    thread_data = TO_RT_ADDR(thread->data_index);
     // find end of thread
     prev_ptr = &(thread_data->start);
     prev = *prev_ptr;
@@ -308,12 +327,49 @@ bl_retval_t bl_function_linkto_thread(struct bl_function_meta_s const *funct, st
         prev_ptr = &(prev->next);
         prev = *prev_ptr;
     }
-    // append function to thread
+    // append function RT data to thread
     funct_data->next = NULL;
     *prev_ptr = funct_data;
     return BL_SUCCESS;
 }
 
+#ifdef  BL_ENABLE_UNLINK
+bl_retval_t bl_function_unlink(struct bl_function_meta_s *funct)
+{
+    bl_thread_meta_t *thread;
+    bl_function_rtdata_t *funct_data;
+    bl_thread_data_t *thread_data;
+    bl_function_rtdata_t *prev, **prev_ptr;
+
+    if ( funct->thread_index == BL_META_MAX_INDEX ) {
+        // function is not in a thread; done
+        return BL_SUCCESS;
+    }
+    thread = TO_META_ADDR(funct->thread_index);
+    // get pointers to realtime data
+    funct_data = TO_RT_ADDR(funct->rtdata_index);
+    thread_data = TO_RT_ADDR(thread->data_index);
+    // traverse thread list
+    prev_ptr = &(thread_data->start);
+    prev = *prev_ptr;
+    while ( prev != NULL ) {
+        if ( prev == funct_data ) {
+            // found it, unlink
+            *prev_ptr = funct_data->next;
+            // reset metadata to 'unlinked'
+            funct->thread_index = BL_META_MAX_INDEX;
+            return BL_SUCCESS;
+        }
+        prev_ptr = &(prev->next);
+        prev = *prev_ptr;
+    }
+    // not found in thread
+    #ifdef BL_ERROR_VERBOSE
+    print_string("data corruption\n");
+    #endif
+    halt();
+}
+#endif
 
 void bl_thread_run(struct bl_thread_data_s const *thread, uint32_t period_ns)
 {
@@ -656,7 +712,7 @@ bl_retval_t bl_instance_add_function(struct bl_instance_meta_s *inst, bl_functio
 
     // allocate memory for metadata
     meta = alloc_from_meta_pool(sizeof(bl_function_meta_t));
-    // allocate memory for dummy signal
+    // allocate memory for realtime data
     data = alloc_from_rt_pool(sizeof(bl_function_rtdata_t));
     #ifndef BL_ERROR_HALT
     if ( ( meta == NULL ) || ( data == NULL ) ) {
@@ -666,12 +722,12 @@ bl_retval_t bl_instance_add_function(struct bl_instance_meta_s *inst, bl_functio
     // initialize realtime data fields
     data->funct = def->fp;
     data->instance_data = TO_RT_ADDR(inst->data_index);
-    // next pointing to self means not in a thread...
-    data->next = data;
+    data->next = NULL;
     // initialise metadata fields
     meta->rtdata_index = TO_RT_INDEX(data);
     meta->nofp = def->nofp;
     meta->name = def->name;
+    meta->thread_index = BL_META_MAX_INDEX;  // MAX means not in a thread
     // add metadata to instances's function list
     ll_result = ll_insert((void **)(&(inst->function_list)), (void *)meta, function_meta_compare_names);
     if ( ll_result != 0 ) {

@@ -61,10 +61,12 @@ struct bl_function_meta_s *bl_function_find_in_instance(char const *name, struct
  */
 bl_retval_t bl_pin_linkto_signal(struct bl_pin_meta_s const *pin, struct bl_signal_meta_s const *sig);
 
+#ifdef BL_ENABLE_UNLINK
 /**************************************************************
  * Disconnect the specified pin from any signal
  */
 bl_retval_t bl_pin_unlink(struct bl_pin_meta_s const *pin);
+#endif
 
 /**************************************************************
  * Set the specified signal to a value
@@ -79,7 +81,14 @@ bl_retval_t bl_pin_set(struct bl_pin_meta_s const *pin, bl_sig_data_t const *val
 /**************************************************************
  * Add the specified function to the end of the specified thread
  */
-bl_retval_t bl_function_linkto_thread(struct bl_function_meta_s const *funct, struct bl_thread_meta_s const *thread);
+bl_retval_t bl_function_linkto_thread(struct bl_function_meta_s *funct, struct bl_thread_meta_s const *thread);
+
+#ifdef BL_ENABLE_UNLINK
+/**************************************************************
+ * Disconnect the specified function from any thread
+ */
+bl_retval_t bl_function_unlink(struct bl_function_meta_s *funct);
+#endif
 
 /**************************************************************
  * A structure that carries the realtime data for a thread.

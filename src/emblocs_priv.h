@@ -116,26 +116,29 @@ _Static_assert((BL_RT_INDEX_BITS*2+BL_TYPE_BITS+BL_DIR_BITS) <= 32, "pin bitfiel
  * Data structure that describes a function.  Each instance
  * has a list of functions.  These structures live in the
  * metadata pool, but point to data in the realtime pool.
+ * (note: thread_index is set to BL_META_MAX_INDEX if the
+ *  function is NOT in a thread; can't use zero for that
+ *  since if a thread was the first object created its
+ *  index would be zero)
  */
 
  typedef struct bl_function_meta_s {
     struct bl_function_meta_s *next;
     uint32_t rtdata_index  : BL_RT_INDEX_BITS;
     uint32_t nofp          : BL_NOFP_BITS;
+    uint32_t thread_index  : BL_META_INDEX_BITS;
     char const *name;
 } bl_function_meta_t;
 
 /* Verify that bitfields fit in one uint32_t */
-_Static_assert((BL_RT_INDEX_BITS+BL_NOFP_BITS) <= 32, "function bitfields too big");
+_Static_assert((BL_RT_INDEX_BITS+BL_NOFP_BITS+BL_META_INDEX_BITS) <= 32, "function bitfields too big");
 
 /**************************************************************
  * Realtime data for a function.  These structures are created
  * when the instance is created.  Later, when the function is
- * added to a realtime thread, this structure is linked into
- * the list that corresponds to the thread.
- * The 'next' pointer is used to link functions into a thread.
- * If it points to itself, the function is not currently part
- * of a thread.
+ * added to a realtime thread, the 'next' field is used to
+ * link this structure into the list that corresponds to the
+ * thread.
  */
 typedef struct bl_function_rtdata_s {
     bl_rt_function_t *funct;
