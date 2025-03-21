@@ -21,6 +21,21 @@
  * details such as memory addresses, indexes, etc. */
 //#define BL_SHOW_VERBOSE
 
+/* uncomment this define to enable pin and function
+ * 'unlink' commands */
+#define BL_ENABLE_UNLINK
+
+/* uncomment this define to enable pin and function
+ * 'linkto' commands to unlink previously linked
+ * objects; this also defines BL_ENABLE_UNLINK */
+#define BL_ENABLE_IMPLICIT_UNLINK
+
+#ifdef BL_ENABLE_IMPLICIT_UNLINK
+#ifndef BL_ENABLE_UNLINK
+#define BL_ENABLE_UNLINK
+#endif
+#endif
+
 /* size of the memory pool for realtime data */
 #define BL_RT_POOL_SIZE     (2048)
 

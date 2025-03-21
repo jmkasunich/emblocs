@@ -203,6 +203,8 @@ struct bl_instance_meta_s *gpio_setup(char const *instance_name, struct bl_comp_
         }
         active_bit <<= 1;
     }
+    // finally, create the functions; nothing custom here
+    bl_instance_add_functions(meta, comp_def);
     return meta;
 }
 
