@@ -21,7 +21,6 @@ static bl_function_def_t *bl_find_function_def_in_instance_by_address(bl_rt_func
 static int bl_find_pins_linked_to_signal(bl_signal_meta_t const *sig, void (*callback)(bl_instance_meta_t *inst, bl_pin_meta_t *pin));
 //static int bl_find_functions_in_thread(bl_thread_meta_t const *thread, void (*callback)(bl_instance_meta_t *inst, bl_function_def_t *funct));
 
-static void bl_show_pin(bl_pin_meta_t const *pin);
 static void bl_show_all_pins_of_instance(bl_instance_meta_t const *inst);
 static void bl_show_all_functions_of_instance(bl_instance_meta_t const *inst);
 static void bl_show_pin_value(bl_pin_meta_t const *pin);
@@ -82,7 +81,7 @@ void bl_show_all_instances(void)
     printf("Total of %d instances\n", ll_result);
 }
 
-static void bl_show_pin(bl_pin_meta_t const *pin)
+void bl_show_pin(bl_pin_meta_t const *pin)
 {
 #ifdef BL_SHOW_VERBOSE
     bl_sig_data_t *dummy_addr, **ptr_addr, *ptr_val;
@@ -148,19 +147,22 @@ static void bl_show_pin_linkage(bl_pin_meta_t const *pin)
     }
 }
 
-static void bl_show_function(bl_function_meta_t const *funct)
+void bl_show_function(bl_function_meta_t const *funct)
 {
-    bl_function_rtdata_t *rtdata_addr;
+    bl_thread_meta_t *thread;
 
-    rtdata_addr = (bl_function_rtdata_t *)TO_RT_ADDR(funct->rtdata_index);
 #ifdef BL_SHOW_VERBOSE
+    bl_function_rtdata_t *rtdata_addr = (bl_function_rtdata_t *)TO_RT_ADDR(funct->rtdata_index);
     printf(" FUNCT: %20s  %s @ %p, rtdata @ [%3d]=%p\n",
                             funct->name, nofp[funct->nofp], funct,
                             funct->rtdata_index, rtdata_addr);
 #else
     printf("  %-12s ", funct->name);
-    if ( rtdata_addr->next == rtdata_addr ) {
-        printf(" not in a thread");
+    if ( funct->thread_index == BL_META_MAX_INDEX ) {
+        printf(" (no thread)");
+    } else {
+        thread = TO_META_ADDR(funct->thread_index);
+        printf(" %s", thread->name);
     }
     printf("\n");
 #endif
