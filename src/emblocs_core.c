@@ -97,6 +97,13 @@ static int pin_meta_compare_names(void *node1, void *node2)
     return strcmp(np1->name, np2->name);
 }
 
+static int function_meta_compare_names(void *node1, void *node2)
+{
+    bl_function_meta_t  *np1 = node1;
+    bl_function_meta_t  *np2 = node2;
+    return strcmp(np1->name, np2->name);
+}
+
 static int sig_meta_compare_names(void *node1, void *node2)
 {
     bl_signal_meta_t  *np1 = node1;
@@ -188,18 +195,29 @@ bl_retval_t bl_pin_linkto_signal(bl_pin_meta_t const *pin, bl_signal_meta_t cons
     // check types
     if ( pin->data_type != sig->data_type ) {
         #ifdef BL_ERROR_VERBOSE
-        print_strings(7, "type mismatch: ", "pin: '", pin->name, "' vs ", "signal: '", sig->name, "'\n");
+        print_strings(7, "cannot link ", "pin: '", pin->name, "' to ", "signal: '", sig->name, "'; type mismatch\n");
         #endif
         halt_or_return(BL_ERR_TYPE_MISMATCH);
     }
     // convert indexes to addresses
     pin_ptr_addr = TO_RT_ADDR(pin->ptr_index);
     sig_data_addr = TO_RT_ADDR(sig->data_index);
-    // make the link
+    #ifndef BL_ENABLE_IMPLICIT_UNLINK
+    bl_sig_data_t *dummy_addr = TO_RT_ADDR(pin->dummy_index);
+    if ( *pin_ptr_addr != dummy_addr ) {
+        #ifdef BL_ERROR_VERBOSE
+        print_strings(7, "cannot link ",  "pin: '", pin->name, "' to ", "signal: '", sig->name, "'; already linked\n" );
+        #endif
+        halt_or_return(BL_ERR_GENERAL);
+    }
+    #endif
+    // make the link (this automatically undoes any previous linkage)
     *pin_ptr_addr = sig_data_addr;
     return BL_SUCCESS;
+
 }
 
+#ifdef BL_ENABLE_UNLINK
 bl_retval_t bl_pin_unlink(bl_pin_meta_t const *pin)
 {
     bl_sig_data_t *pin_dummy_addr, **pin_ptr_addr, *pin_ptr_value;
@@ -214,6 +232,7 @@ bl_retval_t bl_pin_unlink(bl_pin_meta_t const *pin)
     *pin_ptr_addr = pin_dummy_addr;
     return BL_SUCCESS;
 }
+#endif
 
 bl_retval_t bl_signal_set(bl_signal_meta_t const *sig, bl_sig_data_t const *value)
 {
@@ -273,55 +292,97 @@ struct bl_thread_meta_s *bl_thread_new(char const *name, uint32_t period_ns, bl_
     halt_or_return(NULL);
 }
 
-bl_retval_t bl_thread_add_function(bl_thread_meta_t const *thread, bl_instance_meta_t const *inst, bl_function_def_t const *funct)
+bl_retval_t bl_function_linkto_thread(struct bl_function_meta_s *funct, struct bl_thread_meta_s const *thread)
 {
-    bl_thread_entry_t *new_entry;
+    bl_function_rtdata_t *funct_data;
     bl_thread_data_t *thread_data;
-    bl_thread_entry_t *prev, **prev_ptr;
+    bl_function_rtdata_t *prev, **prev_ptr;
 
     // validate floating point
     if ( ( thread->nofp == BL_NO_FP) && ( funct->nofp == BL_HAS_FP ) ) {
         #ifdef BL_ERROR_VERBOSE
-        print_string("cannot put FP function in non-FP thread\n");
+        print_strings(7, "cannot link ", "function: '", funct->name, "' to ", "thread: '", thread->name, "'; type mismatch\n");
         #endif
         halt_or_return(BL_ERR_TYPE_MISMATCH);
     }
-    // allocate memory for thread entry
-    new_entry = alloc_from_rt_pool(sizeof(bl_thread_entry_t));
-    #ifndef BL_ERROR_HALT
-    if ( new_entry == NULL ) {
-         return BL_ERR_NOMEM;
+    if ( funct->thread_index != BL_META_MAX_INDEX ) {
+        #ifdef BL_ENABLE_IMPLICIT_UNLINK
+        bl_function_unlink(funct);
+        #else
+        #ifdef BL_ERROR_VERBOSE
+        print_strings(7, "cannot link ",  "function: '", funct->name, "' to ", "thread: '", thread->name, "'; already linked\n" );
+        #endif
+        halt_or_return(BL_ERR_GENERAL);
+        #endif
     }
-    #endif
-    // set entry's fields
-    new_entry->funct = funct->fp;
-    new_entry->instance_data = TO_RT_ADDR(inst->data_index);
-    // find end of thread
+    // link function metadata back to the thread
+    funct->thread_index = TO_META_INDEX(thread);
+    // get pointers to realtime data
+    funct_data = TO_RT_ADDR(funct->rtdata_index);
     thread_data = TO_RT_ADDR(thread->data_index);
+    // find end of thread
     prev_ptr = &(thread_data->start);
     prev = *prev_ptr;
     while ( prev != NULL ) {
         prev_ptr = &(prev->next);
         prev = *prev_ptr;
     }
-    // append new entry
-    new_entry->next = NULL;
-    *prev_ptr = new_entry;
+    // append function RT data to thread
+    funct_data->next = NULL;
+    *prev_ptr = funct_data;
     return BL_SUCCESS;
 }
 
+#ifdef  BL_ENABLE_UNLINK
+bl_retval_t bl_function_unlink(struct bl_function_meta_s *funct)
+{
+    bl_thread_meta_t *thread;
+    bl_function_rtdata_t *funct_data;
+    bl_thread_data_t *thread_data;
+    bl_function_rtdata_t *prev, **prev_ptr;
+
+    if ( funct->thread_index == BL_META_MAX_INDEX ) {
+        // function is not in a thread; done
+        return BL_SUCCESS;
+    }
+    thread = TO_META_ADDR(funct->thread_index);
+    // get pointers to realtime data
+    funct_data = TO_RT_ADDR(funct->rtdata_index);
+    thread_data = TO_RT_ADDR(thread->data_index);
+    // traverse thread list
+    prev_ptr = &(thread_data->start);
+    prev = *prev_ptr;
+    while ( prev != NULL ) {
+        if ( prev == funct_data ) {
+            // found it, unlink
+            *prev_ptr = funct_data->next;
+            // reset metadata to 'unlinked'
+            funct->thread_index = BL_META_MAX_INDEX;
+            return BL_SUCCESS;
+        }
+        prev_ptr = &(prev->next);
+        prev = *prev_ptr;
+    }
+    // not found in thread
+    #ifdef BL_ERROR_VERBOSE
+    print_string("data corruption\n");
+    #endif
+    halt();
+}
+#endif
 
 void bl_thread_run(struct bl_thread_data_s const *thread, uint32_t period_ns)
 {
-    bl_thread_entry_t *entry;
+    bl_function_rtdata_t *function;
 
     if ( period_ns == 0 ) {
         period_ns = thread->period_ns;
     }
-    entry = thread->start;
-    while ( entry != NULL ) {
-        (*(entry->funct))(entry->instance_data, period_ns);
-        entry = entry->next;
+    function = thread->start;
+    while ( function != NULL ) {
+        // call the function
+        (*(function->funct))(function->instance_data, period_ns);
+        function = function->next;
     }
 }
 
@@ -356,6 +417,13 @@ static int thread_meta_compare_name_key(void *node, void *key)
 static int pin_meta_compare_name_key(void *node, void *key)
 {
     bl_pin_meta_t *np = node;
+    char *kp = key;
+    return strcmp(np->name, kp);
+}
+
+static int function_meta_compare_name_key(void *node, void *key)
+{
+    bl_function_meta_t *np = node;
     char *kp = key;
     return strcmp(np->name, kp);
 }
@@ -455,22 +523,36 @@ struct bl_pin_meta_s *bl_pin_find_in_instance(char const *name, struct bl_instan
     return retval;
 }
 
-struct bl_function_def_s *bl_function_find_in_instance(char const *name, struct bl_instance_meta_s *inst)
+struct bl_function_meta_s *bl_function_find_in_instance(char const *name, struct bl_instance_meta_s *inst)
 {
-    bl_comp_def_t const *comp;
-    bl_function_def_t const *fdef;
-
-    comp = inst->comp_def;
-    for ( int n = 0 ; n < comp->function_count ; n++ ) {
-        fdef = &(comp->function_defs[n]);
-        if ( strcmp(name, fdef->name ) == 0 ) {
-            return (bl_function_def_t *)fdef;
-        }
-    }
+    bl_function_meta_t *retval;
     #ifdef BL_ERROR_VERBOSE
-    print_strings(7, "not found: ", "function: '", name, "' in ", "instance: '", inst->name, "'\n");
+    char const *instname;
     #endif
-    halt_or_return(NULL);
+
+    if ( ( inst != NULL ) && ( name != NULL ) ) {
+        retval = ll_find((void **)(&(inst->function_list)), (void *)(name), function_meta_compare_name_key);
+        #ifdef BL_ERROR_VERBOSE
+        instname = inst->name;
+        #endif
+    } else {
+        retval = NULL;
+        #ifdef BL_ERROR_VERBOSE
+        if ( inst == NULL ) {
+            instname = "<NULL>";
+        }
+        if ( name == NULL ) {
+            name = "<NULL>";
+        }
+        #endif
+    }
+    if ( retval == NULL ) {
+        #ifdef BL_ERROR_VERBOSE
+        print_strings(7, "not found: ", "function: '", name, "' in ", "instance: '", instname, "'\n");
+        #endif
+        halt_or_return(NULL);
+    }
+    return retval;
 }
 
 struct bl_instance_meta_s *bl_default_setup(char const *name, bl_comp_def_t const *comp_def)
@@ -484,14 +566,18 @@ struct bl_instance_meta_s *bl_default_setup(char const *name, bl_comp_def_t cons
         goto error;
     }
     #endif
-    for ( int i = 0 ; i < comp_def->pin_count ; i++ ) {
-        retval = bl_instance_add_pin(meta, &(comp_def->pin_defs[i]));
-        #ifndef BL_ERROR_HALT
-        if ( retval != BL_SUCCESS ) {
-            goto error;
-        }
-        #endif
+    retval = bl_instance_add_pins(meta, comp_def);
+    #ifndef BL_ERROR_HALT
+    if ( retval != BL_SUCCESS ) {
+        goto error;
     }
+    #endif
+    retval = bl_instance_add_functions(meta, comp_def);
+    #ifndef BL_ERROR_HALT
+    if ( retval != BL_SUCCESS ) {
+        goto error;
+    }
+    #endif
     return meta;
 
     #ifndef BL_ERROR_HALT
@@ -598,5 +684,82 @@ bl_retval_t bl_instance_add_pin(struct bl_instance_meta_s *inst, bl_pin_def_t co
     print_strings(6, "could not create ", "pin: '", inst->name, ".", def->name, "'\n");
     #endif
     halt_or_return(BL_ERR_GENERAL);
+}
+
+bl_retval_t bl_instance_add_pins(struct bl_instance_meta_s *inst, bl_comp_def_t const *def)
+{
+    bl_retval_t retval;
+    int errors = 0;
+
+    for ( int i = 0 ; i < def->pin_count ; i++ ) {
+        retval = bl_instance_add_pin(inst, &(def->pin_defs[i]));
+        if ( retval != BL_SUCCESS ) {
+            errors++;
+        }
+    }
+    if ( errors > 0 ) {
+        return BL_ERR_GENERAL;
+    } else {
+        return BL_SUCCESS;
+    }
+}
+
+bl_retval_t bl_instance_add_function(struct bl_instance_meta_s *inst, bl_function_def_t const *def)
+{
+    bl_function_meta_t *meta;
+    bl_function_rtdata_t *data;
+    int ll_result;
+
+    // allocate memory for metadata
+    meta = alloc_from_meta_pool(sizeof(bl_function_meta_t));
+    // allocate memory for realtime data
+    data = alloc_from_rt_pool(sizeof(bl_function_rtdata_t));
+    #ifndef BL_ERROR_HALT
+    if ( ( meta == NULL ) || ( data == NULL ) ) {
+        goto error;
+    }
+    #endif
+    // initialize realtime data fields
+    data->funct = def->fp;
+    data->instance_data = TO_RT_ADDR(inst->data_index);
+    data->next = NULL;
+    // initialise metadata fields
+    meta->rtdata_index = TO_RT_INDEX(data);
+    meta->nofp = def->nofp;
+    meta->name = def->name;
+    meta->thread_index = BL_META_MAX_INDEX;  // MAX means not in a thread
+    // add metadata to instances's function list
+    ll_result = ll_insert((void **)(&(inst->function_list)), (void *)meta, function_meta_compare_names);
+    if ( ll_result != 0 ) {
+        #ifdef BL_ERROR_VERBOSE
+        print_string("duplicate name\n");
+        #endif
+        goto error;
+    }
+    return BL_SUCCESS;
+
+    error:
+    #ifdef BL_ERROR_VERBOSE
+    print_strings(6, "could not create ", "function: '", inst->name, ".", def->name, "'\n");
+    #endif
+    halt_or_return(BL_ERR_GENERAL);
+}
+
+bl_retval_t bl_instance_add_functions(struct bl_instance_meta_s *inst, bl_comp_def_t const *def)
+{
+    bl_retval_t retval;
+    int errors = 0;
+
+    for ( int i = 0 ; i < def->function_count ; i++ ) {
+        retval = bl_instance_add_function(inst, &(def->function_defs[i]));
+        if ( retval != BL_SUCCESS ) {
+            errors++;
+        }
+    }
+    if ( errors > 0 ) {
+        return BL_ERR_GENERAL;
+    } else {
+        return BL_SUCCESS;
+    }
 }
 

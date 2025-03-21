@@ -7,8 +7,6 @@
 /**************************************************************
  * Helper functions for finding things in the metadata
  *
- * These functions are implemented in emblocs_priv.c
- *
  * The first group finds the single matching item.
  * The second group finds the zero or more matching items,
  * calls a callback functions for each match (if 'callback'
@@ -23,14 +21,14 @@ static bl_function_def_t *bl_find_function_def_in_instance_by_address(bl_rt_func
 static int bl_find_pins_linked_to_signal(bl_signal_meta_t const *sig, void (*callback)(bl_instance_meta_t *inst, bl_pin_meta_t *pin));
 //static int bl_find_functions_in_thread(bl_thread_meta_t const *thread, void (*callback)(bl_instance_meta_t *inst, bl_function_def_t *funct));
 
-static void bl_show_pin(bl_pin_meta_t const *pin);
 static void bl_show_all_pins_of_instance(bl_instance_meta_t const *inst);
+static void bl_show_all_functions_of_instance(bl_instance_meta_t const *inst);
 static void bl_show_pin_value(bl_pin_meta_t const *pin);
 static void bl_show_pin_linkage(bl_pin_meta_t const *pin);
 static void bl_show_signal_value(bl_signal_meta_t const *sig);
 static void bl_show_signal_linkage(bl_signal_meta_t const *sig);
 static void bl_show_sig_data_t_value(bl_sig_data_t const *data, bl_type_t type);
-static void bl_show_thread_entry(bl_thread_entry_t const *entry);
+static void bl_show_function_rtdata(bl_function_rtdata_t const *funct);
 
 
 static char const * const types[] = {
@@ -66,6 +64,7 @@ void bl_show_instance(struct bl_instance_meta_s const *inst)
     printf("instance '%s' of component '%s'\n", inst->name, inst->comp_def->name);
 #endif
     bl_show_all_pins_of_instance(inst);
+    bl_show_all_functions_of_instance(inst);
 }
 
 static void instance_meta_print_node(void *node)
@@ -82,7 +81,7 @@ void bl_show_all_instances(void)
     printf("Total of %d instances\n", ll_result);
 }
 
-static void bl_show_pin(bl_pin_meta_t const *pin)
+void bl_show_pin(bl_pin_meta_t const *pin)
 {
 #ifdef BL_SHOW_VERBOSE
     bl_sig_data_t *dummy_addr, **ptr_addr, *ptr_val;
@@ -146,6 +145,40 @@ static void bl_show_pin_linkage(bl_pin_meta_t const *pin)
         sig = bl_find_signal_by_index(TO_RT_INDEX(ptr_val));
         printf("%s %-12s", dir, sig->name);
     }
+}
+
+void bl_show_function(bl_function_meta_t const *funct)
+{
+    bl_thread_meta_t *thread;
+
+#ifdef BL_SHOW_VERBOSE
+    bl_function_rtdata_t *rtdata_addr = (bl_function_rtdata_t *)TO_RT_ADDR(funct->rtdata_index);
+    printf(" FUNCT: %20s  %s @ %p, rtdata @ [%3d]=%p\n",
+                            funct->name, nofp[funct->nofp], funct,
+                            funct->rtdata_index, rtdata_addr);
+#else
+    printf("  %-12s ", funct->name);
+    if ( funct->thread_index == BL_META_MAX_INDEX ) {
+        printf(" (no thread)");
+    } else {
+        thread = TO_META_ADDR(funct->thread_index);
+        printf(" %s", thread->name);
+    }
+    printf("\n");
+#endif
+}
+
+static void function_meta_print_node(void *node)
+{
+    bl_show_function((bl_function_meta_t *)node);
+}
+
+static void bl_show_all_functions_of_instance(bl_instance_meta_t const *inst)
+{
+    int ll_result;
+
+    ll_result = ll_traverse((void **)(&inst->function_list), function_meta_print_node);
+    printf("    %d functions\n", ll_result);
 }
 
 void bl_show_signal(struct bl_signal_meta_s const *sig)
@@ -226,16 +259,16 @@ void bl_show_all_signals(void)
     printf("Total of %d signals\n", ll_result);
 }
 
-static void bl_show_thread_entry(bl_thread_entry_t const *entry)
+static void bl_show_function_rtdata(bl_function_rtdata_t const *rtdata)
 {
 #ifdef BL_SHOW_VERBOSE
-    printf("  thread_entry @[%d]=%p, calls %p, inst data @%p\n", TO_RT_INDEX(entry), entry, entry->funct, entry->instance_data);
+    printf("  function_rtdata @[%d]=%p, calls %p, inst data @%p\n", TO_RT_INDEX(rtdata), rtdata, rtdata->funct, rtdata->instance_data);
 #else
     bl_instance_meta_t *inst;
     bl_function_def_t *funct;
 
-    inst = bl_find_instance_by_data_addr(entry->instance_data);
-    funct = bl_find_function_def_in_instance_by_address(entry->funct, inst);
+    inst = bl_find_instance_by_data_addr(rtdata->instance_data);
+    funct = bl_find_function_def_in_instance_by_address(rtdata->funct, inst);
     printf("     %s.%s\n", inst->name, funct->name);
 #endif
 }
@@ -244,33 +277,33 @@ void bl_show_thread(struct bl_thread_meta_s const *thread)
 {
 #ifdef BL_SHOW_VERBOSE
     bl_thread_data_t *data;
-    bl_thread_entry_t *entry;
+    bl_function_rtdata_t *funct_data;
 
     data = TO_RT_ADDR(thread->data_index);
-    entry = data->start;
+    funct_data = data->start;
     printf(" thread '%s' @[%d]=%p, no_fp = %d, period_ns = %d, RT data at [%d]=%p\n", thread->name, 
                                 TO_RT_INDEX(thread), thread, thread->nofp, data->period_ns,
                                 thread->data_index, data);
-    while ( entry != NULL ) {
-        bl_show_thread_entry(entry);
-        entry = entry->next;
+    while ( funct_data != NULL ) {
+        bl_show_function_rtdata(funct_data);
+        funct_data = funct_data->next;
     }
 #else
     bl_thread_data_t *data;
-    bl_thread_entry_t *entry;
+    bl_function_rtdata_t *funct_data;
     char *fp_str;
 
     data = TO_RT_ADDR(thread->data_index);
-    entry = data->start;
+    funct_data = data->start;
     if ( thread->nofp ) {
         fp_str = "no fp ";
     } else {
         fp_str = "has fp";
     }
     printf("  %-12s = %s : %10d nsec\n", thread->name, fp_str, data->period_ns);
-    while ( entry != NULL ) {
-        bl_show_thread_entry(entry);
-        entry = entry->next;
+    while ( funct_data != NULL ) {
+        bl_show_function_rtdata(funct_data);
+        funct_data = funct_data->next;
     }
 #endif
 }
