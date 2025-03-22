@@ -199,6 +199,13 @@ extern bl_thread_meta_t *thread_root;
  * private at some point.                                     *
  **************************************************************/
 
+/* callback functions for linked lists */
+int bl_instance_meta_compare_name_key(void *node, void *key);
+int bl_sig_meta_compare_name_key(void *node, void *key);
+int bl_thread_meta_compare_name_key(void *node, void *key);
+int bl_pin_meta_compare_name_key(void *node, void *key);
+int bl_function_meta_compare_name_key(void *node, void *key);
+
 /**************************************************************
  * Helper function for bl_instance_new(); creates an instance
  * of a component using only the component definition.

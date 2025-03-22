@@ -223,7 +223,7 @@ bl_retval_t bl_init_threads(char const * const threads[]);
  * This function is defined in emblocs_parse.c                *
  *                                                            *
  **************************************************************/
-bl_retval_t bl_parse(char const * const tokens[]);
+bl_retval_t bl_parse_array(char const * const tokens[], uint32_t count);
 
 
 #endif // EMBLOCS_API_H

@@ -42,4 +42,7 @@
 /* size of the memory pool for object metadata */
 #define BL_META_POOL_SIZE   (4096)
 
+/* maximum length of object names */
+#define BL_MAX_NAME_LEN     (40)
+
 #endif // EMBLOCS_CONFIG_H

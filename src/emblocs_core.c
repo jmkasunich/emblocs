@@ -393,35 +393,35 @@ struct bl_thread_data_s *bl_thread_get_data(struct bl_thread_meta_s *thread)
 
 
 /* linked list callback functions */
-static int instance_meta_compare_name_key(void *node, void *key)
+int bl_instance_meta_compare_name_key(void *node, void *key)
 {
     bl_instance_meta_t *np = node;
     char *kp = key;
     return strcmp(np->name, kp);
 }
 
-static int sig_meta_compare_name_key(void *node, void *key)
+int bl_sig_meta_compare_name_key(void *node, void *key)
 {
     bl_signal_meta_t *np = node;
     char *kp = key;
     return strcmp(np->name, kp);
 }
 
-static int thread_meta_compare_name_key(void *node, void *key)
+int bl_thread_meta_compare_name_key(void *node, void *key)
 {
     bl_thread_meta_t *np = node;
     char *kp = key;
     return strcmp(np->name, kp);
 }
 
-static int pin_meta_compare_name_key(void *node, void *key)
+int bl_pin_meta_compare_name_key(void *node, void *key)
 {
     bl_pin_meta_t *np = node;
     char *kp = key;
     return strcmp(np->name, kp);
 }
 
-static int function_meta_compare_name_key(void *node, void *key)
+int bl_function_meta_compare_name_key(void *node, void *key)
 {
     bl_function_meta_t *np = node;
     char *kp = key;
@@ -433,7 +433,7 @@ struct bl_instance_meta_s *bl_instance_find(char const *name)
     bl_instance_meta_t *retval;
 
     if ( name != NULL ) {
-        retval = ll_find((void **)(&(instance_root)), (void *)(name), instance_meta_compare_name_key);
+        retval = ll_find((void **)(&(instance_root)), (void *)(name), bl_instance_meta_compare_name_key);
     } else {
         retval = NULL;
         #ifdef BL_ERROR_VERBOSE
@@ -454,7 +454,7 @@ struct bl_signal_meta_s *bl_signal_find(char const *name)
     bl_signal_meta_t *retval;
 
     if ( name != NULL ) {
-        retval = ll_find((void **)(&(signal_root)), (void *)(name), sig_meta_compare_name_key);
+        retval = ll_find((void **)(&(signal_root)), (void *)(name), bl_sig_meta_compare_name_key);
     } else {
         retval = NULL;
         #ifdef BL_ERROR_VERBOSE
@@ -475,7 +475,7 @@ struct bl_thread_meta_s *bl_thread_find(char const *name)
     bl_thread_meta_t *retval;
 
     if ( name != NULL ) {
-        retval = ll_find((void **)(&(thread_root)), (void *)(name), thread_meta_compare_name_key);
+        retval = ll_find((void **)(&(thread_root)), (void *)(name), bl_thread_meta_compare_name_key);
     } else {
         retval = NULL;
         #ifdef BL_ERROR_VERBOSE
@@ -499,7 +499,7 @@ struct bl_pin_meta_s *bl_pin_find_in_instance(char const *name, struct bl_instan
     #endif
 
     if ( ( inst != NULL ) && ( name != NULL ) ) {
-        retval = ll_find((void **)(&(inst->pin_list)), (void *)(name), pin_meta_compare_name_key);
+        retval = ll_find((void **)(&(inst->pin_list)), (void *)(name), bl_pin_meta_compare_name_key);
         #ifdef BL_ERROR_VERBOSE
         instname = inst->name;
         #endif
@@ -531,7 +531,7 @@ struct bl_function_meta_s *bl_function_find_in_instance(char const *name, struct
     #endif
 
     if ( ( inst != NULL ) && ( name != NULL ) ) {
-        retval = ll_find((void **)(&(inst->function_list)), (void *)(name), function_meta_compare_name_key);
+        retval = ll_find((void **)(&(inst->function_list)), (void *)(name), bl_function_meta_compare_name_key);
         #ifdef BL_ERROR_VERBOSE
         instname = inst->name;
         #endif
