@@ -79,6 +79,8 @@ static bool parse_value_bit  (char const * token, bl_sig_data_t *dest);
 static bool parse_value_float(char const * token, bl_sig_data_t *dest);
 static bool parse_value_s32  (char const * token, bl_sig_data_t *dest);
 static bool parse_value_u32  (char const * token, bl_sig_data_t *dest);
+static bool parse_u32_with_decimal_pt(char const **token, uint32_t *dest, int32_t *shift_digits);
+
 
 /**************************************************************
  * These functions support parsing an array of tokens to build
@@ -106,6 +108,7 @@ static bl_retval_t parse_token(char const *token)
 static uint32_t classify_token(char const * const token)
 {
     uint32_t retval;
+    bl_sig_data_t value;
 
     if ( token == NULL ) {
         return TT_NULL;
@@ -130,17 +133,22 @@ static uint32_t classify_token(char const * const token)
         return retval;
     }
     retval = 0;
-    if ( parse_value_bit(token, NULL) ) {
+    printf("Parsing '%s'\n", token);
+    if ( parse_value_bit(token, &value) ) {
         retval |= TT_VALUE_BIT;
+        printf("  bit   :%d\n", value.b);
     }
-    if ( parse_value_float(token, NULL) ) {
+    if ( parse_value_float(token, &value) ) {
         retval |= TT_VALUE_FLOAT;
+        printf("  float :%f\n", value.f);
     }
-    if ( parse_value_s32(token, NULL) ) {
+    if ( parse_value_s32(token, &value) ) {
         retval |= TT_VALUE_S32;
+        printf("  s32   :%10d = %08x\n", value.s, value.s);
     }
-    if ( parse_value_u32(token, NULL) ) {
+    if ( parse_value_u32(token, &value) ) {
         retval |= TT_VALUE_U32;
+        printf("  u32   :%10u = %08x\n", value.u, value.u);
     }
     if ( retval != 0 ) {
         return retval;
@@ -195,15 +203,64 @@ static bool parse_value_bit  (char const * token, bl_sig_data_t *dest)
 
 static bool parse_value_float(char const * token, bl_sig_data_t *dest)
 {
-    return false;
+    bool is_neg;
+    char c;
+    uint32_t uval;
+    int32_t shift;
+    bl_sig_data_t exp_dest;
+
+    is_neg = 0;
+    c = *token;
+    if ( c == '-' ) {
+        is_neg = 1;
+        token++;
+    } else if ( c == '+' ) {
+        token++;
+    }
+    if ( ! parse_u32_with_decimal_pt( &token, &uval, &shift) ) {
+        return false;
+    }
+    c = *token++;
+    if ( ( c == 'e' ) || ( c == 'E' ) ) {
+        if ( ! parse_value_s32 (token, &exp_dest) ) {
+            return false;
+        }
+        shift = shift + exp_dest.s;
+    }
+    // shift here
 }
 
 static bool parse_value_s32  (char const * token, bl_sig_data_t *dest)
 {
+    bool is_neg;
+    char c;
+
+    is_neg = 0;
+    c = *token;
+    if ( c == '-' ) {
+        is_neg = 1;
+        token++;
+    } else if ( c == '+' ) {
+        token++;
+    }
+    if ( ! parse_value_u32(token, dest) ) {
+        return false;
+    }
+    if ( is_neg ) {
+        if ( dest->u <= 2147483648 ) {
+            dest->s = -dest->u;
+            return true;
+        }
+    } else {
+        if ( dest->u <= 2147483647 ) {
+            dest->s = dest->u;
+            return true;
+        }
+    }
     return false;
 }
 
-static bool parse_value_u32  (char const * token, bl_sig_data_t *dest)
+static bool parse_value_u32(char const * token, bl_sig_data_t *dest)
 {
     char c;
     uint32_t result;
@@ -236,3 +293,146 @@ static bool parse_value_u32  (char const * token, bl_sig_data_t *dest)
     }
     return true;
 }
+
+
+#ifdef USE_ONE_U32_FUNCT
+static bool parse_u32_with_decimal_pt_generic(char const **token, uint32_t *dest, int32_t *shift_digits)
+{
+    char const *cp;
+    char c;
+    bool dp_found, reached_max;
+    int shift;
+    uint32_t result;
+    uint32_t limit;
+
+    result = 0;
+    shift = 0;
+    dp_found = 0;
+    reached_max = 0;
+    cp = *token;
+    c = *(cp++);
+    do {
+        if ( ( c < '0' ) || ( c > '9' ) ) {
+            if ( ( c != '.' ) || ( shift_digits == NULL ) ) {
+                return false;
+            } else {
+                if ( dp_found ) {
+                    return false;
+                } else {
+                    dp_found = 1;
+                    c = *(cp++);
+                    continue;
+                }
+            }
+        }
+        // largest number that can be multiplied by 10 and not overflow
+        limit = 429496729;
+        if ( c > '5' ) {
+            // can't let the subsequent add overflow either
+            limit--;
+        }
+        if ( result > limit ) {
+            // adding this digit would overflow
+            if ( shift_digits == NULL ) {
+                return false;
+            } else {
+                if ( ! reached_max ) {
+                    // first overflow digit, round it
+                    if ( c >= '5' ) {
+                        result++;
+                    }
+                    reached_max = 1;
+                }
+                if ( ! dp_found ) {
+                    shift++;
+                }
+            }
+        } else {
+            // add this digit
+            result *= 10;
+            result += c - '0';
+            if ( dp_found ) {
+                shift--;
+            }
+        }
+        // next digit
+        c = *(cp++);
+    } while ( ( c != '\0' ) && ( c != 'e' ) && ( c != 'E' ) );
+    if ( ( shift_digits == NULL ) && ( c != '\0' ) ) {
+        return false;
+    }
+    // update pointer to last character used
+    *token = --cp;
+    // save results
+    if ( dest != NULL ) {
+        *dest = result;
+    }
+    if ( shift_digits != NULL ) {
+        *shift_digits = shift;
+    }
+    return true;
+}
+#endif
+
+static bool parse_u32_with_decimal_pt(char const **token, uint32_t *dest, int32_t *shift_digits)
+{
+    char const *cp;
+    char c;
+    bool dp_found = 0;
+    bool reached_max = 0;
+    int32_t shift = 0;
+    uint32_t result = 0;
+    uint32_t limit;
+
+    cp = *token;
+    c = *(cp++);
+    do {
+        if ( ( c < '0' ) || ( c > '9' ) ) {
+            if ( ( c == '.' ) && ( ! dp_found ) ) {
+                dp_found = 1;
+                c = *(cp++);
+                continue;
+            }
+            return false;
+        }
+        // largest number that can be multiplied by 10 and not overflow
+        limit = 429496729;
+        if ( c > '5' ) {
+            // can't let the subsequent add overflow either
+            limit--;
+        }
+        if ( result > limit ) {
+            // adding this digit would overflow
+            if ( ! reached_max ) {
+                // first overflow digit, round it
+                if ( c >= '5' ) {
+                    result++;
+                }
+                reached_max = 1;
+            }
+            if ( ! dp_found ) {
+                shift++;
+            }
+        } else {
+            // add this digit
+            result *= 10;
+            result += c - '0';
+            if ( dp_found ) {
+                shift--;
+            }
+        }
+        // next digit
+        c = *(cp++);
+    } while ( ( c != '\0' ) && ( c != 'e' ) && ( c != 'E' ) );
+    // update pointer to last character used
+    *token = --cp;
+    // save results
+    if ( dest != NULL ) {
+        *dest = result;
+    }
+    if ( shift_digits != NULL ) {
+        *shift_digits = shift;
+    }
+    return true;
+}
+
