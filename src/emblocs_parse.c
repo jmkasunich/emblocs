@@ -3,6 +3,7 @@
 #include "printing.h"
 #include "linked_list.h"
 
+#define abs(x)  ( (x) > 0 ? (x) : -(x) )
 #define halt()  do {} while (1)
 
 typedef enum {
@@ -227,7 +228,38 @@ static bool parse_value_float(char const * token, bl_sig_data_t *dest)
         }
         shift = shift + exp_dest.s;
     }
-    // shift here
+    uint32_t shift_abs = abs(shift);
+    if ( shift_abs > 60 ) {
+        return false;
+    }
+    // compute the power of 10 for shift
+    double a = 10;
+    double pow = 1;
+    while ( shift_abs ) {
+        if ( shift_abs & 1 ) {
+            pow *= a;
+        }
+        a *= a;
+        shift_abs >>= 1;
+    }
+    // perform the shift
+    double result = uval;
+    if ( shift < 0 ) {
+        result /= pow;
+    } else {
+        result *= pow;
+    }
+    float fresult = (float)result;
+    // if double value was too high, float value
+    //   becomes +infinity = 0x7F800000
+    if ( *(uint32_t *)(&fresult) == 0x7F800000 ) {
+        return false;
+    }
+    if ( is_neg ) {
+        fresult = -fresult;
+    }
+    dest->f = fresult;
+    return true;
 }
 
 static bool parse_value_s32  (char const * token, bl_sig_data_t *dest)
