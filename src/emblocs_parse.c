@@ -6,6 +6,11 @@
 #define abs(x)  ( (x) > 0 ? (x) : -(x) )
 #define halt()  do {} while (1)
 
+static bool str_to_bool(char const * str, bool *dest);
+static bool str_to_s32(char const *str, int32_t *dest);
+static bool str_to_u32(char const *str, uint32_t *dest);
+static bool str_to_float(char const *str, float *dest);
+
 typedef enum {
     KW_INSTANCE     = 0x0001,
     KW_PIN          = 0x0002,
@@ -80,8 +85,6 @@ static bool parse_value_bit  (char const * token, bl_sig_data_t *dest);
 static bool parse_value_float(char const * token, bl_sig_data_t *dest);
 static bool parse_value_s32  (char const * token, bl_sig_data_t *dest);
 static bool parse_value_u32  (char const * token, bl_sig_data_t *dest);
-static bool parse_u32_with_decimal_pt(char const **token, uint32_t *dest, int32_t *shift_digits);
-
 
 /**************************************************************
  * These functions support parsing an array of tokens to build
@@ -187,119 +190,44 @@ static bool is_name(char const * token)
 
 static bool parse_value_bit  (char const * token, bl_sig_data_t *dest)
 {
-    if ( token == NULL ) {
-        return false;
-    }
-    if ( ( token[0] < '0' ) || ( token[0] > '1' ) ) {
-        return false;
-    }
-    if ( token[1] != '\0' ) {
-        return false;
-    }
-    if ( dest != NULL ) {
-        dest->b = token[0] - '0';
-    }
-    return true;
+    return str_to_bool(token, &dest->b);
 }
 
 static bool parse_value_float(char const * token, bl_sig_data_t *dest)
 {
-    bool is_neg;
-    char c;
-    uint32_t uval;
-    int32_t shift;
-    bl_sig_data_t exp_dest;
-
-    is_neg = 0;
-    c = *token;
-    if ( c == '-' ) {
-        is_neg = 1;
-        token++;
-    } else if ( c == '+' ) {
-        token++;
-    }
-    if ( ! parse_u32_with_decimal_pt( &token, &uval, &shift) ) {
-        return false;
-    }
-    c = *token++;
-    if ( ( c == 'e' ) || ( c == 'E' ) ) {
-        if ( ! parse_value_s32 (token, &exp_dest) ) {
-            return false;
-        }
-        shift = shift + exp_dest.s;
-    }
-    uint32_t shift_abs = abs(shift);
-    if ( shift_abs > 60 ) {
-        return false;
-    }
-    // compute the power of 10 for shift
-    double a = 10;
-    double pow = 1;
-    while ( shift_abs ) {
-        if ( shift_abs & 1 ) {
-            pow *= a;
-        }
-        a *= a;
-        shift_abs >>= 1;
-    }
-    // perform the shift
-    double result = uval;
-    if ( shift < 0 ) {
-        result /= pow;
-    } else {
-        result *= pow;
-    }
-    float fresult = (float)result;
-    // if double value was too high, float value
-    //   becomes +infinity = 0x7F800000
-    if ( *(uint32_t *)(&fresult) == 0x7F800000 ) {
-        return false;
-    }
-    if ( is_neg ) {
-        fresult = -fresult;
-    }
-    dest->f = fresult;
-    return true;
+    return str_to_float(token, &dest->f);
 }
 
-static bool parse_value_s32  (char const * token, bl_sig_data_t *dest)
+static bool parse_value_s32 (char const * token, bl_sig_data_t *dest)
 {
-    bool is_neg;
-    char c;
-
-    is_neg = 0;
-    c = *token;
-    if ( c == '-' ) {
-        is_neg = 1;
-        token++;
-    } else if ( c == '+' ) {
-        token++;
-    }
-    if ( ! parse_value_u32(token, dest) ) {
-        return false;
-    }
-    if ( is_neg ) {
-        if ( dest->u <= 2147483648 ) {
-            dest->s = -dest->u;
-            return true;
-        }
-    } else {
-        if ( dest->u <= 2147483647 ) {
-            dest->s = dest->u;
-            return true;
-        }
-    }
-    return false;
+    return str_to_s32(token, &dest->s);
 }
 
 static bool parse_value_u32(char const * token, bl_sig_data_t *dest)
 {
-    char c;
-    uint32_t result;
+    return str_to_u32(token, &dest->u);
+}
+
+
+static bool str_to_bool(char const * str, bool *dest)
+{
+    if ( ( str == NULL )  ||
+         ( str[0] < '0' ) || ( str[0] > '1' ) ||
+         ( str[1] != '\0' ) ) {
+        return false;
+    }
+    if ( dest != NULL ) {
+        *dest = str[0] - '0';
+    }
+    return true;
+}
+
+static bool str_to_u32(char const *str, uint32_t *dest)
+{
     uint32_t limit;
 
-    result = 0;
-    c = *(token++);
+    uint32_t result = 0;
+    char c = *(str++);
     do {
         if ( ( c < '0' ) || ( c > '9' ) ) {
             return false;
@@ -311,159 +239,132 @@ static bool parse_value_u32(char const * token, bl_sig_data_t *dest)
             limit--;
         }
         if ( result > limit ) {
-            // adding this digit would overflow; too many digits in token
+            // adding this digit would overflow; too many digits in string
             return false;
         }
         // add this digit
         result *= 10;
         result += c - '0';
         // next digit
-        c = *(token++);
+        c = *(str++);
     } while ( c != '\0' );
-    if ( dest != NULL ) {
-        dest->u = result;
-    }
-    return true;
-}
-
-
-#ifdef USE_ONE_U32_FUNCT
-static bool parse_u32_with_decimal_pt_generic(char const **token, uint32_t *dest, int32_t *shift_digits)
-{
-    char const *cp;
-    char c;
-    bool dp_found, reached_max;
-    int shift;
-    uint32_t result;
-    uint32_t limit;
-
-    result = 0;
-    shift = 0;
-    dp_found = 0;
-    reached_max = 0;
-    cp = *token;
-    c = *(cp++);
-    do {
-        if ( ( c < '0' ) || ( c > '9' ) ) {
-            if ( ( c != '.' ) || ( shift_digits == NULL ) ) {
-                return false;
-            } else {
-                if ( dp_found ) {
-                    return false;
-                } else {
-                    dp_found = 1;
-                    c = *(cp++);
-                    continue;
-                }
-            }
-        }
-        // largest number that can be multiplied by 10 and not overflow
-        limit = 429496729;
-        if ( c > '5' ) {
-            // can't let the subsequent add overflow either
-            limit--;
-        }
-        if ( result > limit ) {
-            // adding this digit would overflow
-            if ( shift_digits == NULL ) {
-                return false;
-            } else {
-                if ( ! reached_max ) {
-                    // first overflow digit, round it
-                    if ( c >= '5' ) {
-                        result++;
-                    }
-                    reached_max = 1;
-                }
-                if ( ! dp_found ) {
-                    shift++;
-                }
-            }
-        } else {
-            // add this digit
-            result *= 10;
-            result += c - '0';
-            if ( dp_found ) {
-                shift--;
-            }
-        }
-        // next digit
-        c = *(cp++);
-    } while ( ( c != '\0' ) && ( c != 'e' ) && ( c != 'E' ) );
-    if ( ( shift_digits == NULL ) && ( c != '\0' ) ) {
-        return false;
-    }
-    // update pointer to last character used
-    *token = --cp;
-    // save results
     if ( dest != NULL ) {
         *dest = result;
     }
-    if ( shift_digits != NULL ) {
-        *shift_digits = shift;
+    return true;
+}
+
+static bool str_to_s32(char const *str, int32_t *dest)
+{
+    bool is_neg = 0;
+    if ( *str == '-' ) {
+        is_neg = 1;
+        str++;
+    } else if ( *str == '+' ) {
+        str++;
+    }
+    uint32_t utmp;
+    if ( ! str_to_u32(str, &utmp) ) {
+        return false;
+    }
+    int32_t result = 0;
+    if ( is_neg ) {
+        if ( utmp > 0x80000000 ) {
+            return false;
+        } else {
+            result = -utmp;
+        }
+    } else {
+        if ( utmp > 0x7FFFFFFF ) {
+            return false;
+        } else {
+            result = utmp;
+        }
+    }
+    if ( dest != NULL ) {
+        *dest = result;
     }
     return true;
 }
-#endif
 
-static bool parse_u32_with_decimal_pt(char const **token, uint32_t *dest, int32_t *shift_digits)
+static bool str_to_float(char const *str, float *dest)
 {
-    char const *cp;
-    char c;
+    bool is_neg = 0;
+    char c = *str;
+    if ( c == '-' ) {
+        is_neg = 1;
+        str++;
+    } else if ( c == '+' ) {
+        str++;
+    }
+    c = *(str++);
+    uint32_t uval = 0;
+    int shift = 0;
     bool dp_found = 0;
-    bool reached_max = 0;
-    int32_t shift = 0;
-    uint32_t result = 0;
-    uint32_t limit;
-
-    cp = *token;
-    c = *(cp++);
     do {
         if ( ( c < '0' ) || ( c > '9' ) ) {
             if ( ( c == '.' ) && ( ! dp_found ) ) {
                 dp_found = 1;
-                c = *(cp++);
+                c = *(str++);
                 continue;
             }
             return false;
         }
-        // largest number that can be multiplied by 10 and not overflow
-        limit = 429496729;
-        if ( c > '5' ) {
-            // can't let the subsequent add overflow either
-            limit--;
-        }
-        if ( result > limit ) {
-            // adding this digit would overflow
-            if ( ! reached_max ) {
-                // first overflow digit, round it
-                if ( c >= '5' ) {
-                    result++;
-                }
-                reached_max = 1;
-            }
+        if ( uval > 429496728 ) {
+            // adding this digit could overflow
             if ( ! dp_found ) {
                 shift++;
             }
         } else {
             // add this digit
-            result *= 10;
-            result += c - '0';
+            uval *= 10;
+            uval += c - '0';
             if ( dp_found ) {
                 shift--;
             }
         }
         // next digit
-        c = *(cp++);
+        c = *(str++);
     } while ( ( c != '\0' ) && ( c != 'e' ) && ( c != 'E' ) );
-    // update pointer to last character used
-    *token = --cp;
-    // save results
+    if ( c != '\0' ) {
+        int32_t exponent;
+        if ( ! str_to_s32(str, &exponent) ) {
+            return false;
+        }
+        shift += exponent;
+    }
+    uint32_t shift_abs = abs(shift);
+    if ( shift_abs > 60 ) {
+        return false;
+    }
+    // compute the power of 10 for shift
+    double tmp = 10;
+    double pow = 1;
+    while ( shift_abs ) {
+        if ( shift_abs & 1 ) {
+            pow *= tmp;
+        }
+        tmp *= tmp;
+        shift_abs >>= 1;
+    }
+    // perform the shift
+    double dresult = uval;
+    if ( shift < 0 ) {
+        dresult /= pow;
+    } else {
+        dresult *= pow;
+    }
+    float result = (float)dresult;
+    // if double value was too high, float value
+    //   becomes +infinity = 0x7F800000
+    if ( *(uint32_t *)(&result) == 0x7F800000 ) {
+        return false;
+    }
+    if ( is_neg ) {
+        result = -result;
+    }
     if ( dest != NULL ) {
         *dest = result;
-    }
-    if ( shift_digits != NULL ) {
-        *shift_digits = shift;
     }
     return true;
 }
