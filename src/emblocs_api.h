@@ -59,35 +59,35 @@ struct bl_function_meta_s *bl_function_find_in_instance(char const *name, struct
 /**************************************************************
  * Link the specified pin to the specified signal
  */
-bl_retval_t bl_pin_linkto_signal(struct bl_pin_meta_s const *pin, struct bl_signal_meta_s const *sig);
+bool bl_pin_linkto_signal(struct bl_pin_meta_s const *pin, struct bl_signal_meta_s const *sig);
 
 #ifdef BL_ENABLE_UNLINK
 /**************************************************************
  * Disconnect the specified pin from any signal
  */
-bl_retval_t bl_pin_unlink(struct bl_pin_meta_s const *pin);
+bool bl_pin_unlink(struct bl_pin_meta_s const *pin);
 #endif
 
 /**************************************************************
  * Set the specified signal to a value
  */
-bl_retval_t bl_signal_set(struct bl_signal_meta_s const *sig, bl_sig_data_t const *value);
+bool bl_signal_set(struct bl_signal_meta_s const *sig, bl_sig_data_t const *value);
 
 /**************************************************************
  * Set the specified pin to a value
  */
-bl_retval_t bl_pin_set(struct bl_pin_meta_s const *pin, bl_sig_data_t const *value);
+bool bl_pin_set(struct bl_pin_meta_s const *pin, bl_sig_data_t const *value);
 
 /**************************************************************
  * Add the specified function to the end of the specified thread
  */
-bl_retval_t bl_function_linkto_thread(struct bl_function_meta_s *funct, struct bl_thread_meta_s const *thread);
+bool bl_function_linkto_thread(struct bl_function_meta_s *funct, struct bl_thread_meta_s const *thread);
 
 #ifdef BL_ENABLE_UNLINK
 /**************************************************************
  * Disconnect the specified function from any thread
  */
-bl_retval_t bl_function_unlink(struct bl_function_meta_s *funct);
+bool bl_function_unlink(struct bl_function_meta_s *funct);
 #endif
 
 /**************************************************************
@@ -152,7 +152,7 @@ typedef struct instance_def_s {
     void const *personality;
 } bl_instance_def_t;
 
-bl_retval_t bl_init_instances(bl_instance_def_t const instances[]);
+bool bl_init_instances(bl_instance_def_t const instances[]);
 
 /**************************************************************
  * A NULL terminated array of strings can be passed to 
@@ -166,7 +166,7 @@ bl_retval_t bl_init_instances(bl_instance_def_t const instances[]);
  * or by NULL to end the array.
  */
 
-bl_retval_t bl_init_nets(char const * const nets[]);
+bool bl_init_nets(char const * const nets[]);
 
 /**************************************************************
  * A NULL terminated array of "setsig definitions" (usually
@@ -179,7 +179,7 @@ typedef struct bl_setsig_def_s {
     bl_sig_data_t value;
 } bl_setsig_def_t;
 
-bl_retval_t bl_init_setsigs(bl_setsig_def_t const setsigs[]);
+bool bl_init_setsigs(bl_setsig_def_t const setsigs[]);
 
 /**************************************************************
  * A NULL terminated array of "setpin definitions" (usually
@@ -193,7 +193,7 @@ typedef struct bl_setpin_def_s {
     bl_sig_data_t value;
 } bl_setpin_def_t;
 
-bl_retval_t bl_init_setpins(bl_setpin_def_t const setpins[]);
+bool bl_init_setpins(bl_setpin_def_t const setpins[]);
 
 /**************************************************************
  * A NULL terminated array of strings can be passed to 
@@ -210,7 +210,7 @@ bl_retval_t bl_init_setpins(bl_setpin_def_t const setpins[]);
  * the array.
  */
 
-bl_retval_t bl_init_threads(char const * const threads[]);
+bool bl_init_threads(char const * const threads[]);
 
 
 /**************************************************************
@@ -223,7 +223,7 @@ bl_retval_t bl_init_threads(char const * const threads[]);
  * This function is defined in emblocs_parse.c                *
  *                                                            *
  **************************************************************/
-bl_retval_t bl_parse_array(char const * const tokens[], uint32_t count);
+bool bl_parse_array(char const * const tokens[], uint32_t count);
 
 
 #endif // EMBLOCS_API_H

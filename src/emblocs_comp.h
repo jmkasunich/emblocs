@@ -164,14 +164,14 @@ void *bl_instance_data_addr(struct bl_instance_meta_s *inst);
  * links the pin to the dummy signal
  * adds the meta struct to 'inst' pin list
  */
-bl_retval_t bl_instance_add_pin(struct bl_instance_meta_s *inst, bl_pin_def_t const *def);
+bool bl_instance_add_pin(struct bl_instance_meta_s *inst, bl_pin_def_t const *def);
 
 /* Adds all pins defined by 'def' to instance 'inst'.
  * This function calls bl_instance_add_pin() for each pin
  * definition in 'def'.  It is called by bl_default_setup()
  * and can be called from component-specific setup functions.
  */
-bl_retval_t bl_instance_add_pins(struct bl_instance_meta_s *inst, bl_comp_def_t const *def);
+bool bl_instance_add_pins(struct bl_instance_meta_s *inst, bl_comp_def_t const *def);
 
 /* Adds a function as defined by 'def' to instance 'inst'
  * allocates a new bl_function_meta_t struct in meta RAM
@@ -180,7 +180,7 @@ bl_retval_t bl_instance_add_pins(struct bl_instance_meta_s *inst, bl_comp_def_t 
  * links the meta struct to the rtdata struct
  * adds the meta struct to 'inst' function list
  */
-bl_retval_t bl_instance_add_function(struct bl_instance_meta_s *inst, bl_function_def_t const *def);
+bool bl_instance_add_function(struct bl_instance_meta_s *inst, bl_function_def_t const *def);
 
 /* Adds all functions defined by 'def' to instance 'inst'.
  * This function calls bl_instance_add_function() for each
@@ -188,6 +188,6 @@ bl_retval_t bl_instance_add_function(struct bl_instance_meta_s *inst, bl_functio
  * bl_default_setup() and can be called from component-
  * specific setup functions.
  */
-bl_retval_t bl_instance_add_functions(struct bl_instance_meta_s *inst, bl_comp_def_t const *def);
+bool bl_instance_add_functions(struct bl_instance_meta_s *inst, bl_comp_def_t const *def);
 
 #endif // EMBLOCS_COMP_H

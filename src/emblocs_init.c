@@ -10,7 +10,7 @@
  * structs and/or strings in flash.
  */
 
-bl_retval_t bl_init_instances(bl_instance_def_t const instances[])
+bool bl_init_instances(bl_instance_def_t const instances[])
 {
     bl_instance_def_t const *idp;  // instance definition pointer
     bl_instance_meta_t *inst;
@@ -31,10 +31,10 @@ bl_retval_t bl_init_instances(bl_instance_def_t const instances[])
         #ifdef BL_ERROR_VERBOSE
         print_strings(2, "error(s) during ", "init_instances()\n");
         #endif
-        return BL_ERR_GENERAL;
+        return false;
     }
     #endif
-    return BL_SUCCESS;
+    return true;
 }
 
 static int is_sig_type_str(char const *str, bl_type_t *result)
@@ -58,9 +58,9 @@ static int is_sig_type_str(char const *str, bl_type_t *result)
     return 0;
 }
 
-bl_retval_t bl_init_nets(char const *const nets[])
+bool bl_init_nets(char const *const nets[])
 {
-    bl_retval_t retval __attribute__ ((unused));
+    bool retval __attribute__ ((unused));
     bl_type_t net_type;
     bl_signal_meta_t *sig;
     bl_instance_meta_t *inst;
@@ -127,7 +127,7 @@ bl_retval_t bl_init_nets(char const *const nets[])
             #endif
             retval = bl_pin_linkto_signal(pin, sig);
             #ifndef BL_ERROR_HALT
-            if ( retval != BL_SUCCESS ) {
+            if ( ! retval ) {
                 errors++;
             }
             #endif
@@ -143,16 +143,16 @@ bl_retval_t bl_init_nets(char const *const nets[])
         #ifdef BL_ERROR_VERBOSE
         print_strings(2, "error(s) during ", "init_nets()\n");
         #endif
-        return BL_ERR_GENERAL;
+        return false;
     }
     #endif
-    return BL_SUCCESS;
+    return true;
 }
 
-bl_retval_t bl_init_setsigs(bl_setsig_def_t const setsigs[])
+bool bl_init_setsigs(bl_setsig_def_t const setsigs[])
 {
     bl_setsig_def_t const *sdp;
-    bl_retval_t retval  __attribute__ ((unused));
+    bool retval  __attribute__ ((unused));
     #ifndef BL_ERROR_HALT
     int errors = 0;
     #endif
@@ -161,7 +161,7 @@ bl_retval_t bl_init_setsigs(bl_setsig_def_t const setsigs[])
     while ( sdp->name != NULL ) {
         retval = bl_signal_set(bl_signal_find(sdp->name), &sdp->value);
         #ifndef BL_ERROR_HALT
-        if ( retval != BL_SUCCESS ) {
+        if ( ! retval ) {
             errors++;
         }
         #endif
@@ -172,18 +172,18 @@ bl_retval_t bl_init_setsigs(bl_setsig_def_t const setsigs[])
         #ifdef BL_ERROR_VERBOSE
         print_strings(2, "error(s) during ", "init_setsigs()\n");
         #endif
-        return BL_ERR_GENERAL;
+        return false;
     }
     #endif
-    return BL_SUCCESS;
+    return true;
 }
 
-bl_retval_t bl_init_setpins(bl_setpin_def_t const setpins[])
+bool bl_init_setpins(bl_setpin_def_t const setpins[])
 {
     bl_setpin_def_t const *sdp;
     bl_instance_meta_t *inst;
     bl_pin_meta_t *pin;
-    bl_retval_t retval  __attribute__ ((unused));
+    bool retval  __attribute__ ((unused));
     #ifndef BL_ERROR_HALT
     int errors = 0;
     #endif
@@ -206,7 +206,7 @@ bl_retval_t bl_init_setpins(bl_setpin_def_t const setpins[])
         #endif
         retval = bl_pin_set(pin, &sdp->value);
         #ifndef BL_ERROR_HALT
-        if ( retval != BL_SUCCESS ) {
+        if ( ! retval ) {
             errors++;
         }
         #endif
@@ -218,10 +218,10 @@ bl_retval_t bl_init_setpins(bl_setpin_def_t const setpins[])
         #ifdef BL_ERROR_VERBOSE
         print_strings(2, "error(s) during ", "init_setsigs()\n");
         #endif
-        return BL_ERR_GENERAL;
+        return false;
     }
     #endif
-    return BL_SUCCESS;
+    return true;
 }
 
 static int is_thread_type_str(char const *str, bl_nofp_t *result)
@@ -253,9 +253,9 @@ static int is_uint32_str(char const *str, uint32_t *result)
     return 1;
 }
 
-bl_retval_t bl_init_threads(char const * const threads[])
+bool bl_init_threads(char const * const threads[])
 {
-    bl_retval_t retval  __attribute__ ((unused));
+    bool retval  __attribute__ ((unused));
     bl_nofp_t thread_type;
     uint32_t period_ns;
     bl_thread_meta_t *thread;
@@ -339,7 +339,7 @@ bl_retval_t bl_init_threads(char const * const threads[])
             #endif
             retval = bl_function_linkto_thread(function, thread);
             #ifndef BL_ERROR_HALT
-            if ( retval != BL_SUCCESS ) {
+            if ( ! retval ) {
                 errors++;
             }
             #endif
@@ -355,9 +355,9 @@ bl_retval_t bl_init_threads(char const * const threads[])
         #ifdef BL_ERROR_VERBOSE
         print_strings(2, "error(s) during ", "init_threads()\n");
         #endif
-        return BL_ERR_GENERAL;
+        return false;
     }
     #endif
-    return BL_SUCCESS;
+    return true;
 }
 

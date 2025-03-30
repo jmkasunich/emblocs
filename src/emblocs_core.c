@@ -188,7 +188,7 @@ struct bl_signal_meta_s *bl_signal_new(char const *name, bl_type_t type)
     halt_or_return(NULL);
 }
 
-bl_retval_t bl_pin_linkto_signal(bl_pin_meta_t const *pin, bl_signal_meta_t const *sig )
+bool bl_pin_linkto_signal(bl_pin_meta_t const *pin, bl_signal_meta_t const *sig )
 {
     bl_sig_data_t *sig_data_addr, **pin_ptr_addr;
 
@@ -197,7 +197,7 @@ bl_retval_t bl_pin_linkto_signal(bl_pin_meta_t const *pin, bl_signal_meta_t cons
         #ifdef BL_ERROR_VERBOSE
         print_strings(7, "cannot link ", "pin: '", pin->name, "' to ", "signal: '", sig->name, "'; type mismatch\n");
         #endif
-        halt_or_return(BL_ERR_TYPE_MISMATCH);
+        halt_or_return(false);
     }
     // convert indexes to addresses
     pin_ptr_addr = TO_RT_ADDR(pin->ptr_index);
@@ -208,17 +208,17 @@ bl_retval_t bl_pin_linkto_signal(bl_pin_meta_t const *pin, bl_signal_meta_t cons
         #ifdef BL_ERROR_VERBOSE
         print_strings(7, "cannot link ",  "pin: '", pin->name, "' to ", "signal: '", sig->name, "'; already linked\n" );
         #endif
-        halt_or_return(BL_ERR_GENERAL);
+        halt_or_return(false);
     }
     #endif
     // make the link (this automatically undoes any previous linkage)
     *pin_ptr_addr = sig_data_addr;
-    return BL_SUCCESS;
+    return true;
 
 }
 
 #ifdef BL_ENABLE_UNLINK
-bl_retval_t bl_pin_unlink(bl_pin_meta_t const *pin)
+bool bl_pin_unlink(bl_pin_meta_t const *pin)
 {
     bl_sig_data_t *pin_dummy_addr, **pin_ptr_addr, *pin_ptr_value;
 
@@ -230,27 +230,27 @@ bl_retval_t bl_pin_unlink(bl_pin_meta_t const *pin)
     *pin_dummy_addr = *pin_ptr_value;
     // link pin to its dummy
     *pin_ptr_addr = pin_dummy_addr;
-    return BL_SUCCESS;
+    return true;
 }
 #endif
 
-bl_retval_t bl_signal_set(bl_signal_meta_t const *sig, bl_sig_data_t const *value)
+bool bl_signal_set(bl_signal_meta_t const *sig, bl_sig_data_t const *value)
 {
     bl_sig_data_t *sig_data;
 
     sig_data = TO_RT_ADDR(sig->data_index);
     *sig_data = *value;
-    return BL_SUCCESS;
+    return true;
 }
 
-bl_retval_t bl_pin_set(bl_pin_meta_t const *pin, bl_sig_data_t const *value)
+bool bl_pin_set(bl_pin_meta_t const *pin, bl_sig_data_t const *value)
 {
     bl_sig_data_t **pin_ptr, *sig_data;
 
     pin_ptr = TO_RT_ADDR(pin->ptr_index);
     sig_data = *pin_ptr;
     *sig_data = *value;
-    return BL_SUCCESS;
+    return true;
 }
 
 struct bl_thread_meta_s *bl_thread_new(char const *name, uint32_t period_ns, bl_nofp_t nofp)
@@ -292,7 +292,7 @@ struct bl_thread_meta_s *bl_thread_new(char const *name, uint32_t period_ns, bl_
     halt_or_return(NULL);
 }
 
-bl_retval_t bl_function_linkto_thread(struct bl_function_meta_s *funct, struct bl_thread_meta_s const *thread)
+bool bl_function_linkto_thread(struct bl_function_meta_s *funct, struct bl_thread_meta_s const *thread)
 {
     bl_function_rtdata_t *funct_data;
     bl_thread_data_t *thread_data;
@@ -303,7 +303,7 @@ bl_retval_t bl_function_linkto_thread(struct bl_function_meta_s *funct, struct b
         #ifdef BL_ERROR_VERBOSE
         print_strings(7, "cannot link ", "function: '", funct->name, "' to ", "thread: '", thread->name, "'; type mismatch\n");
         #endif
-        halt_or_return(BL_ERR_TYPE_MISMATCH);
+        halt_or_return(false);
     }
     if ( funct->thread_index != BL_META_MAX_INDEX ) {
         #ifdef BL_ENABLE_IMPLICIT_UNLINK
@@ -312,7 +312,7 @@ bl_retval_t bl_function_linkto_thread(struct bl_function_meta_s *funct, struct b
         #ifdef BL_ERROR_VERBOSE
         print_strings(7, "cannot link ",  "function: '", funct->name, "' to ", "thread: '", thread->name, "'; already linked\n" );
         #endif
-        halt_or_return(BL_ERR_GENERAL);
+        halt_or_return(false);
         #endif
     }
     // link function metadata back to the thread
@@ -330,11 +330,11 @@ bl_retval_t bl_function_linkto_thread(struct bl_function_meta_s *funct, struct b
     // append function RT data to thread
     funct_data->next = NULL;
     *prev_ptr = funct_data;
-    return BL_SUCCESS;
+    return true;
 }
 
 #ifdef  BL_ENABLE_UNLINK
-bl_retval_t bl_function_unlink(struct bl_function_meta_s *funct)
+bool bl_function_unlink(struct bl_function_meta_s *funct)
 {
     bl_thread_meta_t *thread;
     bl_function_rtdata_t *funct_data;
@@ -343,7 +343,7 @@ bl_retval_t bl_function_unlink(struct bl_function_meta_s *funct)
 
     if ( funct->thread_index == BL_META_MAX_INDEX ) {
         // function is not in a thread; done
-        return BL_SUCCESS;
+        return true;
     }
     thread = TO_META_ADDR(funct->thread_index);
     // get pointers to realtime data
@@ -358,7 +358,7 @@ bl_retval_t bl_function_unlink(struct bl_function_meta_s *funct)
             *prev_ptr = funct_data->next;
             // reset metadata to 'unlinked'
             funct->thread_index = BL_META_MAX_INDEX;
-            return BL_SUCCESS;
+            return true;
         }
         prev_ptr = &(prev->next);
         prev = *prev_ptr;
@@ -558,7 +558,7 @@ struct bl_function_meta_s *bl_function_find_in_instance(char const *name, struct
 struct bl_instance_meta_s *bl_default_setup(char const *name, bl_comp_def_t const *comp_def)
 {
     bl_instance_meta_t *meta;
-    bl_retval_t retval __attribute__ ((unused));
+    bool retval __attribute__ ((unused));
 
     meta = bl_instance_create(name, comp_def, 0);
     #ifndef BL_ERROR_HALT
@@ -568,13 +568,13 @@ struct bl_instance_meta_s *bl_default_setup(char const *name, bl_comp_def_t cons
     #endif
     retval = bl_instance_add_pins(meta, comp_def);
     #ifndef BL_ERROR_HALT
-    if ( retval != BL_SUCCESS ) {
+    if ( ! retval ) {
         goto error;
     }
     #endif
     retval = bl_instance_add_functions(meta, comp_def);
     #ifndef BL_ERROR_HALT
-    if ( retval != BL_SUCCESS ) {
+    if ( ! retval ) {
         goto error;
     }
     #endif
@@ -641,7 +641,7 @@ void *bl_instance_data_addr(struct bl_instance_meta_s *inst)
     return TO_RT_ADDR(inst->data_index);
 }
 
-bl_retval_t bl_instance_add_pin(struct bl_instance_meta_s *inst, bl_pin_def_t const *def)
+bool bl_instance_add_pin(struct bl_instance_meta_s *inst, bl_pin_def_t const *def)
 {
     bl_pin_meta_t *meta;
     bl_sig_data_t *data;
@@ -677,34 +677,34 @@ bl_retval_t bl_instance_add_pin(struct bl_instance_meta_s *inst, bl_pin_def_t co
         #endif
         goto error;
     }
-    return BL_SUCCESS;
+    return true;
 
     error:
     #ifdef BL_ERROR_VERBOSE
     print_strings(6, "could not create ", "pin: '", inst->name, ".", def->name, "'\n");
     #endif
-    halt_or_return(BL_ERR_GENERAL);
+    halt_or_return(false);
 }
 
-bl_retval_t bl_instance_add_pins(struct bl_instance_meta_s *inst, bl_comp_def_t const *def)
+bool bl_instance_add_pins(struct bl_instance_meta_s *inst, bl_comp_def_t const *def)
 {
-    bl_retval_t retval;
+    bool retval;
     int errors = 0;
 
     for ( int i = 0 ; i < def->pin_count ; i++ ) {
         retval = bl_instance_add_pin(inst, &(def->pin_defs[i]));
-        if ( retval != BL_SUCCESS ) {
+        if ( ! retval ) {
             errors++;
         }
     }
     if ( errors > 0 ) {
-        return BL_ERR_GENERAL;
+        return false;
     } else {
-        return BL_SUCCESS;
+        return true;
     }
 }
 
-bl_retval_t bl_instance_add_function(struct bl_instance_meta_s *inst, bl_function_def_t const *def)
+bool bl_instance_add_function(struct bl_instance_meta_s *inst, bl_function_def_t const *def)
 {
     bl_function_meta_t *meta;
     bl_function_rtdata_t *data;
@@ -736,30 +736,30 @@ bl_retval_t bl_instance_add_function(struct bl_instance_meta_s *inst, bl_functio
         #endif
         goto error;
     }
-    return BL_SUCCESS;
+    return true;
 
     error:
     #ifdef BL_ERROR_VERBOSE
     print_strings(6, "could not create ", "function: '", inst->name, ".", def->name, "'\n");
     #endif
-    halt_or_return(BL_ERR_GENERAL);
+    halt_or_return(false);
 }
 
-bl_retval_t bl_instance_add_functions(struct bl_instance_meta_s *inst, bl_comp_def_t const *def)
+bool bl_instance_add_functions(struct bl_instance_meta_s *inst, bl_comp_def_t const *def)
 {
-    bl_retval_t retval;
+    bool retval;
     int errors = 0;
 
     for ( int i = 0 ; i < def->function_count ; i++ ) {
         retval = bl_instance_add_function(inst, &(def->function_defs[i]));
-        if ( retval != BL_SUCCESS ) {
+        if ( ! retval ) {
             errors++;
         }
     }
     if ( errors > 0 ) {
-        return BL_ERR_GENERAL;
+        return false;
     } else {
-        return BL_SUCCESS;
+        return true;
     }
 }
 
