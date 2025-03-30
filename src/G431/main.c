@@ -7,7 +7,7 @@
 #include "watch.h"
 
 #define NEW_INIT
-#define OLD_INIT
+//#define OLD_INIT
 #define PRINT_INIT
 
 #ifndef _countof
@@ -102,7 +102,7 @@ gpio_port_config_t const portC = { GPIOC, {
 }};
 
 
-watch_pin_config_t watch_pers[] = {
+watch_pin_config_t const watch_pers[] = {
     { BL_TYPE_BIT, "in", "in: %1b " },
     { BL_TYPE_BIT, "oe", "oe: %1b " },
     { BL_TYPE_BIT, "out", "out: %1b " },
@@ -118,12 +118,12 @@ char const * const tokens[] = {
     "PortB", (char const *)&bl_gpio_def, (char const *)&portB,
     "PortC", (char const *)&bl_gpio_def, (char const *)&portC,
     "ramp_sum", (char const *)&bl_sum2_def, NULL,
-    "ramp_sum", (char const *)&bl_sum2_def, NULL,
     "inv_sum", (char const *)&bl_sum2_def, NULL,
     "timer", (char const *)&bl_perftimer_def, NULL,
+    "watcher", (char const *)&bl_watch_def, (char const *)&watch_pers,
     "dir_mux", (char const *)&bl_mux2_def, NULL,
     "ramp_mux", (char const *)&bl_mux2_def, NULL,
-  "net",
+  "signal",
     "speed", "dir_mux", "in0", "inv_sum", "in0",
     "speed_inv", "inv_sum", "out", "dir_mux", "in1",
     "dir", "dir_mux", "sel",
@@ -136,13 +136,6 @@ char const * const tokens[] = {
     "oe", "PortB", "p08oe", "watcher", "oe",
     "out", "PortB", "p08out", "watcher", "out",
     "in", "PortB", "p08in", "watcher", "in",
-  "setsig",
-    "ramp", "1",
-    "speed", "1.5",
-  "setpin",
-    "inv_sum", "gain0", "-1.0",
-    "ramp_sum", "gain0", "1.0",
-    "ramp_mux", "in1", "1.0",
   "thread",
     "main_thread", "fp", "1000000",
     "timer", "start",
@@ -156,34 +149,13 @@ char const * const tokens[] = {
     "PortC", "write",
     "timer", "stop",
     "watch_thread", "fp", "1000000000",
-    "watcher", "update"
-};
-
-char const * const values[] = {
-    "0", "00000", "+000000", "-00000", "+00000000000000000000", "A0", "0d", "23\n", 
-    "1", "2", "3", "-1", "-2", "-3", "+1", "+2", "+3", "01", "02", "03",
-    "00000000000000000001", "-0000000000000000002", "+000000000000000000003",
-    "00016514235", "+00445879187998798", "-123498098",
-    "-2147483630", "-2147483631", "-2147483632", "-2147483633", "-2147483634", 
-    "-2147483635", "-2147483636", "-2147483637", "-2147483638", "-2147483639", 
-    "-2147483640", "-2147483641", "-2147483642", "-2147483643", "-2147483644", 
-    "-2147483645", "-2147483646", "-2147483647", "-2147483648", "-2147483649", 
-    "2147483630", "2147483631", "2147483632", "2147483633", "2147483634", 
-    "2147483635", "2147483636", "2147483637", "2147483638", "2147483639", 
-    "2147483640", "2147483641", "2147483642", "2147483643", "2147483644", 
-    "2147483645", "2147483646", "2147483647", "2147483648", "2147483649", 
-    "4294967280", "4294967281", "4294967282", "4294967283", "4294967284", 
-    "4294967285", "4294967286", "4294967287", "4294967288", "4294967289", 
-    "4294967290", "4294967291", "4294967292", "4294967293", "4294967294", 
-    "4294967295", "4294967296", "4294967297", "4294967298", "4294967299",
-    "42949672937", "42949672973", "42949672977", "42949672933", "42949672961",
-    "1000000000", "2000000000", "3000000000", "4000000000", "5000000000",
-    "0.0000000000000001", "0.0001234567654321", "12345.6543", "12345.654321",
-    "12345.654324", "12345.654325", "12345.654326",
-    "123456543210000", "123456543241230", "123456543251230", "123456543261230",
-    "123456543210000E12", "123456543241230E-3", "1234565.43251230E-12", "123456543261230",
-    "1e-37", "1e-38", "1e-39", "1e-40", "1e-44", "2e-45", "1e-45", "1e-46",
-    "1e37", "1e38", "2e38", "3e38", "4e38", "1e39"
+    "watcher", "update",
+  "set",
+    "ramp", "1",
+    "speed", "1.5",
+    "inv_sum", "gain0", "-1.0",
+    "ramp_sum", "gain0", "1.0",
+    "ramp_mux", "in1", "1.0"
 };
 
 #endif // NEW_INIT
@@ -305,7 +277,7 @@ int main (void) {
 #ifdef NEW_INIT
     print_string("begin parse\n");
     t_start = tsc_read();
-    bl_parse_array(values, _countof(values));
+    bl_parse_array(tokens, _countof(tokens));
     t_total = tsc_read();
     print_string("parse complete\n");
     t_total -= t_start;
