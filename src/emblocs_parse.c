@@ -41,7 +41,7 @@ typedef struct keyword_s {
     uint32_t threadtype     : BL_NOFP_BITS;
 } keyword_t;
 
-static keyword_t keywords[] = {
+static keyword_t const keywords[] = {
     { "instance",   1, 1, 0, 0, KW_CMD_INSTANCE, KW_OBJ_INSTANCE, 0, 0 },
     { "signal",     1, 1, 0, 0, KW_CMD_SIGNAL, KW_OBJ_SIGNAL, 0, 0 },
     { "thread",     1, 1, 0, 0, KW_CMD_THREAD, KW_OBJ_THREAD, 0, 0 },
