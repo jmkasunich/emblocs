@@ -503,9 +503,6 @@ ST_FUNC(UNLINK_DONE)
 
 ST_FUNC(SET_START)
 {
-    signal_meta = NULL;
-    instance_meta = NULL;
-    pin_meta = NULL;
     if ( is_name(token) ) {
         signal_meta = bl_signal_find(token);
         if ( signal_meta ) {
