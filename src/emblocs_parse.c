@@ -61,59 +61,52 @@ static keyword_t const keywords[] = {
 
 #define MAX_TOKEN_LEN (100)
 
-typedef enum {
-    IDLE            = 0x00,
-    INST_START      = 0x10,
-    INST_1          = 0x11,
-    INST_2          = 0x12,
-    INST_DONE       = 0x1F,
-    SIGNAL_START    = 0x20,
-    SIGNAL_1        = 0x21,
-    SIGNAL_2        = 0x22,
-    SIGNAL_3        = 0x23,
-    SIGNAL_DONE     = 0x2F,
-    THREAD_START    = 0x30,
-    THREAD_1        = 0x31,
-    THREAD_2        = 0x32,
-    THREAD_3        = 0x33,
-    THREAD_4        = 0x34,
-    THREAD_DONE     = 0x3F,
-    LINK_START      = 0x40,
-    LINK_1          = 0x41,
-    LINK_2          = 0x42,
-    LINK_3          = 0x43,
-    LINK_DONE       = 0x4F,
-    UNLINK_START    = 0x50,
-    UNLINK_1        = 0x51,
-    UNLINK_DONE     = 0x5F,
-    SET_START       = 0x60,
-    SET_1           = 0x61,
-    SET_2           = 0x62,
-    SET_3           = 0x63,
-    SET_DONE        = 0x64,
-    SHOW_START      = 0x70,
-    LIST_START      = 0x80
-} parser_state_t;
+// this macro declares a function associated with state 'foo'
+#define ST_FUNC(foo)    static bool st_ ## foo(char const *token)
+// this macr returns the name of the function for state 'foo'signal_
+#define ST_NAME(foo)    st_ ## foo
 
-#define STATE_CMD_MASK      (0xF0)
-#define STATE_STEP_MASK     (0x0F)
+// prototypes for all of the state-handling functions
+// this is also a list of all the valid states
+ST_FUNC(IDLE);
+ST_FUNC(INST_START);
+ST_FUNC(INST_1);
+ST_FUNC(INST_2);
+ST_FUNC(INST_DONE);
+ST_FUNC(SIGNAL_START);
+ST_FUNC(SIGNAL_1);
+ST_FUNC(SIGNAL_2);
+ST_FUNC(SIGNAL_3);
+ST_FUNC(SIGNAL_DONE);
+ST_FUNC(THREAD_START);
+ST_FUNC(THREAD_1);
+ST_FUNC(THREAD_2);
+ST_FUNC(THREAD_3);
+ST_FUNC(THREAD_4);
+ST_FUNC(THREAD_DONE);
+ST_FUNC(LINK_START);
+ST_FUNC(LINK_1);
+ST_FUNC(LINK_2);
+ST_FUNC(LINK_3);
+ST_FUNC(LINK_DONE);
+ST_FUNC(UNLINK_START);
+ST_FUNC(UNLINK_1);
+ST_FUNC(UNLINK_DONE);
+ST_FUNC(SET_START);
+ST_FUNC(SET_1);
+ST_FUNC(SET_2);
+ST_FUNC(SET_3);
+ST_FUNC(SET_DONE);
+ST_FUNC(SHOW_START);
+ST_FUNC(LIST_START);
 
 static bool parse_token(char const *token);
-
-static bool parse_instance_cmd(char const *token);
-static bool parse_signal_cmd(char const *token);
-static bool parse_thread_cmd(char const *token);
-static bool parse_link_cmd(char const *token);
-static bool parse_unlink_cmd(char const *token);
-static bool parse_set_cmd(char const *token);
-static bool parse_show_cmd(char const *token);
-static bool parse_list_cmd(char const *token);
 
 static bool is_string(char const * token);
 static keyword_t *is_keyword(char const *token);
 static bool is_name(char const * token);
 static bool is_new_name(char const *token);
-static bool process_done_state(char const *token, parser_state_t state_if_not_command);
+static bool process_done_state(char const *token, bool (*state_if_not_command)(char const *token));
 
 static void print_token(char const * token);
 static void print_expect_error(char const *expect, char const *token);
@@ -125,7 +118,8 @@ static bool str_to_float(char const *str, float *dest);
 
 
 /* internal parser data */
-static parser_state_t state = IDLE;
+// global that holds the current state
+static bool (*state)(char const *token) = ST_NAME(IDLE);
 static char const *new_name;
 static bl_comp_def_t *comp_def;
 static void *personality;
@@ -156,367 +150,366 @@ bool bl_parse_array(char const * const tokens[], uint32_t count)
 
 static bool parse_token(char const *token)
 {
-    bool retval = false;
-    keyword_t *kw;
-
     print_string("state: ");
-    print_uint_hex(state, 2, 0, 0);
+    print_uint_hex((uint32_t )state, 8, 0, 0);
     print_string(", token: ");
     print_token(token);
     print_string("\n");
-    switch ( state & STATE_CMD_MASK ) {
-        case IDLE:
-            kw = is_keyword(token);
-            if ( ( kw == NULL ) || ( ! kw->is_cmd ) ) {
-                print_expect_error("command", token);
-                return false;
-            }
-            switch ( kw->cmd ) {
-                case CMD_INSTANCE:
-                    state = INST_START;
-                    retval = true;
-                    break;
-                case CMD_SIGNAL:
-                    state = SIGNAL_START;
-                    retval = true;
-                    break;
-                case CMD_THREAD:
-                    state = THREAD_START;
-                    retval = true;
-                    break;
-                case CMD_LINK:
-                    state = LINK_START;
-                    retval = true;
-                    break;
-                case CMD_UNLINK:
-                    state = UNLINK_START;
-                    retval = true;
-                    break;
-                case CMD_SET:
-                    state = SET_START;
-                    retval = true;
-                    break;
-                case CMD_SHOW:
-                    state = SHOW_START;
-                    retval = true;
-                    break;
-                case CMD_LIST:
-                    state = LIST_START;
-                    retval = true;
-                    break;
-                default:
-                    print_strings(2, "ERROR: ", "bad switch\n");
-                    retval = false;
-                    break;
-            }
-            break;
-        case INST_START:
-            retval = parse_instance_cmd(token);
-            break;
-        case SIGNAL_START:
-            retval = parse_signal_cmd(token);
-            break;
-        case THREAD_START:
-            retval = parse_thread_cmd(token);
-            break;
-        case LINK_START:
-            retval = parse_link_cmd(token);
-            break;
-        case UNLINK_START:
-            retval = parse_unlink_cmd(token);
-            break;
-        case SET_START:
-            retval = parse_set_cmd(token);
-            break;
-        case SHOW_START:
-            retval = parse_show_cmd(token);
-            break;
-        case LIST_START:
-            retval = parse_list_cmd(token);
-            break;
-        default:
-            retval = false;
-            break;
-    }
-    return retval;
+    // call the state-specific token processing function
+    return state(token);
 }
 
-static bool parse_instance_cmd(char const *token)
+ST_FUNC(IDLE)
 {
-    bool retval = false;
-
-    switch ( state ) {
-        case INST_START:
-            if ( is_name(token) && is_new_name(token) ) {
-                new_name = token;
-                state = INST_1;
-                retval = true;
-                break;
-            }
-            print_expect_error("new instance name", token);
-            state = IDLE;
-            break;
-        case INST_1:
-            comp_def = (bl_comp_def_t *)token;
-            state = INST_2;
-            retval = true;
-            break;
-        case INST_2:
-            personality = (void *)token;
-            instance_meta = bl_instance_new(new_name, comp_def, personality);
-            if ( instance_meta != NULL ) {
-                state = INST_DONE;
-                retval = true;
-                break;
-            }
-            print_strings(5, "ERROR: ", "could not create ", "instance '", new_name, "'\n" );
-            state = IDLE;
-            break;
-        case INST_DONE:
-            retval = process_done_state(token, INST_START);
-            break;
-        default:
-            print_strings(2, "ERROR: ", "bad switch\n");
-            retval = false;
-    }
-    return retval;
-}
-
-static bool parse_signal_cmd(char const *token)
-{
-    bool retval = false;
     keyword_t *kw;
 
-    switch ( state ) {
-        case SIGNAL_START:
-            if ( is_name(token) ) {
-                signal_meta = bl_signal_find(token);
-                if ( signal_meta ) {
-                    state = SIGNAL_2;
-                    retval = true;
-                    break;
-                }
-                if ( is_new_name(token) ) {
-                    new_name = token;
-                    state = SIGNAL_1;
-                    retval = true;
-                    break;
-                }
+    kw = is_keyword(token);
+    if ( ( kw == NULL ) || ( ! kw->is_cmd ) ) {
+        print_expect_error("command", token);
+        return false;
+    }
+    switch ( kw->cmd ) {
+        case CMD_INSTANCE:
+            state = ST_NAME(INST_START);
+            return true;
+        case CMD_SIGNAL:
+            state = ST_NAME(SIGNAL_START);
+            return true;
+        case CMD_THREAD:
+            state = ST_NAME(THREAD_START);
+            return true;
+        case CMD_LINK:
+            state = ST_NAME(LINK_START);
+            return true;
+        case CMD_UNLINK:
+            state = ST_NAME(UNLINK_START);
+            return true;
+        case CMD_SET:
+            state = ST_NAME(SET_START);
+            return true;
+        case CMD_SHOW:
+            state = ST_NAME(SHOW_START);
+            return true;
+        case CMD_LIST:
+            state = ST_NAME(LIST_START);
+            return true;
+        default:
+            print_strings(2, "ERROR: ", "bad switch\n");
+            state = ST_NAME(IDLE);
+            return false;
+    }
+}
+
+ST_FUNC(INST_START)
+{
+    if ( is_name(token) && is_new_name(token) ) {
+        new_name = token;
+        state = ST_NAME(INST_1);
+        return true;
+    }
+    print_expect_error("new instance name", token);
+    state = ST_NAME(IDLE);
+    return false;
+}
+
+ST_FUNC(INST_1)
+{
+    comp_def = (bl_comp_def_t *)token;
+    state = ST_NAME(INST_2);
+    return true;
+}
+
+ST_FUNC(INST_2)
+{
+    personality = (void *)token;
+    instance_meta = bl_instance_new(new_name, comp_def, personality);
+    if ( instance_meta != NULL ) {
+        state = ST_NAME(INST_DONE);
+        return true;
+    }
+    print_strings(5, "ERROR: ", "could not create ", "instance '", new_name, "'\n" );
+    state = ST_NAME(IDLE);
+    return false;
+}
+
+ST_FUNC(INST_DONE)
+{
+    return process_done_state(token, ST_NAME(INST_START));
+}
+
+ST_FUNC(SIGNAL_START)
+{
+    if ( is_name(token) ) {
+        signal_meta = bl_signal_find(token);
+        if ( signal_meta ) {
+            state = ST_NAME(SIGNAL_2);
+            return true;
+        }
+        if ( is_new_name(token) ) {
+            new_name = token;
+            state = ST_NAME(SIGNAL_1);
+            return true;
+        }
+    }
+    print_expect_error("new or existing signal name", token);
+    state = ST_NAME(IDLE);
+    return false;
+}
+
+ST_FUNC(SIGNAL_1)
+{
+    keyword_t *kw;
+
+    if ( is_name(token) ) {
+        instance_meta = bl_instance_find(token);
+        if ( instance_meta ) {
+            state = ST_NAME(SIGNAL_3);
+            return true;
+        }
+    } else {
+        kw = is_keyword(token);
+        if ( ( kw ) && ( kw->is_data_type ) ) {
+            signal_meta = bl_signal_new(new_name, kw->datatype );
+            if ( signal_meta ) {
+                state = ST_NAME(SIGNAL_DONE);
+                return true;
             }
-            print_expect_error("new or existing signal name", token);
-            state = IDLE;
-            break;
-        case SIGNAL_1:
-            if ( is_name(token) ) {
-                instance_meta = bl_instance_find(token);
-                if ( instance_meta ) {
-                    state = SIGNAL_3;
-                    retval = true;
-                    break;
-                }
-            } else {
-                kw = is_keyword(token);
-                if ( ( kw ) && ( kw->is_data_type ) ) {
-                    signal_meta = bl_signal_new(new_name, kw->datatype );
-                    if ( signal_meta ) {
-                        state = SIGNAL_DONE;
-                        retval = true;
-                        break;
-                    }
+            print_strings(5, "ERROR: ", "could not create ", "signal '", new_name, "'\n" );
+            state = ST_NAME(IDLE);
+            return false;
+        }
+    }
+    print_expect_error("instance name or data type", token);
+    state = ST_NAME(IDLE);
+    return false;
+}
+
+ST_FUNC(SIGNAL_2)
+{
+    if ( is_name(token) ) {
+        instance_meta = bl_instance_find(token);
+        if ( instance_meta ) {
+            state = ST_NAME(SIGNAL_3);
+            return true;
+        }
+    }
+    print_expect_error("instance name", token);
+    state = ST_NAME(IDLE);
+    return false;
+}
+
+ST_FUNC(SIGNAL_3)
+{
+    if ( is_name(token) ) {
+        pin_meta = bl_pin_find_in_instance(token, instance_meta);
+        if ( pin_meta ) {
+            if ( ! signal_meta ) {
+                signal_meta = bl_signal_new(new_name, pin_meta->data_type);
+                if ( ! signal_meta ) {
                     print_strings(5, "ERROR: ", "could not create ", "signal '", new_name, "'\n" );
-                    state = IDLE;
-                    break;
+                    state = ST_NAME(IDLE);
+                    return false;
                 }
             }
-            print_expect_error("instance name or data type", token);
-            state = IDLE;
-            break;
-        case SIGNAL_2:
-            if ( is_name(token) ) {
-                instance_meta = bl_instance_find(token);
-                if ( instance_meta ) {
-                    state = SIGNAL_3;
-                    retval = true;
-                    break;
-                }
+            if ( bl_pin_linkto_signal(pin_meta, signal_meta) ) {
+                state = ST_NAME(SIGNAL_DONE);
+                return true;
             }
-            print_expect_error("instance name", token);
-            state = IDLE;
-            break;
-        case SIGNAL_3:
-            if ( is_name(token) ) {
-                pin_meta = bl_pin_find_in_instance(token, instance_meta);
-                if ( pin_meta ) {
-                    if ( ! signal_meta ) {
-                        signal_meta = bl_signal_new(new_name, pin_meta->data_type);
-                        if ( ! signal_meta ) {
-                            print_strings(5, "ERROR: ", "could not create ", "signal '", new_name, "'\n" );
-                            state = IDLE;
-                            break;
-                        }
-                    }
-                    retval = bl_pin_linkto_signal(pin_meta, signal_meta);
-                    if ( retval ) {
-                        state = SIGNAL_DONE;
-                        retval = true;
-                        break;
-                    }
-                    print_strings(9, "ERROR: ", "could not link ", "pin '", instance_meta->name, ".", pin_meta->name, "' to signal '", signal_meta->name, "'\n" );
-                    state = IDLE;
-                    break;
-                }
-            }
-            print_expect_error("pin name", token);
-            state = IDLE;
-            break;
-        case SIGNAL_DONE:
-            // check innermost loop - another instance/pin pair
-            if ( is_name(token) ) {
-                instance_meta = bl_instance_find(token);
-                if ( instance_meta ) {
-                    state = SIGNAL_3;
-                    retval = true;
-                    break;
-                }
-            }
-            retval = process_done_state(token, SIGNAL_START);
-            break;
-        default:
-            print_strings(2, "ERROR: ", "bad switch\n");
-            break;
+            print_strings(9, "ERROR: ", "could not link ", "pin '", instance_meta->name, ".", pin_meta->name, "' to signal '", signal_meta->name, "'\n" );
+            state = ST_NAME(IDLE);
+            return false;
+        }
     }
-    return retval;
+    print_expect_error("pin name", token);
+    state = ST_NAME(IDLE);
+    return false;
 }
 
-static bool parse_thread_cmd(char const *token)
+ST_FUNC(SIGNAL_DONE)
 {
-    bool retval = false;
+    // check innermost loop - another instance/pin pair
+    if ( is_name(token) ) {
+        instance_meta = bl_instance_find(token);
+        if ( instance_meta ) {
+            state = ST_NAME(SIGNAL_3);
+            return true;
+        }
+    }
+    return process_done_state(token, ST_NAME(SIGNAL_START));
+}
+
+ST_FUNC(THREAD_START)
+{
+    if ( is_name(token) ) {
+        thread_meta = bl_thread_find(token);
+        if ( thread_meta ) {
+            state = ST_NAME(THREAD_3);
+            return true;
+        }
+        if ( is_new_name(token) ) {
+            new_name = token;
+            state = ST_NAME(THREAD_1);
+            return true;
+        }
+    }
+    print_expect_error("new or existing thread name", token);
+    state = ST_NAME(IDLE);
+    return false;
+}
+
+ST_FUNC(THREAD_1)
+{
     keyword_t *kw;
 
-    switch ( state ) {
-        case THREAD_START:
-            if ( is_name(token) ) {
-                thread_meta = bl_thread_find(token);
-                if ( thread_meta ) {
-                    state = THREAD_3;
-                    retval = true;
-                    break;
-                }
-                if ( is_new_name(token) ) {
-                    new_name = token;
-                    state = THREAD_1;
-                    retval = true;
-                    break;
-                }
-            }
-            print_expect_error("new or existing thread name", token);
-            state = IDLE;
-            break;
-        case THREAD_1:
-            kw = is_keyword(token);
-            if ( ( kw ) && ( kw->is_thread_type ) ) {
-                thread_type = kw->threadtype;
-                state = THREAD_2;
-                retval = true;
-                break;
-            }
-            print_expect_error("thread type", token);
-            state = IDLE;
-            break;
-        case THREAD_2:
-            if ( str_to_u32(token, &thread_period) ) {
-                thread_meta = bl_thread_new(new_name, thread_period, thread_type);
-                if ( thread_meta ) {
-                    state = THREAD_DONE;
-                    retval = true;
-                    break;
-                }
-                print_strings(5, "ERROR: ", "could not create ", "thread '", new_name, "'\n" );
-                state = IDLE;
-                break;
-            }
-            print_expect_error("thread period", token);
-            state = IDLE;
-            break;
-        case THREAD_3:
-            if ( is_name(token) ) {
-                instance_meta = bl_instance_find(token);
-                if ( instance_meta ) {
-                    state = THREAD_4;
-                    retval = true;
-                    break;
-                }
-            }
-            print_expect_error("instance name", token);
-            state = IDLE;
-            break;
-        case THREAD_4:
-            if ( is_name(token) ) {
-                funct_meta = bl_function_find_in_instance(token, instance_meta);
-                if ( funct_meta ) {
-                    retval = bl_function_linkto_thread(funct_meta, thread_meta);
-                    if ( retval ) {
-                        state = THREAD_DONE;
-                        retval = true;
-                        break;
-                    } else {
-                        print_strings(9, "ERROR: ", "could not link ", "function '", instance_meta->name, ".", funct_meta->name, "' to thread '", thread_meta->name, "'\n" );
-                        state = IDLE;
-                        break;
-                    }
-                }
-            }
-            print_expect_error("function name", token);
-            state = IDLE;
-            break;
-        case THREAD_DONE:
-            // check innermost loop - another instance/function pair
-            if ( is_name(token) ) {
-                instance_meta = bl_instance_find(token);
-                if ( instance_meta ) {
-                    state = THREAD_4;
-                    retval = true;
-                    break;
-                }
-            }
-            retval = process_done_state(token, THREAD_START);
-            break;
-        default:
-            print_strings(2, "ERROR: ", "bad switch\n");
-            break;
+    kw = is_keyword(token);
+    if ( ( kw ) && ( kw->is_thread_type ) ) {
+        thread_type = kw->threadtype;
+        state = ST_NAME(THREAD_2);
+        return true;
     }
-    return retval;
-}
-
-static bool parse_link_cmd(char const *token)
-{
-
+    print_expect_error("thread type", token);
+    state = ST_NAME(IDLE);
     return false;
 }
 
-static bool parse_unlink_cmd(char const *token)
+ST_FUNC(THREAD_2)
 {
-
+    if ( str_to_u32(token, &thread_period) ) {
+        thread_meta = bl_thread_new(new_name, thread_period, thread_type);
+        if ( thread_meta ) {
+            state = ST_NAME(THREAD_DONE);
+            return true;
+        }
+        print_strings(5, "ERROR: ", "could not create ", "thread '", new_name, "'\n" );
+        state = ST_NAME(IDLE);
+        return false;
+    }
+    print_expect_error("thread period", token);
+    state = ST_NAME(IDLE);
     return false;
 }
 
-static bool parse_set_cmd(char const *token)
+ST_FUNC(THREAD_3)
 {
-
+    if ( is_name(token) ) {
+        instance_meta = bl_instance_find(token);
+        if ( instance_meta ) {
+            state = ST_NAME(THREAD_4);
+            return true;
+        }
+    }
+    print_expect_error("instance name", token);
+    state = ST_NAME(IDLE);
     return false;
 }
 
-static bool parse_show_cmd(char const *token)
+ST_FUNC(THREAD_4)
 {
-
+    if ( is_name(token) ) {
+        funct_meta = bl_function_find_in_instance(token, instance_meta);
+        if ( funct_meta ) {
+            if ( bl_function_linkto_thread(funct_meta, thread_meta) ) {
+                state = ST_NAME(THREAD_DONE);
+                return true;
+            }
+            print_strings(9, "ERROR: ", "could not link ", "function '", instance_meta->name, ".", funct_meta->name, "' to thread '", thread_meta->name, "'\n" );
+            state = ST_NAME(IDLE);
+            return false;
+        }
+    }
+    print_expect_error("function name", token);
+    state = ST_NAME(IDLE);
     return false;
 }
 
-static bool parse_list_cmd(char const *token)
+ST_FUNC(THREAD_DONE)
+{
+    // check innermost loop - another instance/function pair
+    if ( is_name(token) ) {
+        instance_meta = bl_instance_find(token);
+        if ( instance_meta ) {
+            state = ST_NAME(THREAD_4);
+            return true;
+        }
+    }
+    return process_done_state(token, ST_NAME(THREAD_START));
+}
+
+ST_FUNC(LINK_START)
 {
 
-    return false;
 }
+
+ST_FUNC(LINK_1)
+{
+
+}
+
+ST_FUNC(LINK_2)
+{
+
+}
+
+ST_FUNC(LINK_3)
+{
+
+}
+
+ST_FUNC(LINK_DONE)
+{
+
+}
+
+ST_FUNC(UNLINK_START)
+{
+    
+}
+
+ST_FUNC(UNLINK_1)
+{
+
+}
+
+ST_FUNC(UNLINK_DONE)
+{
+
+}
+
+ST_FUNC(SET_START)
+{
+
+}
+
+ST_FUNC(SET_1)
+{
+    
+}
+
+ST_FUNC(SET_2)
+{
+    
+}
+
+ST_FUNC(SET_3)
+{
+    
+}
+
+ST_FUNC(SET_DONE)
+{
+    
+}
+
+ST_FUNC(SHOW_START)
+{
+    
+}
+
+ST_FUNC(LIST_START)
+{
+    
+}
+
 
 /* a string must be 1 to MAX_TOKEN_LEN printable
  * characters terminated by '\0'
@@ -600,23 +593,21 @@ static bool is_new_name(char const *token)
     return true;
 }
 
-static bool process_done_state(char const *token, parser_state_t state_if_not_command)
+static bool process_done_state(char const *token, bool (*state_if_not_command)(char const *token))
 {
     keyword_t *kw;
 
     if ( (kw = is_keyword(token)) != NULL ) {
         if ( kw->is_cmd ) {
-            state = IDLE;
+            state = ST_NAME(IDLE);
             return parse_token(token);
-        } else {
-            print_expect_error("command", token);
-            state = IDLE;
-            return false;
         }
-    } else {
-        state = state_if_not_command;
-        return parse_token(token);
+        print_expect_error("command", token);
+        state = ST_NAME(IDLE);
+        return false;
     }
+    state = state_if_not_command;
+    return parse_token(token);
 }
 
 
