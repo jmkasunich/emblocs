@@ -437,47 +437,90 @@ ST_FUNC(THREAD_DONE)
 
 ST_FUNC(LINK_START)
 {
-
+    if ( is_name(token) ) {
+        instance_meta = bl_instance_find(token);
+        if ( instance_meta ) {
+            state = ST_NAME(LINK_1);
+            return true;
+        }
+    }
+    print_expect_error("instance name", token);
+    state = ST_NAME(IDLE);
+    return false;
 }
 
 ST_FUNC(LINK_1)
 {
+    // dummy code, avoids warning spam
+    return (token == NULL);
 
 }
 
 ST_FUNC(LINK_2)
 {
+    // dummy code, avoids warning spam
+    return (token == NULL);
 
 }
 
 ST_FUNC(LINK_3)
 {
+    // dummy code, avoids warning spam
+    return (token == NULL);
 
 }
 
 ST_FUNC(LINK_DONE)
 {
-
+    return process_done_state(token, ST_NAME(LINK_START));
 }
 
 ST_FUNC(UNLINK_START)
 {
-    
+    if ( is_name(token) ) {
+        instance_meta = bl_instance_find(token);
+        if ( instance_meta ) {
+            state = ST_NAME(UNLINK_1);
+            return true;
+        }
+    }
+    print_expect_error("instance name", token);
+    state = ST_NAME(IDLE);
+    return false;
 }
 
 ST_FUNC(UNLINK_1)
 {
+    // dummy code, avoids warning spam
+    return (token == NULL);
 
 }
 
 ST_FUNC(UNLINK_DONE)
 {
-
+    return process_done_state(token, ST_NAME(UNLINK_START));
 }
 
 ST_FUNC(SET_START)
 {
-
+    signal_meta = NULL;
+    instance_meta = NULL;
+    pin_meta = NULL;
+    if ( is_name(token) ) {
+        signal_meta = bl_signal_find(token);
+        if ( signal_meta ) {
+            state = ST_NAME(SET_1);
+            return true;
+        }
+        instance_meta = bl_instance_find(token);
+        if ( instance_meta ) {
+            state = ST_NAME(SET_2);
+            return true;
+        }
+    }
+    print_expect_error("signal or instance name", token);
+    state = ST_NAME(IDLE);
+    return false;
 }
 
 ST_FUNC(SET_1)
@@ -487,7 +530,16 @@ ST_FUNC(SET_1)
 
 ST_FUNC(SET_2)
 {
-    
+    if ( is_name(token) ) {
+        pin_meta = bl_pin_find_in_instance(token, instance_meta);
+        if ( pin_meta ) {
+            state = ST_NAME(SET_3);
+            return true;
+        }
+    }
+    print_expect_error("pin name", token);
+    state = ST_NAME(IDLE);
+    return false;
 }
 
 ST_FUNC(SET_3)
@@ -497,16 +549,20 @@ ST_FUNC(SET_3)
 
 ST_FUNC(SET_DONE)
 {
-    
+    return process_done_state(token, ST_NAME(SET_START));
 }
 
 ST_FUNC(SHOW_START)
 {
+    // dummy code, avoids warning spam
+    return (token == NULL);
     
 }
 
 ST_FUNC(LIST_START)
 {
+    // dummy code, avoids warning spam
+    return (token == NULL);
     
 }
 
