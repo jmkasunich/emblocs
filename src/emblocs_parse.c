@@ -103,7 +103,7 @@ ST_FUNC(LIST_START);
 static bool parse_token(char const *token);
 
 static bool is_string(char const * token);
-static keyword_t *is_keyword(char const *token);
+static keyword_t const *is_keyword(char const *token);
 static bool is_name(char const * token);
 static bool is_new_name(char const *token);
 static bool process_done_state(char const *token, bool (*state_if_not_command)(char const *token));
@@ -161,7 +161,7 @@ static bool parse_token(char const *token)
 
 ST_FUNC(IDLE)
 {
-    keyword_t *kw;
+    keyword_t const *kw;
 
     kw = is_keyword(token);
     if ( ( kw == NULL ) || ( ! kw->is_cmd ) ) {
@@ -258,7 +258,7 @@ ST_FUNC(SIGNAL_START)
 
 ST_FUNC(SIGNAL_1)
 {
-    keyword_t *kw;
+    keyword_t const *kw;
 
     if ( is_name(token) ) {
         instance_meta = bl_instance_find(token);
@@ -359,7 +359,7 @@ ST_FUNC(THREAD_START)
 
 ST_FUNC(THREAD_1)
 {
-    keyword_t *kw;
+    keyword_t const *kw;
 
     kw = is_keyword(token);
     if ( ( kw ) && ( kw->is_thread_type ) ) {
@@ -537,7 +537,7 @@ static bool is_string(char const * token)
     return false;
 }
 
-static keyword_t *is_keyword(char const *token)
+static keyword_t const *is_keyword(char const *token)
 {
     if ( token == NULL ) {
         return NULL;
@@ -595,7 +595,7 @@ static bool is_new_name(char const *token)
 
 static bool process_done_state(char const *token, bool (*state_if_not_command)(char const *token))
 {
-    keyword_t *kw;
+    keyword_t const *kw;
 
     if ( (kw = is_keyword(token)) != NULL ) {
         if ( kw->is_cmd ) {
