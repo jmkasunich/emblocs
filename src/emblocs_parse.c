@@ -7,26 +7,26 @@
 #define halt()  do {} while (1)
 
 typedef enum {
-    KW_CMD_INSTANCE         = 1,
-    KW_CMD_SIGNAL           = 2,
-    KW_CMD_THREAD           = 3,
-    KW_CMD_LINK             = 4,
-    KW_CMD_UNLINK           = 5,
-    KW_CMD_SET              = 6,
-    KW_CMD_SHOW             = 7,
-    KW_CMD_LIST             = 8
-} keyword_command_enum_t;
+    CMD_INSTANCE         = 1,
+    CMD_SIGNAL           = 2,
+    CMD_THREAD           = 3,
+    CMD_LINK             = 4,
+    CMD_UNLINK           = 5,
+    CMD_SET              = 6,
+    CMD_SHOW             = 7,
+    CMD_LIST             = 8
+} command_enum_t;
 
-#define KEYWORD_CMD_BITS (4)
+#define CMD_BITS (4)
 
 typedef enum {
-    KW_OBJ_INSTANCE         = 1,
-    KW_OBJ_SIGNAL           = 2,
-    KW_OBJ_THREAD           = 3,
-    KW_OBJ_ALL              = 4
-} keyword_objtype_enum_t;
+    OBJ_INSTANCE         = 1,
+    OBJ_SIGNAL           = 2,
+    OBJ_THREAD           = 3,
+    OBJ_ALL              = 4
+} objtype_enum_t;
 
-#define KEYWORD_OBJTYPE_BITS (3)
+#define OBJTYPE_BITS (3)
 
 
 typedef struct keyword_s {
@@ -35,28 +35,28 @@ typedef struct keyword_s {
     uint32_t is_obj_type    : 1;
     uint32_t is_data_type   : 1;
     uint32_t is_thread_type : 1;
-    uint32_t cmd            : KEYWORD_CMD_BITS;
-    uint32_t objtype        : KEYWORD_OBJTYPE_BITS;
+    uint32_t cmd            : CMD_BITS;
+    uint32_t objtype        : OBJTYPE_BITS;
     uint32_t datatype       : BL_TYPE_BITS;
     uint32_t threadtype     : BL_NOFP_BITS;
 } keyword_t;
 
 static keyword_t keywords[] = {
-    { "instance",   1, 1, 0, 0, KW_CMD_INSTANCE, KW_OBJ_INSTANCE, 0, 0 },
-    { "signal",     1, 1, 0, 0, KW_CMD_SIGNAL, KW_OBJ_SIGNAL, 0, 0 },
-    { "thread",     1, 1, 0, 0, KW_CMD_THREAD, KW_OBJ_THREAD, 0, 0 },
-    { "link",       1, 0, 0, 0, KW_CMD_LINK, 0, 0, 0 },
-    { "unlink",     1, 0, 0, 0, KW_CMD_UNLINK, 0, 0, 0 },
-    { "set",        1, 0, 0, 0, KW_CMD_SET, 0, 0, 0 },
-    { "show",       1, 0, 0, 0, KW_CMD_SHOW, 0, 0, 0 },
-    { "list",       1, 0, 0, 0, KW_CMD_LIST, 0, 0, 0 },
+    { "instance",   1, 1, 0, 0, CMD_INSTANCE, OBJ_INSTANCE, 0, 0 },
+    { "signal",     1, 1, 0, 0, CMD_SIGNAL, OBJ_SIGNAL, 0, 0 },
+    { "thread",     1, 1, 0, 0, CMD_THREAD, OBJ_THREAD, 0, 0 },
+    { "link",       1, 0, 0, 0, CMD_LINK, 0, 0, 0 },
+    { "unlink",     1, 0, 0, 0, CMD_UNLINK, 0, 0, 0 },
+    { "set",        1, 0, 0, 0, CMD_SET, 0, 0, 0 },
+    { "show",       1, 0, 0, 0, CMD_SHOW, 0, 0, 0 },
+    { "list",       1, 0, 0, 0, CMD_LIST, 0, 0, 0 },
     { "bit",        0, 0, 1, 0, 0, 0, BL_TYPE_BIT, 0 },
     { "float",      0, 0, 1, 0, 0, 0, BL_TYPE_FLOAT, 0 },
     { "s32",        0, 0, 1, 0, 0, 0, BL_TYPE_S32, 0 },
     { "u32",        0, 0, 1, 0, 0, 0, BL_TYPE_U32, 0 },
     { "nofp",       0, 0, 0, 1, 0, 0, 0, BL_NO_FP },
     { "fp",         0, 0, 0, 1, 0, 0, 0, BL_HAS_FP },
-    { "all",        0, 1, 0, 0, 0, KW_OBJ_ALL, 0, 0 }
+    { "all",        0, 1, 0, 0, 0, OBJ_ALL, 0, 0 }
 };
 
 #define MAX_TOKEN_LEN (100)
@@ -172,35 +172,35 @@ static bool parse_token(char const *token)
                 return false;
             }
             switch ( kw->cmd ) {
-                case KW_CMD_INSTANCE:
+                case CMD_INSTANCE:
                     state = INST_START;
                     retval = true;
                     break;
-                case KW_CMD_SIGNAL:
+                case CMD_SIGNAL:
                     state = SIGNAL_START;
                     retval = true;
                     break;
-                case KW_CMD_THREAD:
+                case CMD_THREAD:
                     state = THREAD_START;
                     retval = true;
                     break;
-                case KW_CMD_LINK:
+                case CMD_LINK:
                     state = LINK_START;
                     retval = true;
                     break;
-                case KW_CMD_UNLINK:
+                case CMD_UNLINK:
                     state = UNLINK_START;
                     retval = true;
                     break;
-                case KW_CMD_SET:
+                case CMD_SET:
                     state = SET_START;
                     retval = true;
                     break;
-                case KW_CMD_SHOW:
+                case CMD_SHOW:
                     state = SHOW_START;
                     retval = true;
                     break;
-                case KW_CMD_LIST:
+                case CMD_LIST:
                     state = LIST_START;
                     retval = true;
                     break;
