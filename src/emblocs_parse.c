@@ -129,7 +129,8 @@ static bl_thread_meta_t *thread_meta;
 static bl_pin_meta_t *pin_meta;
 static bl_function_meta_t *funct_meta;
 static bl_nofp_t thread_type;
-static uint32_t thread_period;
+static bl_sig_data_t *set_target;
+static bl_type_t set_type;
 
 /**************************************************************
  * These functions support parsing an array of tokens to build
@@ -374,6 +375,8 @@ ST_FUNC(THREAD_1)
 
 ST_FUNC(THREAD_2)
 {
+    uint32_t thread_period;
+
     if ( str_to_u32(token, &thread_period) ) {
         thread_meta = bl_thread_new(new_name, thread_period, thread_type);
         if ( thread_meta ) {
@@ -506,6 +509,8 @@ ST_FUNC(SET_START)
     if ( is_name(token) ) {
         signal_meta = bl_signal_find(token);
         if ( signal_meta ) {
+            set_type = signal_meta->data_type;
+            set_target = TO_RT_ADDR(signal_meta->data_index);
             state = ST_NAME(SET_1);
             return true;
         }
@@ -530,6 +535,8 @@ ST_FUNC(SET_2)
     if ( is_name(token) ) {
         pin_meta = bl_pin_find_in_instance(token, instance_meta);
         if ( pin_meta ) {
+            set_type = pin_meta->data_type;
+            set_target = *(bl_sig_data_t **)TO_RT_ADDR(pin_meta->ptr_index);
             state = ST_NAME(SET_3);
             return true;
         }
@@ -541,7 +548,40 @@ ST_FUNC(SET_2)
 
 ST_FUNC(SET_3)
 {
-    
+    switch ( set_type ) {
+        case BL_TYPE_BIT:
+            if ( str_to_bool(token, &(set_target->b)) ) {
+                state = ST_NAME(SET_DONE);
+                return true;
+            }
+            print_expect_error("bit value", token);
+            return false;
+        case BL_TYPE_FLOAT:
+            if ( str_to_float(token, &(set_target->f)) ) {
+                state = ST_NAME(SET_DONE);
+                return true;
+            }
+            print_expect_error("float value", token);
+            return false;
+        case BL_TYPE_S32:
+            if ( str_to_s32(token, &(set_target->s)) ) {
+                state = ST_NAME(SET_DONE);
+                return true;
+            }
+            print_expect_error("s32 value", token);
+            return false;
+        case BL_TYPE_U32:
+            if ( str_to_u32(token, &(set_target->u)) ) {
+                state = ST_NAME(SET_DONE);
+                return true;
+            }
+            print_expect_error("u32 value", token);
+            return false;
+        default:
+            print_strings(2, "ERROR: ", "bad switch\n");
+            state = ST_NAME(IDLE);
+            return false;
+    }
 }
 
 ST_FUNC(SET_DONE)
