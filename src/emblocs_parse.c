@@ -63,7 +63,7 @@ static keyword_t const keywords[] = {
 
 // this macro declares a function associated with state 'foo'
 #define ST_FUNC(foo)    static bool st_ ## foo(char const *token)
-// this macr returns the name of the function for state 'foo'signal_
+// this macro returns the name of the function for state 'foo'
 #define ST_NAME(foo)    st_ ## foo
 
 // prototypes for all of the state-handling functions
@@ -95,7 +95,6 @@ ST_FUNC(UNLINK_DONE);
 ST_FUNC(SET_START);
 ST_FUNC(SET_1);
 ST_FUNC(SET_2);
-ST_FUNC(SET_3);
 ST_FUNC(SET_DONE);
 ST_FUNC(SHOW_START);
 ST_FUNC(LIST_START);
@@ -511,12 +510,12 @@ ST_FUNC(SET_START)
         if ( signal_meta ) {
             set_type = signal_meta->data_type;
             set_target = TO_RT_ADDR(signal_meta->data_index);
-            state = ST_NAME(SET_1);
+            state = ST_NAME(SET_2);
             return true;
         }
         instance_meta = bl_instance_find(token);
         if ( instance_meta ) {
-            state = ST_NAME(SET_2);
+            state = ST_NAME(SET_1);
             return true;
         }
     }
@@ -527,17 +526,12 @@ ST_FUNC(SET_START)
 
 ST_FUNC(SET_1)
 {
-    
-}
-
-ST_FUNC(SET_2)
-{
     if ( is_name(token) ) {
         pin_meta = bl_pin_find_in_instance(token, instance_meta);
         if ( pin_meta ) {
             set_type = pin_meta->data_type;
             set_target = *(bl_sig_data_t **)TO_RT_ADDR(pin_meta->ptr_index);
-            state = ST_NAME(SET_3);
+            state = ST_NAME(SET_2);
             return true;
         }
     }
@@ -546,7 +540,7 @@ ST_FUNC(SET_2)
     return false;
 }
 
-ST_FUNC(SET_3)
+ST_FUNC(SET_2)
 {
     switch ( set_type ) {
         case BL_TYPE_BIT:

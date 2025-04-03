@@ -155,7 +155,8 @@ char const * const tokens[] = {
     "speed", "1.5",
     "inv_sum", "gain0", "-1.0",
     "ramp_sum", "gain0", "1.0",
-    "ramp_mux", "in1", "1.0"
+    "ramp_mux", "in1", "1.0",
+    "ramp_mux", "out", "-3"
 };
 
 #endif // NEW_INIT
