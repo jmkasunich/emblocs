@@ -84,7 +84,7 @@ static void write_bitfield(volatile uint32_t *dest, uint32_t value, int field_wi
     *dest = tmp | ((value & mask) << (field_num * field_width));
 }
 
-
+#pragma GCC optimize ("no-strict-aliasing")
 /* component-specific setup function */
 struct bl_instance_meta_s *gpio_setup(char const *instance_name, struct bl_comp_def_s const *comp_def, void const *personality)
 {
@@ -207,6 +207,7 @@ struct bl_instance_meta_s *gpio_setup(char const *instance_name, struct bl_comp_
     bl_instance_add_functions(meta, comp_def);
     return meta;
 }
+#pragma GCC reset_options
 
 
 // realtime code - one copy in FLASH

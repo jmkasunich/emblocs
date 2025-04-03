@@ -60,6 +60,7 @@ bl_comp_def_t const bl_watch_def = {
 };
 
 /* component-specific setup function */
+#pragma GCC optimize ("no-strict-aliasing")
 struct bl_instance_meta_s *watch_setup(char const *instance_name, struct bl_comp_def_s const *comp_def, void const *personality)
 {
     watch_pin_config_t *pin_info;
@@ -113,9 +114,11 @@ struct bl_instance_meta_s *watch_setup(char const *instance_name, struct bl_comp
     bl_instance_add_functions(meta, comp_def);
     return meta;
 }
+#pragma GCC reset_options
 
 
 // realtime code - one copy in FLASH
+#pragma GCC optimize ("no-strict-aliasing")
 static void bl_watch_update_function(void *ptr, uint32_t period_ns)
 {
     (void)period_ns;  // not used
@@ -152,4 +155,5 @@ static void bl_watch_update_function(void *ptr, uint32_t period_ns)
         pins--;
     }
 }
+#pragma GCC reset_options
 

@@ -674,6 +674,7 @@ static bool is_name(char const * token)
     return false;
 }
 
+#pragma GCC optimize ("no-strict-aliasing")
 static bool is_new_name(char const *token)
 {
     if ( ll_find((void **)(&(instance_root)), (void *)(token), bl_instance_meta_compare_name_key) ) {
@@ -687,6 +688,7 @@ static bool is_new_name(char const *token)
     }
     return true;
 }
+#pragma GCC reset_options
 
 static bool process_done_state(char const *token, bool (*state_if_not_command)(char const *token))
 {
