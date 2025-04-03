@@ -13,7 +13,9 @@
 #define STM32G431xx
 #endif
 
+#pragma GCC diagnostic ignored "-Wsign-conversion"
 #include "stm32g4xx.h"
+#pragma GCC diagnostic pop
 #include "platform.h"
 
 /* some of the functions declared in platform.h are implemented here as macros */
