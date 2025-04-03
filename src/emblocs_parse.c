@@ -115,21 +115,27 @@ static bool str_to_s32(char const *str, int32_t *dest);
 static bool str_to_u32(char const *str, uint32_t *dest);
 static bool str_to_float(char const *str, float *dest);
 
+/* we need to initialize 'state' but  
+   don't care about the other fields */
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 
 /* internal parser data */
-// global that holds the current state
-static bool (*state)(char const *token) = ST_NAME(IDLE);
-static char const *new_name;
-static bl_comp_def_t *comp_def;
-static void *personality;
-static bl_signal_meta_t *signal_meta;
-static bl_instance_meta_t *instance_meta;
-static bl_thread_meta_t *thread_meta;
-static bl_pin_meta_t *pin_meta;
-static bl_function_meta_t *funct_meta;
-static bl_nofp_t thread_type;
-static bl_sig_data_t *set_target;
-static bl_type_t set_type;
+static struct parser_data {
+    bool (*state)(char const *token);
+    char const *new_name;
+    bl_comp_def_t *comp_def;
+    void *personality;
+    bl_signal_meta_t *signal_meta;
+    bl_instance_meta_t *instance_meta;
+    bl_thread_meta_t *thread_meta;
+    bl_pin_meta_t *pin_meta;
+    bl_function_meta_t *funct_meta;
+    bl_nofp_t thread_type;
+    bl_sig_data_t *set_target;
+    bl_type_t set_type;
+} pd = {ST_NAME(IDLE)};
+
+#pragma GCC diagnostic pop
 
 /**************************************************************
  * These functions support parsing an array of tokens to build
@@ -151,12 +157,12 @@ bool bl_parse_array(char const * const tokens[], uint32_t count)
 static bool parse_token(char const *token)
 {
     print_string("state: ");
-    print_uint_hex((uint32_t )state, 8, 0, 0);
+    print_uint_hex((uint32_t )pd.state, 8, 0, 0);
     print_string(", token: ");
     print_token(token);
     print_string("\n");
     // call the state-specific token processing function
-    return state(token);
+    return pd.state(token);
 }
 
 ST_FUNC(IDLE)
@@ -170,32 +176,32 @@ ST_FUNC(IDLE)
     }
     switch ( kw->cmd ) {
         case CMD_INSTANCE:
-            state = ST_NAME(INST_START);
+            pd.state = ST_NAME(INST_START);
             return true;
         case CMD_SIGNAL:
-            state = ST_NAME(SIGNAL_START);
+            pd.state = ST_NAME(SIGNAL_START);
             return true;
         case CMD_THREAD:
-            state = ST_NAME(THREAD_START);
+            pd.state = ST_NAME(THREAD_START);
             return true;
         case CMD_LINK:
-            state = ST_NAME(LINK_START);
+            pd.state = ST_NAME(LINK_START);
             return true;
         case CMD_UNLINK:
-            state = ST_NAME(UNLINK_START);
+            pd.state = ST_NAME(UNLINK_START);
             return true;
         case CMD_SET:
-            state = ST_NAME(SET_START);
+            pd.state = ST_NAME(SET_START);
             return true;
         case CMD_SHOW:
-            state = ST_NAME(SHOW_START);
+            pd.state = ST_NAME(SHOW_START);
             return true;
         case CMD_LIST:
-            state = ST_NAME(LIST_START);
+            pd.state = ST_NAME(LIST_START);
             return true;
         default:
             print_strings(2, "ERROR: ", "bad switch\n");
-            state = ST_NAME(IDLE);
+            pd.state = ST_NAME(IDLE);
             return false;
     }
 }
@@ -203,32 +209,32 @@ ST_FUNC(IDLE)
 ST_FUNC(INST_START)
 {
     if ( is_name(token) && is_new_name(token) ) {
-        new_name = token;
-        state = ST_NAME(INST_1);
+        pd.new_name = token;
+        pd.state = ST_NAME(INST_1);
         return true;
     }
     print_expect_error("new instance name", token);
-    state = ST_NAME(IDLE);
+    pd.state = ST_NAME(IDLE);
     return false;
 }
 
 ST_FUNC(INST_1)
 {
-    comp_def = (bl_comp_def_t *)token;
-    state = ST_NAME(INST_2);
+    pd.comp_def = (bl_comp_def_t *)token;
+    pd.state = ST_NAME(INST_2);
     return true;
 }
 
 ST_FUNC(INST_2)
 {
-    personality = (void *)token;
-    instance_meta = bl_instance_new(new_name, comp_def, personality);
-    if ( instance_meta != NULL ) {
-        state = ST_NAME(INST_DONE);
+    pd.personality = (void *)token;
+    pd.instance_meta = bl_instance_new(pd.new_name, pd.comp_def, pd.personality);
+    if ( pd.instance_meta != NULL ) {
+        pd.state = ST_NAME(INST_DONE);
         return true;
     }
-    print_strings(5, "ERROR: ", "could not create ", "instance '", new_name, "'\n" );
-    state = ST_NAME(IDLE);
+    print_strings(5, "ERROR: ", "could not create ", "instance '", pd.new_name, "'\n" );
+    pd.state = ST_NAME(IDLE);
     return false;
 }
 
@@ -240,19 +246,19 @@ ST_FUNC(INST_DONE)
 ST_FUNC(SIGNAL_START)
 {
     if ( is_name(token) ) {
-        signal_meta = bl_signal_find(token);
-        if ( signal_meta ) {
-            state = ST_NAME(SIGNAL_2);
+        pd.signal_meta = bl_signal_find(token);
+        if ( pd.signal_meta ) {
+            pd.state = ST_NAME(SIGNAL_2);
             return true;
         }
         if ( is_new_name(token) ) {
-            new_name = token;
-            state = ST_NAME(SIGNAL_1);
+            pd.new_name = token;
+            pd.state = ST_NAME(SIGNAL_1);
             return true;
         }
     }
     print_expect_error("new or existing signal name", token);
-    state = ST_NAME(IDLE);
+    pd.state = ST_NAME(IDLE);
     return false;
 }
 
@@ -261,67 +267,67 @@ ST_FUNC(SIGNAL_1)
     keyword_t const *kw;
 
     if ( is_name(token) ) {
-        instance_meta = bl_instance_find(token);
-        if ( instance_meta ) {
-            state = ST_NAME(SIGNAL_3);
+        pd.instance_meta = bl_instance_find(token);
+        if ( pd.instance_meta ) {
+            pd.state = ST_NAME(SIGNAL_3);
             return true;
         }
     } else {
         kw = is_keyword(token);
         if ( ( kw ) && ( kw->is_data_type ) ) {
-            signal_meta = bl_signal_new(new_name, kw->datatype );
-            if ( signal_meta ) {
-                state = ST_NAME(SIGNAL_DONE);
+            pd.signal_meta = bl_signal_new(pd.new_name, kw->datatype );
+            if ( pd.signal_meta ) {
+                pd.state = ST_NAME(SIGNAL_DONE);
                 return true;
             }
-            print_strings(5, "ERROR: ", "could not create ", "signal '", new_name, "'\n" );
-            state = ST_NAME(IDLE);
+            print_strings(5, "ERROR: ", "could not create ", "signal '", pd.new_name, "'\n" );
+            pd.state = ST_NAME(IDLE);
             return false;
         }
     }
     print_expect_error("instance name or data type", token);
-    state = ST_NAME(IDLE);
+    pd.state = ST_NAME(IDLE);
     return false;
 }
 
 ST_FUNC(SIGNAL_2)
 {
     if ( is_name(token) ) {
-        instance_meta = bl_instance_find(token);
-        if ( instance_meta ) {
-            state = ST_NAME(SIGNAL_3);
+        pd.instance_meta = bl_instance_find(token);
+        if ( pd.instance_meta ) {
+            pd.state = ST_NAME(SIGNAL_3);
             return true;
         }
     }
     print_expect_error("instance name", token);
-    state = ST_NAME(IDLE);
+    pd.state = ST_NAME(IDLE);
     return false;
 }
 
 ST_FUNC(SIGNAL_3)
 {
     if ( is_name(token) ) {
-        pin_meta = bl_pin_find_in_instance(token, instance_meta);
-        if ( pin_meta ) {
-            if ( ! signal_meta ) {
-                signal_meta = bl_signal_new(new_name, pin_meta->data_type);
-                if ( ! signal_meta ) {
-                    print_strings(5, "ERROR: ", "could not create ", "signal '", new_name, "'\n" );
-                    state = ST_NAME(IDLE);
+        pd.pin_meta = bl_pin_find_in_instance(token, pd.instance_meta);
+        if ( pd.pin_meta ) {
+            if ( ! pd.signal_meta ) {
+                pd.signal_meta = bl_signal_new(pd.new_name, pd.pin_meta->data_type);
+                if ( ! pd.signal_meta ) {
+                    print_strings(5, "ERROR: ", "could not create ", "signal '", pd.new_name, "'\n" );
+                    pd.state = ST_NAME(IDLE);
                     return false;
                 }
             }
-            if ( bl_pin_linkto_signal(pin_meta, signal_meta) ) {
-                state = ST_NAME(SIGNAL_DONE);
+            if ( bl_pin_linkto_signal(pd.pin_meta, pd.signal_meta) ) {
+                pd.state = ST_NAME(SIGNAL_DONE);
                 return true;
             }
-            print_strings(9, "ERROR: ", "could not link ", "pin '", instance_meta->name, ".", pin_meta->name, "' to signal '", signal_meta->name, "'\n" );
-            state = ST_NAME(IDLE);
+            print_strings(9, "ERROR: ", "could not link ", "pin '", pd.instance_meta->name, ".", pd.pin_meta->name, "' to signal '", pd.signal_meta->name, "'\n" );
+            pd.state = ST_NAME(IDLE);
             return false;
         }
     }
     print_expect_error("pin name", token);
-    state = ST_NAME(IDLE);
+    pd.state = ST_NAME(IDLE);
     return false;
 }
 
@@ -329,9 +335,9 @@ ST_FUNC(SIGNAL_DONE)
 {
     // check innermost loop - another instance/pin pair
     if ( is_name(token) ) {
-        instance_meta = bl_instance_find(token);
-        if ( instance_meta ) {
-            state = ST_NAME(SIGNAL_3);
+        pd.instance_meta = bl_instance_find(token);
+        if ( pd.instance_meta ) {
+            pd.state = ST_NAME(SIGNAL_3);
             return true;
         }
     }
@@ -341,19 +347,19 @@ ST_FUNC(SIGNAL_DONE)
 ST_FUNC(THREAD_START)
 {
     if ( is_name(token) ) {
-        thread_meta = bl_thread_find(token);
-        if ( thread_meta ) {
-            state = ST_NAME(THREAD_3);
+        pd.thread_meta = bl_thread_find(token);
+        if ( pd.thread_meta ) {
+            pd.state = ST_NAME(THREAD_3);
             return true;
         }
         if ( is_new_name(token) ) {
-            new_name = token;
-            state = ST_NAME(THREAD_1);
+            pd.new_name = token;
+            pd.state = ST_NAME(THREAD_1);
             return true;
         }
     }
     print_expect_error("new or existing thread name", token);
-    state = ST_NAME(IDLE);
+    pd.state = ST_NAME(IDLE);
     return false;
 }
 
@@ -363,12 +369,12 @@ ST_FUNC(THREAD_1)
 
     kw = is_keyword(token);
     if ( ( kw ) && ( kw->is_thread_type ) ) {
-        thread_type = kw->threadtype;
-        state = ST_NAME(THREAD_2);
+        pd.thread_type = kw->threadtype;
+        pd.state = ST_NAME(THREAD_2);
         return true;
     }
     print_expect_error("thread type", token);
-    state = ST_NAME(IDLE);
+    pd.state = ST_NAME(IDLE);
     return false;
 }
 
@@ -377,50 +383,50 @@ ST_FUNC(THREAD_2)
     uint32_t thread_period;
 
     if ( str_to_u32(token, &thread_period) ) {
-        thread_meta = bl_thread_new(new_name, thread_period, thread_type);
-        if ( thread_meta ) {
-            state = ST_NAME(THREAD_DONE);
+        pd.thread_meta = bl_thread_new(pd.new_name, thread_period, pd.thread_type);
+        if ( pd.thread_meta ) {
+            pd.state = ST_NAME(THREAD_DONE);
             return true;
         }
-        print_strings(5, "ERROR: ", "could not create ", "thread '", new_name, "'\n" );
-        state = ST_NAME(IDLE);
+        print_strings(5, "ERROR: ", "could not create ", "thread '", pd.new_name, "'\n" );
+        pd.state = ST_NAME(IDLE);
         return false;
     }
     print_expect_error("thread period", token);
-    state = ST_NAME(IDLE);
+    pd.state = ST_NAME(IDLE);
     return false;
 }
 
 ST_FUNC(THREAD_3)
 {
     if ( is_name(token) ) {
-        instance_meta = bl_instance_find(token);
-        if ( instance_meta ) {
-            state = ST_NAME(THREAD_4);
+        pd.instance_meta = bl_instance_find(token);
+        if ( pd.instance_meta ) {
+            pd.state = ST_NAME(THREAD_4);
             return true;
         }
     }
     print_expect_error("instance name", token);
-    state = ST_NAME(IDLE);
+    pd.state = ST_NAME(IDLE);
     return false;
 }
 
 ST_FUNC(THREAD_4)
 {
     if ( is_name(token) ) {
-        funct_meta = bl_function_find_in_instance(token, instance_meta);
-        if ( funct_meta ) {
-            if ( bl_function_linkto_thread(funct_meta, thread_meta) ) {
-                state = ST_NAME(THREAD_DONE);
+        pd.funct_meta = bl_function_find_in_instance(token, pd.instance_meta);
+        if ( pd.funct_meta ) {
+            if ( bl_function_linkto_thread(pd.funct_meta, pd.thread_meta) ) {
+                pd.state = ST_NAME(THREAD_DONE);
                 return true;
             }
-            print_strings(9, "ERROR: ", "could not link ", "function '", instance_meta->name, ".", funct_meta->name, "' to thread '", thread_meta->name, "'\n" );
-            state = ST_NAME(IDLE);
+            print_strings(9, "ERROR: ", "could not link ", "function '", pd.instance_meta->name, ".", pd.funct_meta->name, "' to thread '", pd.thread_meta->name, "'\n" );
+            pd.state = ST_NAME(IDLE);
             return false;
         }
     }
     print_expect_error("function name", token);
-    state = ST_NAME(IDLE);
+    pd.state = ST_NAME(IDLE);
     return false;
 }
 
@@ -428,9 +434,9 @@ ST_FUNC(THREAD_DONE)
 {
     // check innermost loop - another instance/function pair
     if ( is_name(token) ) {
-        instance_meta = bl_instance_find(token);
-        if ( instance_meta ) {
-            state = ST_NAME(THREAD_4);
+        pd.instance_meta = bl_instance_find(token);
+        if ( pd.instance_meta ) {
+            pd.state = ST_NAME(THREAD_4);
             return true;
         }
     }
@@ -440,14 +446,14 @@ ST_FUNC(THREAD_DONE)
 ST_FUNC(LINK_START)
 {
     if ( is_name(token) ) {
-        instance_meta = bl_instance_find(token);
-        if ( instance_meta ) {
-            state = ST_NAME(LINK_1);
+        pd.instance_meta = bl_instance_find(token);
+        if ( pd.instance_meta ) {
+            pd.state = ST_NAME(LINK_1);
             return true;
         }
     }
     print_expect_error("instance name", token);
-    state = ST_NAME(IDLE);
+    pd.state = ST_NAME(IDLE);
     return false;
 }
 
@@ -480,14 +486,14 @@ ST_FUNC(LINK_DONE)
 ST_FUNC(UNLINK_START)
 {
     if ( is_name(token) ) {
-        instance_meta = bl_instance_find(token);
-        if ( instance_meta ) {
-            state = ST_NAME(UNLINK_1);
+        pd.instance_meta = bl_instance_find(token);
+        if ( pd.instance_meta ) {
+            pd.state = ST_NAME(UNLINK_1);
             return true;
         }
     }
     print_expect_error("instance name", token);
-    state = ST_NAME(IDLE);
+    pd.state = ST_NAME(IDLE);
     return false;
 }
 
@@ -506,74 +512,76 @@ ST_FUNC(UNLINK_DONE)
 ST_FUNC(SET_START)
 {
     if ( is_name(token) ) {
-        signal_meta = bl_signal_find(token);
-        if ( signal_meta ) {
-            set_type = signal_meta->data_type;
-            set_target = TO_RT_ADDR(signal_meta->data_index);
-            state = ST_NAME(SET_2);
+        pd.signal_meta = bl_signal_find(token);
+        if ( pd.signal_meta ) {
+            pd.set_type = pd.signal_meta->data_type;
+            pd.set_target = TO_RT_ADDR(pd.signal_meta->data_index);
+            pd.state = ST_NAME(SET_2);
             return true;
         }
-        instance_meta = bl_instance_find(token);
-        if ( instance_meta ) {
-            state = ST_NAME(SET_1);
+        pd.instance_meta = bl_instance_find(token);
+        if ( pd.instance_meta ) {
+            pd.state = ST_NAME(SET_1);
             return true;
         }
     }
     print_expect_error("signal or instance name", token);
-    state = ST_NAME(IDLE);
+    pd.state = ST_NAME(IDLE);
     return false;
 }
 
+#pragma GCC optimize ("no-strict-aliasing")
 ST_FUNC(SET_1)
 {
     if ( is_name(token) ) {
-        pin_meta = bl_pin_find_in_instance(token, instance_meta);
-        if ( pin_meta ) {
-            set_type = pin_meta->data_type;
-            set_target = *(bl_sig_data_t **)TO_RT_ADDR(pin_meta->ptr_index);
-            state = ST_NAME(SET_2);
+        pd.pin_meta = bl_pin_find_in_instance(token, pd.instance_meta);
+        if ( pd.pin_meta ) {
+            pd.set_type = pd.pin_meta->data_type;
+            pd.set_target = *(bl_sig_data_t **)TO_RT_ADDR(pd.pin_meta->ptr_index);
+            pd.state = ST_NAME(SET_2);
             return true;
         }
     }
     print_expect_error("pin name", token);
-    state = ST_NAME(IDLE);
+    pd.state = ST_NAME(IDLE);
     return false;
 }
+#pragma GCC reset_options
 
 ST_FUNC(SET_2)
 {
-    switch ( set_type ) {
+    switch ( pd.set_type ) {
         case BL_TYPE_BIT:
-            if ( str_to_bool(token, &(set_target->b)) ) {
-                state = ST_NAME(SET_DONE);
+            if ( str_to_bool(token, &(pd.set_target->b)) ) {
+                pd.state = ST_NAME(SET_DONE);
                 return true;
             }
             print_expect_error("bit value", token);
             return false;
         case BL_TYPE_FLOAT:
-            if ( str_to_float(token, &(set_target->f)) ) {
-                state = ST_NAME(SET_DONE);
+            if ( str_to_float(token, &(pd.set_target->f)) ) {
+                pd.state = ST_NAME(SET_DONE);
                 return true;
             }
             print_expect_error("float value", token);
             return false;
         case BL_TYPE_S32:
-            if ( str_to_s32(token, &(set_target->s)) ) {
-                state = ST_NAME(SET_DONE);
+            if ( str_to_s32(token, &(pd.set_target->s)) ) {
+                pd.state = ST_NAME(SET_DONE);
                 return true;
             }
             print_expect_error("s32 value", token);
             return false;
         case BL_TYPE_U32:
-            if ( str_to_u32(token, &(set_target->u)) ) {
-                state = ST_NAME(SET_DONE);
+            if ( str_to_u32(token, &(pd.set_target->u)) ) {
+                pd.state = ST_NAME(SET_DONE);
                 return true;
             }
             print_expect_error("u32 value", token);
             return false;
         default:
             print_strings(2, "ERROR: ", "bad switch\n");
-            state = ST_NAME(IDLE);
+            pd.state = ST_NAME(IDLE);
             return false;
     }
 }
@@ -686,14 +694,14 @@ static bool process_done_state(char const *token, bool (*state_if_not_command)(c
 
     if ( (kw = is_keyword(token)) != NULL ) {
         if ( kw->is_cmd ) {
-            state = ST_NAME(IDLE);
+            pd.state = ST_NAME(IDLE);
             return parse_token(token);
         }
         print_expect_error("command", token);
-        state = ST_NAME(IDLE);
+        pd.state = ST_NAME(IDLE);
         return false;
     }
-    state = state_if_not_command;
+    pd.state = state_if_not_command;
     return parse_token(token);
 }
 
@@ -797,6 +805,7 @@ static bool str_to_s32(char const *str, int32_t *dest)
     return true;
 }
 
+#pragma GCC optimize ("no-strict-aliasing")
 static bool str_to_float(char const *str, float *dest)
 {
     bool is_neg = 0;
@@ -878,4 +887,5 @@ static bool str_to_float(char const *str, float *dest)
     }
     return true;
 }
+#pragma GCC reset_options
 
