@@ -21,7 +21,7 @@ void __assert_func (const char * file, int line, const char * funct, const char 
     print_string(") at ");
     print_string(file);
     print_string(":");
-    print_uint_dec(line);
+    print_int_dec(line, '\0');
     print_string(" in function ");
     print_string(funct);
     print_string("()\n");
