@@ -453,23 +453,59 @@ ST_FUNC(LINK_START)
 
 ST_FUNC(LINK_1)
 {
-    // dummy code, avoids warning spam
-    return (token == NULL);
-
+    if ( is_name(token) ) {
+        pd.pin_meta = bl_pin_find_in_instance(token, pd.instance_meta);
+        if ( pd.pin_meta ) {
+            pd.state = ST_NAME(LINK_2);
+            return true;
+        }
+        pd.funct_meta = bl_function_find_in_instance(token, pd.instance_meta);
+        if ( pd.funct_meta ) {
+            pd.state = ST_NAME(LINK_3);
+            return true;
+        }
+    }
+    print_expect_error("pin or function name", token);
+    pd.state = ST_NAME(IDLE);
+    return false;
 }
 
 ST_FUNC(LINK_2)
 {
-    // dummy code, avoids warning spam
-    return (token == NULL);
-
+    if ( is_name(token) ) {
+        pd.signal_meta = bl_signal_find(token);
+        if ( pd.signal_meta ) {
+            if ( bl_pin_linkto_signal(pd.pin_meta, pd.signal_meta) ) {
+                pd.state = ST_NAME(LINK_DONE);
+                return true;
+            }
+            print_strings(9, "ERROR: ", "could not link ", "pin '", pd.instance_meta->name, ".", pd.pin_meta->name, "' to signal '", pd.signal_meta->name, "'\n" );
+            pd.state = ST_NAME(IDLE);
+            return false;
+        }
+    }
+    print_expect_error("signal name", token);
+    pd.state = ST_NAME(IDLE);
+    return false;
 }
 
 ST_FUNC(LINK_3)
 {
-    // dummy code, avoids warning spam
-    return (token == NULL);
-
+    if ( is_name(token) ) {
+        pd.thread_meta = bl_thread_find(token);
+        if ( pd.thread_meta ) {
+            if ( bl_function_linkto_thread(pd.funct_meta, pd.thread_meta) ) {
+                pd.state = ST_NAME(LINK_DONE);
+                return true;
+            }
+            print_strings(9, "ERROR: ", "could not link ", "function '", pd.instance_meta->name, ".", pd.funct_meta->name, "' to thread '", pd.thread_meta->name, "'\n" );
+            pd.state = ST_NAME(IDLE);
+            return false;
+        }
+    }
+    print_expect_error("signal name", token);
+    pd.state = ST_NAME(IDLE);
+    return false;
 }
 
 ST_FUNC(LINK_DONE)
@@ -493,9 +529,31 @@ ST_FUNC(UNLINK_START)
 
 ST_FUNC(UNLINK_1)
 {
-    // dummy code, avoids warning spam
-    return (token == NULL);
-
+    if ( is_name(token) ) {
+        pd.pin_meta = bl_pin_find_in_instance(token, pd.instance_meta);
+        if ( pd.pin_meta ) {
+            if ( bl_pin_unlink(pd.pin_meta) ) {
+                pd.state = ST_NAME(UNLINK_DONE);
+                return true;
+            }
+            print_strings(7, "ERROR: ", "could not unlink ", "pin '", pd.instance_meta->name, ".", pd.pin_meta->name, "'\n" );
+            pd.state = ST_NAME(IDLE);
+            return false;
+        }
+        pd.funct_meta = bl_function_find_in_instance(token, pd.instance_meta);
+        if ( pd.funct_meta ) {
+            if ( bl_function_unlink(pd.funct_meta) ) {
+                pd.state = ST_NAME(UNLINK_DONE);
+                return true;
+            }
+            print_strings(7, "ERROR: ", "could not unlink ", "function '", pd.instance_meta->name, ".", pd.funct_meta->name, "'\n" );
+            pd.state = ST_NAME(IDLE);
+            return false;
+        }
+    }
+    print_expect_error("pin or function name", token);
+    pd.state = ST_NAME(IDLE);
+    return false;
 }
 
 ST_FUNC(UNLINK_DONE)
