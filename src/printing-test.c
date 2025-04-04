@@ -104,7 +104,7 @@ void __assert_func (const char * file, int line, const char * funct, const char 
     print_string(") at ");
     print_string(file);
     print_string(":");
-    print_uint_dec(line);
+    print_int_dec(line, '\0');
     print_string(" in function ");
     print_string(funct);
     print_string("()\n");
@@ -128,7 +128,7 @@ void print_test_result(char *function, char *val_string, char *result, uint32_t 
     print_string("), '");
     print_string(result);
     print_string("', ");
-    print_int_dec(clocks, '\0');
+    print_uint_dec(clocks);
     print_string(", clocks, ");
     print_int_dec(len, '\0');
     print_string(", bytes");

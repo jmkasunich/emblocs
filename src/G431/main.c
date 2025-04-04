@@ -6,6 +6,12 @@
 #include "tmp_gpio.h"
 #include "watch.h"
 
+#define PRINT_INIT
+
+#ifndef _countof
+#define _countof(array) (sizeof(array)/sizeof(array[0]))
+#endif
+
 void __assert_func (const char * file, int line, const char * funct, const char *expr)
 {
     print_string("assert(");
@@ -13,7 +19,7 @@ void __assert_func (const char * file, int line, const char * funct, const char 
     print_string(") at ");
     print_string(file);
     print_string(":");
-    print_uint_dec(line);
+    print_int_dec(line, '\0');
     print_string(" in function ");
     print_string(funct);
     print_string("()\n");
@@ -94,7 +100,7 @@ gpio_port_config_t const portC = { GPIOC, {
 }};
 
 
-watch_pin_config_t watch_pers[] = {
+watch_pin_config_t const watch_pers[] = {
     { BL_TYPE_BIT, "in", "in: %1b " },
     { BL_TYPE_BIT, "oe", "oe: %1b " },
     { BL_TYPE_BIT, "out", "out: %1b " },
@@ -102,70 +108,85 @@ watch_pin_config_t watch_pers[] = {
     { BL_TYPE_BIT, NULL, NULL }
 };
 
-bl_instance_def_t const instances[] = {
-    { "PortA", &bl_gpio_def, &portA},
-    { "PortB", &bl_gpio_def, &portB},
-    { "PortC", &bl_gpio_def, &portC},
-    { "watcher", &bl_watch_def, &watch_pers},
-    { "ramp_sum", &bl_sum2_def, NULL },
-    { "inv_sum", &bl_sum2_def, NULL },
-    { "timer", &bl_perftimer_def, NULL },
-    { "dir_mux", &bl_mux2_def, NULL },
-    { "ramp_mux", &bl_mux2_def, NULL },
-    { NULL, NULL, NULL }
-};
-
-char const * const nets[] = {
-    "FLOAT", "speed", "dir_mux", "in0", "inv_sum", "in0",
-    "FLOAT", "speed_inv", "inv_sum", "out", "dir_mux", "in1",
-    "BIT", "dir", "dir_mux", "sel",
-    "BIT", "ramp", "ramp_mux", "sel",
-    "FLOAT", "slope", "dir_mux", "out", "ramp_sum", "in1",
-    "FLOAT", "ramp_gain", "ramp_mux", "out", "ramp_sum", "gain1",
-    "FLOAT", "output", "ramp_sum", "out", "ramp_sum", "in0", "watcher", "output",
-    "U32", "clocks", "timer", "time",
-    "BIT", "LED", "PortC", "10_in", "PortC", "06_out",
-    "BIT", "oe", "PortB", "08_oe", "watcher", "oe",
-    "BIT", "out", "PortB", "08_out", "watcher", "out",
-    "BIT", "in", "PortB", "08_in", "watcher", "in",
-    NULL
-};
-
-bl_setsig_def_t const setsigs[] = {
-    { "ramp", { .b = 1 } },
-    { "speed", { .f = 1.5F } },
-    {NULL, {0} }
-};
-
-bl_setpin_def_t const setpins[] = {
-    { "inv_sum", "gain0", { .f = -1.0F } },
-    { "ramp_sum", "gain0", { .f = 1.0F } },
-    { "ramp_mux", "in1", { .f = 1.0F } },
-    { NULL, NULL, {0} }
-};
-
-char const * const threads[] = {
-    "HAS_FP", "1000000", "main_thread",
+char const * const tokens[] = {
+  "instance",
+    "PortA", (char const *)&bl_gpio_def, (char const *)&portA,
+    "PortB", (char const *)&bl_gpio_def, (char const *)&portB,
+    "PortC", (char const *)&bl_gpio_def, (char const *)&portC,
+    "ramp_sum", (char const *)&bl_sum2_def, NULL,
+    "inv_sum", (char const *)&bl_sum2_def, NULL,
+    "timer", (char const *)&bl_perftimer_def, NULL,
+    "watcher", (char const *)&bl_watch_def, (char const *)&watch_pers,
+    "dir_mux", (char const *)&bl_mux2_def, NULL,
+    "ramp_mux", (char const *)&bl_mux2_def, NULL,
+  "signal",
+    "speed", "dir_mux", "in0", "inv_sum", "in0",
+    "speed_inv", "inv_sum", "out", "dir_mux", "in1",
+    "dir", "bit", 
+    "abit", "dir_mux", "sel",
+    "ramp", "ramp_mux", "sel",
+    "slope", "dir_mux", "out", "ramp_sum", "in1",
+    "ramp_gain", "ramp_mux", "out",
+    "output", "ramp_sum", "out", "ramp_sum", "in0", "watcher", "output",
+    "clocks", "timer", "time",
+    "LED", "PortC", "p10in", "PortC", "p06out",
+    "oe", "PortB", "p08oe", "watcher", "oe",
+    "out", "PortB", "p08out", "watcher", "out",
+    "in", "PortB", "p08in", "watcher", "in",
+  "thread",
+    "main_thread", "fp", "1000000",
     "timer", "start",
     "PortB", "read",
     "PortC", "read",
+    "timer", "stop",
     "inv_sum", "update",
     "dir_mux", "update",
     "ramp_mux", "update",
     "ramp_sum", "update",
     "PortB", "write",
     "PortC", "write",
-    "timer", "stop",
-    "HAS_FP", "1000000000", "watch_thread",
+    "watch_thread", "fp", "1000000000",
     "watcher", "update",
-    NULL
+  "show",
+    "thread",
+  "unlink",
+    "timer", "stop",
+  "show",
+    "main_thread",
+  "link",
+    "timer", "stop", "main_thread",
+  "show",
+    "thread",
+    "instance",
+    "timer",
+    "signal",
+    "oe",
+  "unlink",
+    "dir_mux", "sel",
+  "show",
+    "signal",
+  "link",
+    "dir_mux", "sel", "dir",
+  "signal",
+    "ramp_gain", "ramp_sum", "gain1",
+  "show",
+    "signal",
+  "set",
+    "ramp", "1",
+    "speed", "1.5",
+    "inv_sum", "gain0", "-1.0",
+    "ramp_sum", "gain0", "1.0",
+    "ramp_mux", "in1", "1.0",
+    "ramp_mux", "out", "-3",
+  "show",
+    "all"
 };
 
 #define CLK_MHZ 170
 
 int main (void) {
     char *hello = "\nHello, world!\n";
-    uint32_t t_start, t_inst, t_nets, t_setsig, t_setpin, t_threads, t_total;
+    uint32_t t_start, t_end, t_init, t_thread;
     struct bl_thread_data_s *main_thread;
     struct bl_thread_data_s *watch_thread;
     char c;
@@ -178,38 +199,20 @@ int main (void) {
 //    print_memory((void *)hello, 512);
     print_string("\n\n");
     bl_show_memory_status();
-    print_string("begin init\n");
+    print_string("begin parse\n");
     t_start = tsc_read();
-    bl_init_instances(instances);
-    t_inst = tsc_read();
-    bl_init_nets(nets);
-    t_nets = tsc_read();
-    bl_init_setsigs(setsigs);
-    t_setsig = tsc_read();
-    bl_init_setpins(setpins);
-    t_setpin = tsc_read();
-    bl_init_threads(threads);
-    t_threads = tsc_read();
-    print_string("init complete\n");
-    t_total = t_threads - t_start;
-    t_threads -= t_setpin;
-    t_setpin -= t_setsig;
-    t_setsig -= t_nets;
-    t_nets -= t_inst;
-    t_inst -= t_start;
-    printf("Init time:        Clocks      uSec\n");
-    printf("  Instances:    %8d  %8d\n", t_inst, t_inst/CLK_MHZ);
-    printf("  Nets:         %8d  %8d\n", t_nets, t_nets/CLK_MHZ);
-    printf("  Set signals:  %8d  %8d\n", t_setsig, t_setsig/CLK_MHZ);
-    printf("  Set pins:     %8d  %8d\n", t_setpin, t_setpin/CLK_MHZ);
-    printf("  Threads:      %8d  %8d\n\n", t_threads, t_threads/CLK_MHZ);
-    printf("  Total:        %8d  %8d\n\n", t_total, t_total/CLK_MHZ);
+    bl_parse_array(tokens, _countof(tokens));
+    t_end = tsc_read();
+    print_string("parse complete\n");
+    t_init = t_end - t_start;
+#ifdef PRINT_INIT
+    printf("Parse time        Clocks      uSec\n");
+    printf("  Total:        %8d  %8d\n\n", t_init, t_init/CLK_MHZ);
     bl_show_memory_status();
     bl_show_all_instances();
     bl_show_all_signals();
     bl_show_all_threads();
-
-    
+#endif // PRINT_INIT
     main_thread = bl_thread_get_data(bl_thread_find("main_thread"));
     watch_thread = bl_thread_get_data(bl_thread_find("watch_thread"));
     assert(main_thread != NULL);
@@ -259,10 +262,10 @@ int main (void) {
         print_string("running...");
         t_start = tsc_read();
         bl_thread_run(main_thread, 1);
-        t_threads = tsc_read();
+        t_end = tsc_read();
         print_string("done\n");
-        t_threads -= t_start;
-        printf("execution time: %d\n", t_threads);
+        t_thread = t_end - t_start;
+        printf("execution time: %d\n", t_thread);
         bl_thread_run(watch_thread,0);
         bl_show_all_signals();
     }

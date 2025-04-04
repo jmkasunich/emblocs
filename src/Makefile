@@ -28,7 +28,7 @@ TEMP_DIR 				:= $(BUILD_DIR)/temp
 ALL_SRCS := 
 ALL_TARGETS :=
 
-EMBLOCS_SRCS := emblocs_core.c emblocs_show.c emblocs_init.c
+EMBLOCS_SRCS := emblocs_core.c emblocs_show.c emblocs_parse.c
 
 # target definitions
 PRINT_TEST_TARGET := printing-test.hex
@@ -123,6 +123,7 @@ CFLAGS 					+= -Wpointer-arith
 CFLAGS 					+= -Wdisabled-optimization
 CFLAGS                	+= -Wunused-parameter
 CFLAGS					+= -Wno-sign-conversion
+CFLAGS					+= -Wstrict-aliasing=1
 # Assembler settings
 CFLAGS                  += -Wa,-alh=$(@:.o=.lst)
 

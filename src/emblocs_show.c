@@ -49,6 +49,10 @@ static char const * const dirs_sp[] = {
     "xxx", "==>", "<==", "<=>"
 };
 
+/* I do a bunch of pointer manipulation 
+   and type-punning in this file */
+#pragma GCC optimize ("no-strict-aliasing")
+
 void bl_show_memory_status(void)
 {
     printf("RT pool:   %d/%d, %d free\n", bl_rt_pool_size-bl_rt_pool_avail, bl_rt_pool_size, bl_rt_pool_avail);
@@ -454,3 +458,5 @@ static int bl_find_functions_in_thread(bl_thread_meta_t const *thread, void (*ca
     return matches;
 }
 #endif
+
+#pragma GCC reset_options

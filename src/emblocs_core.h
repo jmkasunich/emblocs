@@ -44,15 +44,6 @@ typedef bl_u32_t    *bl_pin_u32_t;
 /* "generic" pin is a pointer to generic data */
 typedef bl_sig_data_t *bl_pin_t;
 
-/* return values for API functions */
-typedef enum {
-    BL_SUCCESS = 0,
-    BL_ERR_GENERAL = -1,
-    BL_ERR_TYPE_MISMATCH = -2,
-    BL_ERR_NOT_FOUND = -3,
-    BL_ERR_NOMEM = -4
-} bl_retval_t;
-
 /* macro to calculate the size of bitfield needed to store 'n' */
 #define BITS2STORE(n) (32-(__builtin_clz((n))))
 

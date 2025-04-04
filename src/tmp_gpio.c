@@ -29,24 +29,24 @@ _Static_assert((GPIO_MAX_INSTANCE_SIZE < BL_INSTANCE_DATA_MAX_SIZE), "instance s
 // pin name strings
 // (pin definitions are created dynamically, but the strings must exist in flash)
 char const pin_names_in[16][6] = {
-    "00_in", "01_in", "02_in", "03_in",
-    "04_in", "05_in", "06_in", "07_in",
-    "08_in", "09_in", "10_in", "11_in",
-    "12_in", "13_in", "14_in", "15_in"
+    "p00in", "p01in", "p02in", "p03in",
+    "p04in", "p05in", "p06in", "p07in",
+    "p08in", "p09in", "p10in", "p11in",
+    "p12in", "p13in", "p14in", "p15in"
 };
 
 char const pin_names_out[16][7] = {
-    "00_out", "01_out", "02_out", "03_out",
-    "04_out", "05_out", "06_out", "07_out",
-    "08_out", "09_out", "10_out", "11_out",
-    "12_out", "13_out", "14_out", "15_out"
+    "p00out", "p01out", "p02out", "p03out",
+    "p04out", "p05out", "p06out", "p07out",
+    "p08out", "p09out", "p10out", "p11out",
+    "p12out", "p13out", "p14out", "p15out"
 };
 
 char const pin_names_oe[16][6] = {
-    "00_oe", "01_oe", "02_oe", "03_oe",
-    "04_oe", "05_oe", "06_oe", "07_oe",
-    "08_oe", "09_oe", "10_oe", "11_oe",
-    "12_oe", "13_oe", "14_oe", "15_oe"
+    "p00oe", "p01oe", "p02oe", "p03oe",
+    "p04oe", "p05oe", "p06oe", "p07oe",
+    "p08oe", "p09oe", "p10oe", "p11oe",
+    "p12oe", "p13oe", "p14oe", "p15oe"
 };
 
 
@@ -84,7 +84,7 @@ static void write_bitfield(volatile uint32_t *dest, uint32_t value, int field_wi
     *dest = tmp | ((value & mask) << (field_num * field_width));
 }
 
-
+#pragma GCC optimize ("no-strict-aliasing")
 /* component-specific setup function */
 struct bl_instance_meta_s *gpio_setup(char const *instance_name, struct bl_comp_def_s const *comp_def, void const *personality)
 {
@@ -207,6 +207,7 @@ struct bl_instance_meta_s *gpio_setup(char const *instance_name, struct bl_comp_
     bl_instance_add_functions(meta, comp_def);
     return meta;
 }
+#pragma GCC reset_options
 
 
 // realtime code - one copy in FLASH
