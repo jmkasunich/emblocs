@@ -11,7 +11,9 @@ typedef enum {
     CMD_SIGNAL           = 2,
     CMD_THREAD           = 3,
     CMD_LINK             = 4,
+#ifdef BL_ENABLE_UNLINK
     CMD_UNLINK           = 5,
+#endif
     CMD_SET              = 6,
     CMD_SHOW             = 7,
 } command_enum_t;
@@ -45,7 +47,9 @@ static keyword_t const keywords[] = {
     { "signal",     1, 1, 0, 0, CMD_SIGNAL, OBJ_SIGNAL, 0, 0 },
     { "thread",     1, 1, 0, 0, CMD_THREAD, OBJ_THREAD, 0, 0 },
     { "link",       1, 0, 0, 0, CMD_LINK, 0, 0, 0 },
+#ifdef BL_ENABLE_UNLINK
     { "unlink",     1, 0, 0, 0, CMD_UNLINK, 0, 0, 0 },
+#endif
     { "set",        1, 0, 0, 0, CMD_SET, 0, 0, 0 },
     { "show",       1, 0, 0, 0, CMD_SHOW, 0, 0, 0 },
     { "bit",        0, 0, 1, 0, 0, 0, BL_TYPE_BIT, 0 },
@@ -87,9 +91,11 @@ ST_FUNC(LINK_1);
 ST_FUNC(LINK_2);
 ST_FUNC(LINK_3);
 ST_FUNC(LINK_DONE);
+#ifdef BL_ENABLE_UNLINK
 ST_FUNC(UNLINK_START);
 ST_FUNC(UNLINK_1);
 ST_FUNC(UNLINK_DONE);
+#endif
 ST_FUNC(SET_START);
 ST_FUNC(SET_1);
 ST_FUNC(SET_2);
@@ -184,9 +190,11 @@ ST_FUNC(IDLE)
         case CMD_LINK:
             pd.state = ST_NAME(LINK_START);
             return true;
+#ifdef BL_ENABLE_UNLINK
         case CMD_UNLINK:
             pd.state = ST_NAME(UNLINK_START);
             return true;
+#endif
         case CMD_SET:
             pd.state = ST_NAME(SET_START);
             return true;
@@ -513,6 +521,7 @@ ST_FUNC(LINK_DONE)
     return process_done_state(token, ST_NAME(LINK_START));
 }
 
+#ifdef BL_ENABLE_UNLINK
 ST_FUNC(UNLINK_START)
 {
     if ( is_name(token) ) {
@@ -560,6 +569,7 @@ ST_FUNC(UNLINK_DONE)
 {
     return process_done_state(token, ST_NAME(UNLINK_START));
 }
+#endif
 
 ST_FUNC(SET_START)
 {
