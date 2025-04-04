@@ -671,6 +671,7 @@ ST_FUNC(SHOW_START)
                     bl_show_all_threads();
                 return true;
                 case OBJ_ALL:
+                    bl_show_memory_status();
                     bl_show_all_instances();
                     bl_show_all_signals();
                     bl_show_all_threads();

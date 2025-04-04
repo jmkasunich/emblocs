@@ -179,7 +179,7 @@ char const * const tokens[] = {
     "ramp_mux", "in1", "1.0",
     "ramp_mux", "out", "-3",
   "show",
-    "signal"
+    "all"
 };
 
 #define CLK_MHZ 170
