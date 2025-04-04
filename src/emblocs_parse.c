@@ -14,7 +14,6 @@ typedef enum {
     CMD_UNLINK           = 5,
     CMD_SET              = 6,
     CMD_SHOW             = 7,
-    CMD_LIST             = 8
 } command_enum_t;
 
 #define CMD_BITS (4)
@@ -49,7 +48,6 @@ static keyword_t const keywords[] = {
     { "unlink",     1, 0, 0, 0, CMD_UNLINK, 0, 0, 0 },
     { "set",        1, 0, 0, 0, CMD_SET, 0, 0, 0 },
     { "show",       1, 0, 0, 0, CMD_SHOW, 0, 0, 0 },
-    { "list",       1, 0, 0, 0, CMD_LIST, 0, 0, 0 },
     { "bit",        0, 0, 1, 0, 0, 0, BL_TYPE_BIT, 0 },
     { "float",      0, 0, 1, 0, 0, 0, BL_TYPE_FLOAT, 0 },
     { "s32",        0, 0, 1, 0, 0, 0, BL_TYPE_S32, 0 },
@@ -97,7 +95,6 @@ ST_FUNC(SET_1);
 ST_FUNC(SET_2);
 ST_FUNC(SET_DONE);
 ST_FUNC(SHOW_START);
-ST_FUNC(LIST_START);
 
 static bool parse_token(char const *token);
 
@@ -195,9 +192,6 @@ ST_FUNC(IDLE)
             return true;
         case CMD_SHOW:
             pd.state = ST_NAME(SHOW_START);
-            return true;
-        case CMD_LIST:
-            pd.state = ST_NAME(LIST_START);
             return true;
         default:
             print_strings(2, "ERROR: ", "bad switch\n");
@@ -597,14 +591,6 @@ ST_FUNC(SHOW_START)
     return (token == NULL);
     
 }
-
-ST_FUNC(LIST_START)
-{
-    // dummy code, avoids warning spam
-    return (token == NULL);
-    
-}
-
 
 /* a string must be 1 to MAX_TOKEN_LEN printable
  * characters terminated by '\0'
