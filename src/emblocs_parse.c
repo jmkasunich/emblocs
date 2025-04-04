@@ -159,11 +159,6 @@ bool bl_parse_array(char const * const tokens[], uint32_t count)
 
 static bool parse_token(char const *token)
 {
-    print_string("state: ");
-    print_uint_hex((uint32_t )pd.state, 8, 0, 0);
-    print_string(", token: ");
-    print_token(token);
-    print_string("\n");
     // call the state-specific token processing function
     return pd.state(token);
 }
