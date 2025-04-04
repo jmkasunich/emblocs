@@ -127,7 +127,7 @@ void bl_show_all_signals(void);
 void bl_show_all_threads(void);
 void bl_show_instance(struct bl_instance_meta_s const *inst);
 void bl_show_pin(struct bl_pin_meta_s const *pin);
-void bl_show_funct(struct bl_function_meta_s const *funct);
+void bl_show_function(struct bl_function_meta_s const *funct);
 void bl_show_signal(struct bl_signal_meta_s const *sig);
 void bl_show_thread(struct bl_thread_meta_s const *thread);
 
