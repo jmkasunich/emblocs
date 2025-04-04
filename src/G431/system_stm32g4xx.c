@@ -75,7 +75,9 @@
   * @{
   */
 
+#pragma GCC diagnostic ignored "-Wsign-conversion"
 #include "stm32g4xx.h"
+#pragma GCC diagnostic pop
 
 #if !defined  (HSE_VALUE)
   #define HSE_VALUE     24000000U /*!< Value of the External oscillator in Hz */

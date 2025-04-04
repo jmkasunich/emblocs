@@ -21,7 +21,7 @@ void __assert_func (const char * file, int line, const char * funct, const char 
     print_string(") at ");
     print_string(file);
     print_string(":");
-    print_uint_dec(line);
+    print_int_dec(line, '\0');
     print_string(" in function ");
     print_string(funct);
     print_string("()\n");
@@ -126,10 +126,11 @@ char const * const tokens[] = {
   "signal",
     "speed", "dir_mux", "in0", "inv_sum", "in0",
     "speed_inv", "inv_sum", "out", "dir_mux", "in1",
-    "dir", "dir_mux", "sel",
+    "dir", "bit", 
+    "abit", "dir_mux", "sel",
     "ramp", "ramp_mux", "sel",
     "slope", "dir_mux", "out", "ramp_sum", "in1",
-    "ramp_gain", "ramp_mux", "out", "ramp_sum", "gain1",
+    "ramp_gain", "ramp_mux", "out",
     "output", "ramp_sum", "out", "ramp_sum", "in0", "watcher", "output",
     "clocks", "timer", "time",
     "LED", "PortC", "p10in", "PortC", "p06out",
@@ -141,21 +142,48 @@ char const * const tokens[] = {
     "timer", "start",
     "PortB", "read",
     "PortC", "read",
+    "timer", "stop",
     "inv_sum", "update",
     "dir_mux", "update",
     "ramp_mux", "update",
     "ramp_sum", "update",
     "PortB", "write",
     "PortC", "write",
-    "timer", "stop",
     "watch_thread", "fp", "1000000000",
     "watcher", "update",
+  "show",
+    "thread",
+  "unlink",
+    "timer", "stop",
+  "show",
+    "main_thread",
+  "link",
+    "timer", "stop", "main_thread",
+  "show",
+    "thread",
+    "instance",
+    "timer",
+    "signal",
+    "oe",
+  "unlink",
+    "dir_mux", "sel",
+  "show",
+    "signal",
+  "link",
+    "dir_mux", "sel", "dir",
+  "signal",
+    "ramp_gain", "ramp_sum", "gain1",
+  "show",
+    "signal",
   "set",
     "ramp", "1",
     "speed", "1.5",
     "inv_sum", "gain0", "-1.0",
     "ramp_sum", "gain0", "1.0",
-    "ramp_mux", "in1", "1.0"
+    "ramp_mux", "in1", "1.0",
+    "ramp_mux", "out", "-3",
+  "show",
+    "signal"
 };
 
 #endif // NEW_INIT

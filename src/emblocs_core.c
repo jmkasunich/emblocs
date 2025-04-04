@@ -27,6 +27,10 @@ const int32_t bl_meta_pool_size = sizeof(bl_meta_pool);
 
 /* memory allocation functions */
 
+/* I do a bunch of pointer manipulation 
+   and type-punning in this file */
+#pragma GCC optimize ("no-strict-aliasing")
+
 static void *alloc_from_rt_pool(int32_t size)
 {
     void *retval;
@@ -763,3 +767,4 @@ bool bl_instance_add_functions(struct bl_instance_meta_s *inst, bl_comp_def_t co
     }
 }
 
+#pragma GCC reset_options

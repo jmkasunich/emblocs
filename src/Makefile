@@ -123,6 +123,7 @@ CFLAGS 					+= -Wpointer-arith
 CFLAGS 					+= -Wdisabled-optimization
 CFLAGS                	+= -Wunused-parameter
 CFLAGS					+= -Wno-sign-conversion
+CFLAGS					+= -Wstrict-aliasing=1
 # Assembler settings
 CFLAGS                  += -Wa,-alh=$(@:.o=.lst)
 
