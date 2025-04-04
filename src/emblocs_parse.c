@@ -645,9 +645,57 @@ ST_FUNC(SET_DONE)
 
 ST_FUNC(SHOW_START)
 {
-    // dummy code, avoids warning spam
-    return (token == NULL);
-    
+    keyword_t const *kw;
+
+    kw = is_keyword(token);
+    if ( kw ) {
+        if ( kw->is_obj_type ) {
+            switch ( kw->objtype ) {
+                case OBJ_INSTANCE:
+                    bl_show_all_instances();
+                return true;
+                case OBJ_SIGNAL:
+                    bl_show_all_signals();
+                return true;
+                case OBJ_THREAD:
+                    bl_show_all_threads();
+                return true;
+                case OBJ_ALL:
+                    bl_show_all_instances();
+                    bl_show_all_signals();
+                    bl_show_all_threads();
+                return true;
+                default:
+                    print_strings(2, "ERROR: ", "bad switch\n");
+                    pd.state = ST_NAME(IDLE);
+                    return false;
+            }
+        }
+        if ( kw->is_cmd ) {
+            pd.state = ST_NAME(IDLE);
+            return parse_token(token);
+        }
+    }
+    if ( is_name(token) ) {
+        pd.instance_meta = bl_instance_find(token);
+        if ( pd.instance_meta ) {
+            bl_show_instance(pd.instance_meta);
+            return true;
+        }
+        pd.signal_meta = bl_signal_find(token);
+        if ( pd.signal_meta ) {
+            bl_show_signal(pd.signal_meta);
+            return true;
+        }
+        pd.thread_meta = bl_thread_find(token);
+        if ( pd.thread_meta ) {
+            bl_show_thread(pd.thread_meta);
+            return true;
+        }
+    }
+    print_expect_error("object name, object type, or 'all'", token);
+    pd.state = ST_NAME(IDLE);
+    return false;
 }
 
 /* a string must be 1 to MAX_TOKEN_LEN printable
