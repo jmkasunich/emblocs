@@ -17,6 +17,38 @@
 #define _countof(array) (sizeof(array)/sizeof(array[0]))
 #endif
 
+/***********************************************
+ * error handling macros
+ *
+ * ERROR_RETURN(errno) sets bl_errno to 'errno'
+ * and then either halts or returns 0 from the
+ * containing function.
+ *
+ * CHECK_RETURN(checkval) assumes that 'checkval'
+ * was returned from a function that uses these
+ * macros.
+ * If 'checkval' is false or NULL, it returns 0
+ * from the containing function.
+ *
+ * CHECK_NULL(ptr) verifies a pointer.
+ * If 'ptr' is NULL, it returns 0 from the
+ * containing function.
+ *
+ */
+#ifdef BL_ERROR_HALT
+#define ERROR_RETURN(errno) do { bl_errno = (errno); while (1); } while (0)
+#define CHECK_RETURN(checkval) do {} while (0)  /* previous function would not return */
+#else
+#define ERROR_RETURN(errno) do { bl_errno = (errno); return 0; } while (0)
+#define CHECK_RETURN(checkval) do { if ( 0 == (checkval) ) { return 0; } } while (0)
+#endif
+
+#ifdef BL_NULL_POINTER_CHECKS
+#define CHECK_NULL(ptr) do { if ( NULL == (ptr) ) { ERROR_RETURN(BL_ERR_NULL_PTR); } } while (0)
+#else
+#define CHECK_NULL(ptr)
+#endif
+
 /**************************************************************
  * Each instance of a component has "instance data" which is
  * in the RT memory pool.  The instance data size is specified
