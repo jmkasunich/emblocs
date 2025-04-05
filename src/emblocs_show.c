@@ -386,7 +386,7 @@ static bl_function_def_t *bl_find_function_def_in_instance_by_address(bl_rt_func
     bl_function_def_t const *fdef;
 
     comp = inst->comp_def;
-    for ( int n = 0 ; n < comp->function_count ; n++ ) {
+    for ( int n = 0 ; n < comp->num_function_defs ; n++ ) {
         fdef = &(comp->function_defs[n]);
         if ( addr == fdef->fp ) {
             return (bl_function_def_t *)fdef;

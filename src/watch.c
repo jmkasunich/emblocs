@@ -53,6 +53,7 @@ bl_comp_def_t const bl_watch_def = {
     "watch",
     watch_setup,
     sizeof(bl_watch_instance_t),
+    BL_NEEDS_PERSONALITY,
     0,
     _countof(bl_watch_functions),
     NULL,

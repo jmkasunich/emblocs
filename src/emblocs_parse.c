@@ -237,9 +237,26 @@ ST_FUNC(INST_START)
 
 ST_FUNC(INST_1)
 {
-    pd.comp_def = (bl_comp_def_t *)token;
-    pd.state = ST_NAME(INST_2);
-    return true;
+    if ( is_name(token) ) {
+        int n = 0;
+        // search comp_defs[] for a match
+        while ( (pd.comp_def = bl_comp_defs[n]) != NULL ) {
+            if ( strcmp(token, pd.comp_def->name) == 0 ) {
+                if ( pd.comp_def->needs_pers == BL_NEEDS_PERSONALITY ) {
+                    pd.state = ST_NAME(INST_2);
+                    return true;
+                }
+                pd.instance_meta = bl_instance_new(pd.new_name, pd.comp_def, NULL);
+                if ( pd.instance_meta != NULL ) {
+                    pd.state = ST_NAME(INST_DONE);
+                    return true;
+                }
+                ERROR_API(4, "creating ", "instance '", pd.new_name, "'" );
+            }
+            n++;
+        }
+    }
+    ERROR_EXPECT("component definition name", token);
 }
 
 ST_FUNC(INST_2)

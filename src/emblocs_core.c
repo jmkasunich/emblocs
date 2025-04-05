@@ -578,7 +578,7 @@ bool bl_instance_add_pins(struct bl_instance_meta_s *inst, bl_comp_def_t const *
 
     CHECK_NULL(inst);
     CHECK_NULL(def);
-    for ( int i = 0 ; i < def->pin_count ; i++ ) {
+    for ( int i = 0 ; i < def->num_pin_defs ; i++ ) {
         retval = bl_instance_add_pin(inst, &(def->pin_defs[i]));
         if ( ! retval ) {
             errors++;
@@ -629,7 +629,7 @@ bool bl_instance_add_functions(struct bl_instance_meta_s *inst, bl_comp_def_t co
 
     CHECK_NULL(inst);
     CHECK_NULL(def);
-    for ( int i = 0 ; i < def->function_count ; i++ ) {
+    for ( int i = 0 ; i < def->num_function_defs ; i++ ) {
         retval = bl_instance_add_function(inst, &(def->function_defs[i]));
         if ( ! retval ) {
             errors++;

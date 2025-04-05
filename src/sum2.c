@@ -43,6 +43,7 @@ bl_comp_def_t const bl_sum2_def = {
     "sum2",
     NULL,
     sizeof(bl_sum2_inst_t),
+    BL_NO_PERSONALITY,
     _countof(bl_sum2_pins),
     _countof(bl_sum2_functions),
     bl_sum2_pins,
