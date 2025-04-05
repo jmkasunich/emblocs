@@ -40,6 +40,7 @@ bl_comp_def_t const bl_perftimer_def = {
     "perftimer",
     NULL,
     sizeof(bl_perftimer_inst_t),
+    BL_NO_PERSONALITY,
     _countof(bl_perftimer_pins),
     _countof(bl_perftimer_functions),
     bl_perftimer_pins,

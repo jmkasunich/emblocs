@@ -69,6 +69,7 @@ bl_comp_def_t const bl_gpio_def = {
     "gpio",
     gpio_setup,
     sizeof(bl_gpio_instance_t),
+    BL_NEEDS_PERSONALITY,
     0,
     _countof(bl_gpio_functions),
     NULL,

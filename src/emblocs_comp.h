@@ -32,6 +32,15 @@
 /* masks 'size' so it can go into a bit field without a conversion warning */
 #define TO_INSTANCE_SIZE(size) ((size) & BL_INSTANCE_DATA_SIZE_MASK)
 
+/* A field in the component definition determined whether the 
+ * component needs personality data */
+typedef enum {
+    BL_NO_PERSONALITY = 0,
+    BL_NEEDS_PERSONALITY = 1
+} bl_personality_t;
+
+#define BL_PERSONALITY_FLAG_BITS 1
+
 /* pin count (number of pins in a component instance)
  * is stored in bitfields, need to specify the size
  */
@@ -73,15 +82,17 @@
 typedef struct bl_comp_def_s {
     char const *name;
     struct bl_instance_meta_s * (*setup) (char const *instance_name, struct bl_comp_def_s const *comp_def, void const *personality);
-    uint32_t data_size   : BL_INSTANCE_DATA_SIZE_BITS;
-    uint32_t pin_count   : BL_PIN_COUNT_BITS;
-    uint32_t function_count : BL_FUNCTION_COUNT_BITS;
+    uint32_t data_size          : BL_INSTANCE_DATA_SIZE_BITS;
+    uint32_t needs_pers         : BL_PERSONALITY_FLAG_BITS;
+    uint32_t num_pin_defs       : BL_PIN_COUNT_BITS;
+    uint32_t num_function_defs  : BL_FUNCTION_COUNT_BITS;
     struct bl_pin_def_s const *pin_defs;
     struct bl_function_def_s const *function_defs;
 } bl_comp_def_t;
 
 /* Verify that bitfields fit in one uint32_t */
-_Static_assert((BL_INSTANCE_DATA_SIZE_BITS+BL_PIN_COUNT_BITS+BL_FUNCTION_COUNT_BITS) <= 32, "comp_def bitfields too big");
+_Static_assert((BL_INSTANCE_DATA_SIZE_BITS+BL_PERSONALITY_FLAG_BITS+\
+                BL_PIN_COUNT_BITS+BL_FUNCTION_COUNT_BITS) <= 32, "comp_def bitfields too big");
 
 /**************************************************************
  * Data structure that defines a pin.  These can exist in flash

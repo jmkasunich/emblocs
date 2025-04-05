@@ -41,6 +41,7 @@ bl_comp_def_t const bl_mux2_def = {
     "mux2",
     NULL,
     sizeof(bl_mux2_inst_t),
+    BL_NO_PERSONALITY,
     _countof(bl_mux2_pins),
     _countof(bl_mux2_functions),
     bl_mux2_pins,
