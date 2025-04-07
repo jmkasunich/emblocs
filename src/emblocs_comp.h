@@ -17,6 +17,38 @@
 #define _countof(array) (sizeof(array)/sizeof(array[0]))
 #endif
 
+/***********************************************
+ * error handling macros
+ *
+ * ERROR_RETURN(errno) sets bl_errno to 'errno'
+ * and then either halts or returns 0 from the
+ * containing function.
+ *
+ * CHECK_RETURN(checkval) assumes that 'checkval'
+ * was returned from a function that uses these
+ * macros.
+ * If 'checkval' is false or NULL, it returns 0
+ * from the containing function.
+ *
+ * CHECK_NULL(ptr) verifies a pointer.
+ * If 'ptr' is NULL, it returns 0 from the
+ * containing function.
+ *
+ */
+#ifdef BL_ERROR_HALT
+#define ERROR_RETURN(errno) do { bl_errno = (errno); while (1); } while (0)
+#define CHECK_RETURN(checkval) do {} while (0)  /* previous function would not return */
+#else
+#define ERROR_RETURN(errno) do { bl_errno = (errno); return 0; } while (0)
+#define CHECK_RETURN(checkval) do { if ( 0 == (checkval) ) { return 0; } } while (0)
+#endif
+
+#ifdef BL_NULL_POINTER_CHECKS
+#define CHECK_NULL(ptr) do { if ( NULL == (ptr) ) { ERROR_RETURN(BL_ERR_NULL_PTR); } } while (0)
+#else
+#define CHECK_NULL(ptr)
+#endif
+
 /**************************************************************
  * Each instance of a component has "instance data" which is
  * in the RT memory pool.  The instance data size is specified
@@ -31,6 +63,15 @@
 
 /* masks 'size' so it can go into a bit field without a conversion warning */
 #define TO_INSTANCE_SIZE(size) ((size) & BL_INSTANCE_DATA_SIZE_MASK)
+
+/* A field in the component definition determined whether the 
+ * component needs personality data */
+typedef enum {
+    BL_NO_PERSONALITY = 0,
+    BL_NEEDS_PERSONALITY = 1
+} bl_personality_t;
+
+#define BL_PERSONALITY_FLAG_BITS 1
 
 /* pin count (number of pins in a component instance)
  * is stored in bitfields, need to specify the size
@@ -73,15 +114,17 @@
 typedef struct bl_comp_def_s {
     char const *name;
     struct bl_instance_meta_s * (*setup) (char const *instance_name, struct bl_comp_def_s const *comp_def, void const *personality);
-    uint32_t data_size   : BL_INSTANCE_DATA_SIZE_BITS;
-    uint32_t pin_count   : BL_PIN_COUNT_BITS;
-    uint32_t function_count : BL_FUNCTION_COUNT_BITS;
+    uint32_t data_size          : BL_INSTANCE_DATA_SIZE_BITS;
+    uint32_t needs_pers         : BL_PERSONALITY_FLAG_BITS;
+    uint32_t num_pin_defs       : BL_PIN_COUNT_BITS;
+    uint32_t num_function_defs  : BL_FUNCTION_COUNT_BITS;
     struct bl_pin_def_s const *pin_defs;
     struct bl_function_def_s const *function_defs;
 } bl_comp_def_t;
 
 /* Verify that bitfields fit in one uint32_t */
-_Static_assert((BL_INSTANCE_DATA_SIZE_BITS+BL_PIN_COUNT_BITS+BL_FUNCTION_COUNT_BITS) <= 32, "comp_def bitfields too big");
+_Static_assert((BL_INSTANCE_DATA_SIZE_BITS+BL_PERSONALITY_FLAG_BITS+\
+                BL_PIN_COUNT_BITS+BL_FUNCTION_COUNT_BITS) <= 32, "comp_def bitfields too big");
 
 /**************************************************************
  * Data structure that defines a pin.  These can exist in flash

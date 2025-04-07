@@ -53,6 +53,7 @@ bl_comp_def_t const bl_watch_def = {
     "watch",
     watch_setup,
     sizeof(bl_watch_instance_t),
+    BL_NEEDS_PERSONALITY,
     0,
     _countof(bl_watch_functions),
     NULL,
@@ -69,7 +70,10 @@ struct bl_instance_meta_s *watch_setup(char const *instance_name, struct bl_comp
     struct bl_instance_meta_s *meta;
     bl_watch_instance_t *data;
     bl_pin_def_t pindef;
+    bool result;
 
+    CHECK_NULL(comp_def);
+    CHECK_NULL(personality);
     // count pins in personality
     pin_info = (watch_pin_config_t *)personality;
     pins = 0;
@@ -80,14 +84,13 @@ struct bl_instance_meta_s *watch_setup(char const *instance_name, struct bl_comp
         pin_info++;
     }
     if ( pins > WATCH_MAX_PINS ) {
-        #ifdef BL_ERROR_VERBOSE
-        print_string("too many pins in personality\n");
-        #endif
-        return NULL;
+        ERROR_RETURN(BL_ERR_RANGE);
     }
     // now the emblocs setup - create an instance of the proper size to include all the pin data
     meta = bl_instance_create(instance_name, comp_def, comp_def->data_size + (pins * sizeof(bl_watch_pin_rt_data_t)));
+    CHECK_RETURN(meta);
     data = bl_instance_data_addr(meta);
+    CHECK_RETURN(data);
     // fill in instance data fields
     data->pin_count = pins & WATCH_PIN_COUNT_MASK;
     data->pin_types = types & WATCH_PIN_TYPES_MASK;
@@ -102,7 +105,8 @@ struct bl_instance_meta_s *watch_setup(char const *instance_name, struct bl_comp
         pindef.pin_dir = BL_DIR_IN;
         pindef.data_offset = TO_INSTANCE_SIZE((uint32_t)((char *)&(pin_data->pin) - (char *)data));
         // create the pin
-        bl_instance_add_pin(meta, &pindef);
+        result = bl_instance_add_pin(meta, &pindef);
+        CHECK_RETURN(result);
         // save the format string
         pin_data->format = pin_info->format;
         // next pin
@@ -111,7 +115,8 @@ struct bl_instance_meta_s *watch_setup(char const *instance_name, struct bl_comp
         pins--;
     }
     // finally, create the functions; nothing custom here
-    bl_instance_add_functions(meta, comp_def);
+    result = bl_instance_add_functions(meta, comp_def);
+    CHECK_RETURN(result);
     return meta;
 }
 #pragma GCC reset_options

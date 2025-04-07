@@ -13,6 +13,12 @@
 
 #include "emblocs_config.h"
 
+#ifdef BL_ENABLE_IMPLICIT_UNLINK
+#ifndef BL_ENABLE_UNLINK
+#define BL_ENABLE_UNLINK
+#endif
+#endif
+
 #include <stdint.h>    // int32_t, uint32_t
 #include <stdbool.h>   // bool, true, false
 #include <stddef.h>    // offsetof(), NULL
@@ -20,6 +26,39 @@
 /* some basic assumptions */
 _Static_assert(sizeof(int) == 4, "ints must be 32 bits");
 _Static_assert(sizeof(void *) == 4, "pointers must be 32 bits");
+
+/**************************************************************
+ * Error handling.
+ * Functions that normally return a pointer will return NULL
+ * on error.
+ * Functions that return bool will return true on success and
+ * false on error.
+ *
+ * On an error, functions set bl_errno to a value indicating
+ * the cause of the error
+ *
+ * bl_errstr() returns a human readable string that descrbes
+ * the current value of bl_errno.
+ */
+typedef enum {
+    BL_ERR_NONE = 0,
+    BL_ERR_RANGE,           // operand out of range
+    BL_ERR_NULL_PTR,        // unexpected NULL pointer
+    BL_ERR_NO_RT_RAM,       // realtime memory pool full
+    BL_ERR_NO_META_RAM,     // metadata memory poll full
+    BL_ERR_NO_PERSONALITY,  // component doesn't support personality
+    BL_ERR_NAME_EXISTS,     // name already exists
+    BL_ERR_TYPE_MISMATCH,   // pin/signal or funct/thread type mismatch
+    BL_ERR_ALREADY_LINKED,  // pin/function already linked to signal/thread
+    BL_ERR_NOT_FOUND,       // object not found
+    BL_ERR_TOO_BIG,         // object size exceeds limit
+    BL_ERR_INTERNAL,        // internal error in emblocs data structures
+    BL_ERRNO_MAX
+} bl_errno_t;
+
+extern bl_errno_t bl_errno;
+
+char const *bl_errstr(void);
 
 /* the four pin/signal data types */
 typedef float       bl_float_t;

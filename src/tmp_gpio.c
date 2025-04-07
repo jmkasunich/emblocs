@@ -5,7 +5,6 @@
 #include "platform.h"
 #include "tmp_gpio.h"
 #include "platform_g431.h"
-#include "printing.h"
 
 // instance data structure - one copy per instance in RAM
 typedef struct bl_gpio_instance_s {
@@ -69,6 +68,7 @@ bl_comp_def_t const bl_gpio_def = {
     "gpio",
     gpio_setup,
     sizeof(bl_gpio_instance_t),
+    BL_NEEDS_PERSONALITY,
     0,
     _countof(bl_gpio_functions),
     NULL,
@@ -98,7 +98,10 @@ struct bl_instance_meta_s *gpio_setup(char const *instance_name, struct bl_comp_
     bl_gpio_instance_t *data;
     bl_pin_t *next_pin;
     bl_pin_def_t pindef;
+    bool result;
 
+    CHECK_NULL(comp_def);
+    CHECK_NULL(personality);
     // configure the hardware and find out how many blocs pins we need
     pins_in = pins_out = pins_oe = 0;
     input_bitmask = output_bitmask = out_ena_bitmask = 0;
@@ -153,7 +156,9 @@ struct bl_instance_meta_s *gpio_setup(char const *instance_name, struct bl_comp_
     // now the emblocs setup - create an instance of the proper size to include all pins
     pins_total = pins_in + pins_out + pins_oe;
     meta = bl_instance_create(instance_name, comp_def, comp_def->data_size+pins_total*sizeof(bl_pin_t));
+    CHECK_RETURN(meta);
     data = bl_instance_data_addr(meta);
+    CHECK_RETURN(data);
     // fill in instance data fields
     data->base_addr = p->base_address;
     data->input_bitmask = input_bitmask;
@@ -172,7 +177,8 @@ struct bl_instance_meta_s *gpio_setup(char const *instance_name, struct bl_comp_
             // create a pin
             pindef.name = &(pin_names_in[n][0]);
             pindef.data_offset = TO_INSTANCE_SIZE((uint32_t)((char *)next_pin - (char *)data));
-            bl_instance_add_pin(meta, &pindef);
+            result = bl_instance_add_pin(meta, &pindef);
+            CHECK_RETURN(result);
             next_pin++;
         }
         active_bit <<= 1;
@@ -186,7 +192,8 @@ struct bl_instance_meta_s *gpio_setup(char const *instance_name, struct bl_comp_
             // create a pin
             pindef.name = &(pin_names_out[n][0]);
             pindef.data_offset = TO_INSTANCE_SIZE((uint32_t)((char *)next_pin - (char *)data));
-            bl_instance_add_pin(meta, &pindef);
+            result = bl_instance_add_pin(meta, &pindef);
+            CHECK_RETURN(result);
             next_pin++;
         }
         active_bit <<= 1;
@@ -198,13 +205,15 @@ struct bl_instance_meta_s *gpio_setup(char const *instance_name, struct bl_comp_
             // create a pin
             pindef.name = &(pin_names_oe[n][0]);
             pindef.data_offset = TO_INSTANCE_SIZE((uint32_t)((char *)next_pin - (char *)data));
-            bl_instance_add_pin(meta, &pindef);
+            result = bl_instance_add_pin(meta, &pindef);
+            CHECK_RETURN(result);
             next_pin++;
         }
         active_bit <<= 1;
     }
     // finally, create the functions; nothing custom here
-    bl_instance_add_functions(meta, comp_def);
+    result = bl_instance_add_functions(meta, comp_def);
+    CHECK_RETURN(result);
     return meta;
 }
 #pragma GCC reset_options

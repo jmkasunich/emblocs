@@ -351,7 +351,7 @@ static bl_instance_meta_t *bl_find_instance_by_data_addr(void *data_addr)
     index = TO_RT_INDEX(data_addr);
     retval = ll_find((void **)(&(instance_root)), (void *)(&index), instance_meta_compare_index_key);
     if ( retval == NULL ) {
-        #ifdef BL_ERROR_VERBOSE
+        #ifdef BL_PRINT_ERRORS
         print_string("data corruption\n");
         #endif
         halt();
@@ -372,7 +372,7 @@ static bl_signal_meta_t *bl_find_signal_by_index(uint32_t index)
 
     retval = ll_find((void **)(&(signal_root)), (void *)(&index), sig_meta_compare_index_key);
     if ( retval == NULL ) {
-        #ifdef BL_ERROR_VERBOSE
+        #ifdef BL_PRINT_ERRORS
         print_string("data corruption\n");
         #endif
         halt();
@@ -386,13 +386,13 @@ static bl_function_def_t *bl_find_function_def_in_instance_by_address(bl_rt_func
     bl_function_def_t const *fdef;
 
     comp = inst->comp_def;
-    for ( int n = 0 ; n < comp->function_count ; n++ ) {
+    for ( int n = 0 ; n < comp->num_function_defs ; n++ ) {
         fdef = &(comp->function_defs[n]);
         if ( addr == fdef->fp ) {
             return (bl_function_def_t *)fdef;
         }
     }
-    #ifdef BL_ERROR_VERBOSE
+    #ifdef BL_PRINT_ERRORS
     print_string("data corruption\n");
     #endif
     halt();

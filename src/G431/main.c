@@ -41,6 +41,15 @@ extern struct bl_comp_def_s bl_perftimer_def;
 extern struct bl_comp_def_s bl_gpio_def;
 extern struct bl_comp_def_s bl_watch_def;
 
+struct bl_comp_def_s * const bl_comp_defs[] = {
+    &bl_mux2_def,
+    &bl_sum2_def,
+    &bl_perftimer_def,
+    &bl_gpio_def,
+    &bl_watch_def,
+    NULL
+};
+
 
 gpio_port_config_t const portA = { GPIOA, {
     { BGPIO_MD_ANA,  BGPIO_OUT_PP, BGPIO_SPD_SLOW, BGPIO_PULL_NONE, BGPIO_AF0 }, // PA0  = VBUS
@@ -110,15 +119,15 @@ watch_pin_config_t const watch_pers[] = {
 
 char const * const tokens[] = {
   "instance",
-    "PortA", (char const *)&bl_gpio_def, (char const *)&portA,
-    "PortB", (char const *)&bl_gpio_def, (char const *)&portB,
-    "PortC", (char const *)&bl_gpio_def, (char const *)&portC,
-    "ramp_sum", (char const *)&bl_sum2_def, NULL,
-    "inv_sum", (char const *)&bl_sum2_def, NULL,
-    "timer", (char const *)&bl_perftimer_def, NULL,
-    "watcher", (char const *)&bl_watch_def, (char const *)&watch_pers,
-    "dir_mux", (char const *)&bl_mux2_def, NULL,
-    "ramp_mux", (char const *)&bl_mux2_def, NULL,
+    "PortA", "gpio", (char const *)&portA,
+    "PortB", "gpio", (char const *)&portB,
+    "PortC", "gpio", (char const *)&portC,
+    "ramp_sum", "sum2",
+    "inv_sum", "sum2",
+    "timer", "perftimer",
+    "watcher", "watch", (char const *)&watch_pers,
+    "dir_mux", "mux2",
+    "ramp_mux", "mux2",
   "signal",
     "speed", "dir_mux", "in0", "inv_sum", "in0",
     "speed_inv", "inv_sum", "out", "dir_mux", "in1",

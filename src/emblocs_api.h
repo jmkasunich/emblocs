@@ -143,5 +143,16 @@ void bl_show_thread(struct bl_thread_meta_s const *thread);
  **************************************************************/
 bool bl_parse_array(char const * const tokens[], uint32_t count);
 
+/**************************************************************
+ * Components must be linked into the flash image before they
+ * can be used.  The application determines what components
+ * to link by creating a NULL terminated constant array of
+ * pointers to comp_def_s structures and initializing it with
+ * the desired component definitions.  Only components in this
+ * array can be instantiated by the 'instance' command.
+ */
+extern struct bl_comp_def_s * const bl_comp_defs[];
+
+
 
 #endif // EMBLOCS_API_H

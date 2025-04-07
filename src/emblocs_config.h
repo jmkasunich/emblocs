@@ -11,30 +11,44 @@
 #ifndef EMBLOCS_CONFIG_H
 #define EMBLOCS_CONFIG_H
 
-/* uncomment this define to print error messages */
-#define BL_ERROR_VERBOSE
+/* Uncomment this define to print error messages */
+#define BL_PRINT_ERRORS
 
-/* uncomment this define to halt on errors */
+/* Uncomment this define to halt on errors.
+ * This can save code size since calling functions 
+ * don't need to check return values.
+ */
 //#define BL_ERROR_HALT
 
-/* uncomment this define to make 'show' commands print more
- * details such as memory addresses, indexes, etc. */
+/* Uncomment this define to make 'show' commands print
+ * more details such as memory addresses, indexes, etc.
+ */
 //#define BL_SHOW_VERBOSE
 
-/* uncomment this define to enable pin and function
- * 'unlink' commands */
+/* Uncomment this define to enable pin and function
+ * 'unlink' commands.
+ * Most systems don't need 'unlink', they should
+ * just configure things correctly in the first
+ * place.  Leaving this commented will save code
+ * space.
+ */
 #define BL_ENABLE_UNLINK
 
-/* uncomment this define to enable pin and function
+/* Uncomment this define to enable pin and function
  * 'linkto' commands to unlink previously linked
- * objects; this also defines BL_ENABLE_UNLINK */
+ * objects.  This also defines BL_ENABLE_UNLINK.
+ * Most systems don't need this, they should just
+ * configure things correctly in the first place.
+ * Leaving this commented will save a little bit
+ * of code space.
+ */
 #define BL_ENABLE_IMPLICIT_UNLINK
 
-#ifdef BL_ENABLE_IMPLICIT_UNLINK
-#ifndef BL_ENABLE_UNLINK
-#define BL_ENABLE_UNLINK
-#endif
-#endif
+/* Uncomment this define to enable checks for NULL
+ * pointers passed into API functions.  Leaving
+ * it commented will save code space.
+ */
+#define BL_NULL_POINTER_CHECKS
 
 /* size of the memory pool for realtime data */
 #define BL_RT_POOL_SIZE     (2048)
