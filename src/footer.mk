@@ -1,3 +1,7 @@
+# use a stack to track what directory the current .mk file is in
+STACK += $(lastword $(MAKEFILE_LIST))
+THISDIR := $(dir $(lastword $(STACK)))
+
 # processing of source file list 'SOURCES'
 
 C_SOURCES		:= $(filter %.c, $(SOURCES))
@@ -102,3 +106,7 @@ clean:
 
 # include auto dependencies
 -include $(DEPS_DIR)/*.d
+
+# pop this .mk file off the stack
+STACK := $(subst $(lastword $(STACK)),,$(STACK))
+THISDIR := $(dir $(lastword $(STACK)))

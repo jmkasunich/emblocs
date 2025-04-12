@@ -1,6 +1,10 @@
+# track what directory we are in
+STACK := $(lastword $(MAKEFILE_LIST))
+THISDIR := $(dir $(lastword $(STACK)))
+
 # include common make variables, paths, etc, from the next level up
 # this will recurse all the way to the top of the repo tree
-include ../header.mk
+include $(THISDIR)../header.mk
 
 # info for this project
 
@@ -8,7 +12,6 @@ SOURCES := main.c \
           startup_stm32g431kbtx.s \
 		  system_stm32g4xx.c \
 		  platform_g431.c \
-		  ../printing.c \
 		  $(EMBLOCS_SRCS) \
 		  $(COMP_SRCS)
 
@@ -49,4 +52,4 @@ LDFLAGS		+= --specs=rdimon.specs -Og
 
 # include common make recipies, etc, from the next level up
 # this will recurse all the way to the top of the repo tree
-include ../footer.mk
+include $(THISDIR)../footer.mk

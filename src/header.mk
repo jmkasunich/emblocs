@@ -1,3 +1,9 @@
+# use a stack to track what directory the current .mk file is in
+STACK += $(lastword $(MAKEFILE_LIST))
+THISDIR := $(dir $(lastword $(STACK)))
+# this is the top of the tree
+TOPDIR := $(THISDIR)
+
 # Disable built-in rules and variables
 MAKEFLAGS += --no-builtin-rules
 MAKEFLAGS += --no-builtin-variables
@@ -13,7 +19,7 @@ MAKEFLAGS += --no-builtin-variables
 #
 # it might also need to set (and export) PATH so the shell can find utilities like 'rm', etc
 
-include ../local.mk
+include $(TOPDIR)local.mk
 
 # ---------------------------------------------------------------------
 # Toolchain Configuration
@@ -41,8 +47,16 @@ DIRS			:= $(BUILD_DIR) $(OBJECT_DIR) $(DEPS_DIR) $(TEMP_DIR)
 
 # define source file groups that projects might want to use
 
-EMBLOCS_SRCS := ../emblocs_core.c ../emblocs_parse.c ../emblocs_show.c \
-			   ../linked_list.c  ../str_to_xx.c
+EMBLOCS_SRCS := emblocs_core.c emblocs_parse.c emblocs_show.c \
+			    linked_list.c  str_to_xx.c printing.c
 
-COMP_SRCS := ../mux2.c ../sum2.c ../perftimer.c ../tmp_gpio.c ../watch.c
+EMBLOCS_SRCS := $(addprefix $(THISDIR), $(EMBLOCS_SRCS))
 
+COMP_SRCS := mux2.c sum2.c perftimer.c tmp_gpio.c watch.c
+
+COMP_SRCS := $(addprefix $(THISDIR), $(COMP_SRCS))
+
+
+# pop this .mk file off the stack
+STACK := $(subst $(lastword $(STACK)),,$(STACK))
+THISDIR := $(dir $(lastword $(STACK)))
