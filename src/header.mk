@@ -1,8 +1,6 @@
-# use a stack to track what directory the current .mk file is in
-STACK += $(lastword $(MAKEFILE_LIST))
-THISDIR := $(dir $(lastword $(STACK)))
-# this is the top of the tree
-TOPDIR := $(THISDIR)
+# directory containing the currently included header.mk
+# this is the very top of the tree, no more climbing
+TOPDIR := $(dir $(lastword $(MAKEFILE_LIST)))
 
 # Disable built-in rules and variables
 MAKEFLAGS += --no-builtin-rules
@@ -50,13 +48,9 @@ DIRS			:= $(BUILD_DIR) $(OBJECT_DIR) $(DEPS_DIR) $(TEMP_DIR)
 EMBLOCS_SRCS := emblocs_core.c emblocs_parse.c emblocs_show.c \
 			    linked_list.c  str_to_xx.c printing.c
 
-EMBLOCS_SRCS := $(addprefix $(THISDIR), $(EMBLOCS_SRCS))
+EMBLOCS_SRCS := $(addprefix $(TOPDIR), $(EMBLOCS_SRCS))
 
 COMP_SRCS := mux2.c sum2.c perftimer.c tmp_gpio.c watch.c
 
-COMP_SRCS := $(addprefix $(THISDIR), $(COMP_SRCS))
+COMP_SRCS := $(addprefix $(TOPDIR), $(COMP_SRCS))
 
-
-# pop this .mk file off the stack
-STACK := $(subst $(lastword $(STACK)),,$(STACK))
-THISDIR := $(dir $(lastword $(STACK)))

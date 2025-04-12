@@ -1,10 +1,7 @@
-# track what directory we are in
-STACK := $(lastword $(MAKEFILE_LIST))
-THISDIR := $(dir $(lastword $(STACK)))
-
 # include common make variables, paths, etc, from the next level up
 # this will recurse all the way to the top of the repo tree
-include $(THISDIR)../header.mk
+# and will set TOPDIR for later
+include ../header.mk
 
 # info for this project
 
@@ -50,6 +47,5 @@ LDFLAGS		+= --specs=rdimon.specs -Og
 #LDFLAGS		+= --specs=nosys.specs -Og
 #LDFLAGS		+= -nolibc -nostartfiles -Og
 
-# include common make recipies, etc, from the next level up
-# this will recurse all the way to the top of the repo tree
-include $(THISDIR)../footer.mk
+# include common make recipies, etc, from the top of the repo tree
+include $(TOPDIR)include.mk
