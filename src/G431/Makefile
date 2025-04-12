@@ -43,9 +43,9 @@ LDSCRIPTS				:= -TSTM32G431KBTX_FLASH.ld
 
 DEFS 		+= -DDEBUG
 CFLAGS		+= -ggdb -g1 -Og
-LDFLAGS		+= --specs=rdimon.specs -Og 
-#LDFLAGS		+= --specs=nosys.specs -Og 
-#LDFLAGS		+= -nolibc -nostartfiles -Og 
+LDFLAGS		+= --specs=rdimon.specs -Og
+#LDFLAGS		+= --specs=nosys.specs -Og
+#LDFLAGS		+= -nolibc -nostartfiles -Og
 
 # include common make recipies, etc, from the next level up
 # this will recurse all the way to the top of the repo tree
