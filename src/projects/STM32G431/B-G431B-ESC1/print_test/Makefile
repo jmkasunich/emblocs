@@ -8,18 +8,16 @@ include ../header.mk
 
 # info for this project
 
-OBJECTS := main.o \
+OBJECTS := printing-test.o \
            startup_stm32g431kbtx.o \
 		   system_stm32g4xx.o \
 		   platform_g431.o \
-		   printing.o \
-		   $(EMBLOCS_OBJS) \
-		   $(COMP_OBJS)
+		   printing.o
 
 # objects aren't built here; prepend the object directory
 OBJECTS := $(addprefix $(OBJECT_DIR)/,$(OBJECTS))
 
-TARGET := main.hex
+TARGET := print-test.hex
 
 MCU_PKG := $(PACKAGE_ROOT)/STM32Cube_FW_G4_V1.6.0
 
@@ -37,8 +35,8 @@ DEFS 					:= -DSTM32G431xx -DARM_MATH_CM4 -D__FPU_PRESENT=1U -DHSE_VALUE=8000000
 # ---------------------------------------------------------------------------------------------------------------------------------------
 # Compiler & Linker Flags
 # ---------------------------------------------------------------------------------------------------------------------------------------
-# Flags sent to all tools in the Toolchain 
-TOOLCHAIN_SETTINGS 		:= -mcpu=cortex-m4 -march=armv7e-m -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16 
+# Flags sent to all tools in the Toolchain
+TOOLCHAIN_SETTINGS 		:= -mcpu=cortex-m4 -march=armv7e-m -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16
 TOOLCHAIN_SETTINGS 		+= -fmessage-length=0 -ffunction-sections -fdata-sections
 
 LDSCRIPTS				:= -TSTM32G431KBTX_FLASH.ld
