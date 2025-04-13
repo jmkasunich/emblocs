@@ -6,6 +6,7 @@ TOPDIR := $(dir $(lastword $(MAKEFILE_LIST)))
 MAKEFLAGS += --no-builtin-rules
 MAKEFLAGS += --no-builtin-variables
 .SUFFIXES :
+
 # Avoid excess printing
 .SILENT :
 
@@ -18,6 +19,15 @@ MAKEFLAGS += --no-builtin-variables
 # it might also need to set (and export) PATH so the shell can find utilities like 'rm', etc
 
 include $(TOPDIR)local.mk
+
+#append this directory to the source search path
+SRC_PATH += $(TOPDIR)
+
+# tell make to use the path only for .c and .s files
+SET_VPATH := $(eval vpath %.c $(SRC_PATH))
+SET_VPATH := $(eval vpath %.s $(SRC_PATH))
+
+
 
 # ---------------------------------------------------------------------
 # Toolchain Configuration
@@ -43,14 +53,9 @@ DEPS_DIR		:= $(BUILD_DIR)/dep
 TEMP_DIR		:= $(BUILD_DIR)/tmp
 DIRS			:= $(BUILD_DIR) $(OBJECT_DIR) $(DEPS_DIR) $(TEMP_DIR)
 
-# define source file groups that projects might want to use
+# define object file groups that projects might want to use
 
-EMBLOCS_SRCS := emblocs_core.c emblocs_parse.c emblocs_show.c \
-			    linked_list.c  str_to_xx.c printing.c
+EMBLOCS_OBJS := emblocs_core.o emblocs_parse.o emblocs_show.o \
+			    linked_list.o str_to_xx.o
 
-EMBLOCS_SRCS := $(addprefix $(TOPDIR), $(EMBLOCS_SRCS))
-
-COMP_SRCS := mux2.c sum2.c perftimer.c tmp_gpio.c watch.c
-
-COMP_SRCS := $(addprefix $(TOPDIR), $(COMP_SRCS))
-
+COMP_OBJS := mux2.o sum2.o perftimer.o tmp_gpio.o watch.o

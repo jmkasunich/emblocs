@@ -1,13 +1,3 @@
-# processing of source file list 'SOURCES'
-
-C_SOURCES		:= $(filter %.c, $(SOURCES))
-ASM_SOURCES		:= $(filter %.s, $(SOURCES))
-SOURCE_DIRS		:= $(sort $(dir $(SOURCES)))
-OBJECTS			:= $(addprefix $(OBJECT_DIR)/, $(notdir $(C_SOURCES:.c=.o) $(ASM_SOURCES:.s=.o)))
-
-# tell make where to find each source file by setting individual vpaths for each one
-SET_VPATH 		:= $(foreach SRC, $(SOURCES), $(eval vpath $(notdir $(SRC)) $(dir $(SRC))))
-
 # C Compiler -- main args 
 CFLAGS 			+= $(TOOLCHAIN_SETTINGS) $(DEFS)
 # C Compiler -- include paths

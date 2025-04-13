@@ -1,3 +1,6 @@
+# source search always starts in the project directory
+SRC_PATH := .
+
 # include common make variables, paths, etc, from the next level up
 # this will recurse all the way to the top of the repo tree
 # and will set TOPDIR for later
@@ -5,19 +8,22 @@ include ../header.mk
 
 # info for this project
 
-SOURCES := main.c \
-          startup_stm32g431kbtx.s \
-		  system_stm32g4xx.c \
-		  platform_g431.c \
-		  $(EMBLOCS_SRCS) \
-		  $(COMP_SRCS)
+OBJECTS := main.o \
+           startup_stm32g431kbtx.o \
+		   system_stm32g4xx.o \
+		   platform_g431.o \
+		   printing.o \
+		   $(EMBLOCS_OBJS) \
+		   $(COMP_OBJS)
+
+# objects aren't built here; prepend the object directory
+OBJECTS := $(addprefix $(OBJECT_DIR)/,$(OBJECTS))
 
 TARGET := main.hex
 
 MCU_PKG := $(PACKAGE_ROOT)/STM32Cube_FW_G4_V1.6.0
 
-INC_DIRS				= .
-INC_DIRS 				+= $(SOURCE_DIRS:%/=%)
+INC_DIRS 				:= $(SRC_PATH:%/=%)
 INC_DIRS				+= $(MCU_PKG)/Drivers/CMSIS/Include
 INC_DIRS				+= $(MCU_PKG)/Drivers/CMSIS/Device/ST/STM32G4xx/Include
 INC_DIRS				+= $(MCU_PKG)/Drivers/STM32G4xx_HAL_Driver/Inc
