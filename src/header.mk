@@ -20,8 +20,13 @@ MAKEFLAGS += --no-builtin-variables
 
 include $(TOPDIR)local.mk
 
-#append this directory to the source search path
+# append this directory to the source search path
 SRC_PATH += $(TOPDIR)
+
+# append some subdirs to the source search path
+SRC_PATH += $(TOPDIR)emblocs
+SRC_PATH += $(TOPDIR)components
+SRC_PATH += $(TOPDIR)misc
 
 # tell make to use the path only for .c and .s files
 SET_VPATH := $(eval vpath %.c $(SRC_PATH))
