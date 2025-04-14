@@ -1,15 +1,17 @@
 /***************************************************************
  *
- * emblocs_core.h - header for EMBLOCS core
+ * emblocs_common.h - header for EMBLOCS
  *
  * Embedded Block-Oriented Control System
  *
+ * This header contains things that are common to both the
+ * 'application' and 'component' APIs
  *
  *
  **************************************************************/
 
-#ifndef EMBLOCS_CORE_H
-#define EMBLOCS_CORE_H
+#ifndef EMBLOCS_COMMON_H
+#define EMBLOCS_COMMON_H
 
 #include "emblocs_config.h"
 
@@ -139,4 +141,4 @@ struct bl_signal_meta_s;
 struct bl_thread_meta_s;
 struct bl_thread_data_s;
 
-#endif // EMBLOCS_CORE_H
+#endif // EMBLOCS_COMMON_H

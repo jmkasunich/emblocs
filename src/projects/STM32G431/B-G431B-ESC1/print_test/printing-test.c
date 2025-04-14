@@ -1,4 +1,4 @@
-#include "G431/platform_g431.h"
+#include "platform_g431.h"
 
 #include "printing.h"
 #include <float.h>

@@ -11,7 +11,7 @@
 #ifndef EMBLOCS_COMP_H
 #define EMBLOCS_COMP_H
 
-#include "emblocs_core.h"
+#include "emblocs_common.h"
 
 #ifndef _countof
 #define _countof(array) (sizeof(array)/sizeof(array[0]))
@@ -33,6 +33,9 @@
  * CHECK_NULL(ptr) verifies a pointer.
  * If 'ptr' is NULL, it returns 0 from the
  * containing function.
+ *
+ * These macros are intended for use by component-
+ * specific setup functions.
  *
  */
 #ifdef BL_ERROR_HALT
@@ -64,14 +67,14 @@
 /* masks 'size' so it can go into a bit field without a conversion warning */
 #define TO_INSTANCE_SIZE(size) ((size) & BL_INSTANCE_DATA_SIZE_MASK)
 
-/* A field in the component definition determined whether the 
+/* A field in the component definition determines whether the
  * component needs personality data */
 typedef enum {
     BL_NO_PERSONALITY = 0,
     BL_NEEDS_PERSONALITY = 1
 } bl_personality_t;
 
-#define BL_PERSONALITY_FLAG_BITS 1
+#define BL_PERSONALITY_FLAG_BITS (BITS2STORE(BL_NEEDS_PERSONALITY))
 
 /* pin count (number of pins in a component instance)
  * is stored in bitfields, need to specify the size

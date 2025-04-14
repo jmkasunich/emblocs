@@ -196,7 +196,7 @@ extern bl_thread_meta_t *thread_root;
 /**************************************************************
  * Lower-level EMBLOCS API functions; typically helpers used  *
  * by the main API functions.  Some of these may become       *
- * private at some point.                                     *
+ * static at some point.                                      *
  **************************************************************/
 
 /* callback functions for linked lists */

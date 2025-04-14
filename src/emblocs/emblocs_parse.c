@@ -67,7 +67,7 @@ static keyword_t const keywords[] = {
 #define MAX_TOKEN_LEN (100)
 
 // this macro declares a function associated with state 'foo'
-#define ST_FUNC(foo)    static bool st_ ## foo(char const *token)
+#define ST_FUNC(foo)    static bool st_ ## foo(char const * const token)
 // this macro returns the name of the function for state 'foo'
 #define ST_NAME(foo)    st_ ## foo
 
@@ -126,8 +126,6 @@ static void error_api(int num_strings, ...);
 #define ERROR_API(num, ...)             do { pd.state = ST_NAME(IDLE); return false; } while (0)
 #endif
 
-static bool parse_token(char const *token);
-
 static bool process_done_state(char const *token, bool (*state_if_not_command)(char const *token));
 
 static bool is_string(char const * token);
@@ -169,14 +167,14 @@ bool bl_parse_array(char const * const tokens[], uint32_t count)
 
     CHECK_NULL(tokens);
     for ( uint32_t n = 0 ; n < count ; n++ ) {
-        if ( ! parse_token(tokens[n]) ) {
+        if ( ! bl_parse_token(tokens[n]) ) {
             errors++;
         }
     }
     return ( errors == 0 );
 }
 
-static bool parse_token(char const *token)
+bool bl_parse_token(char const * const token)
 {
     // call the state-specific token processing function
     return pd.state(token);
@@ -648,7 +646,7 @@ ST_FUNC(SHOW_START)
         }
         if ( kw->is_cmd ) {
             pd.state = ST_NAME(IDLE);
-            return parse_token(token);
+            return bl_parse_token(token);
         }
     }
     if ( is_name(token) ) {
@@ -679,12 +677,12 @@ static bool process_done_state(char const *token, bool (*state_if_not_command)(c
     if ( (kw = is_keyword(token)) != NULL ) {
         if ( kw->is_cmd ) {
             pd.state = ST_NAME(IDLE);
-            return parse_token(token);
+            return bl_parse_token(token);
         }
         ERROR_EXPECT("command", token);
     }
     pd.state = state_if_not_command;
-    return parse_token(token);
+    return bl_parse_token(token);
 }
 
 
