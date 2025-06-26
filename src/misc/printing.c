@@ -7,7 +7,11 @@
  * *************************************************************/
 
 #include "printing.h"
+#ifdef PICO_BUILD
+#include <stdio.h>
+#else
 #include "platform.h"
+#endif
 #include <stdarg.h>
 #include <assert.h>
 #include <math.h>
@@ -369,7 +373,11 @@ void (* print_char)(char c) = cons_tx_wait;
 #else
 void print_char(char c)
 {
+#ifdef PICO_BUILD
+    putchar(c);
+#else
     cons_tx_wait(c);
+#endif
 }
 #endif
 

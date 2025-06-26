@@ -206,10 +206,4 @@ int bl_thread_meta_compare_name_key(void *node, void *key);
 int bl_pin_meta_compare_name_key(void *node, void *key);
 int bl_function_meta_compare_name_key(void *node, void *key);
 
-/**************************************************************
- * Helper function for bl_instance_new(); creates an instance
- * of a component using only the component definition.
- */
-struct bl_instance_meta_s *bl_default_setup(char const *name, bl_comp_def_t const *comp_def);
-
 #endif // EMBLOCS_PRIV_H

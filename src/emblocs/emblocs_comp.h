@@ -181,6 +181,12 @@ _Static_assert((BL_NOFP_BITS) <= 32, "function_def bitfields too big");
  * instance
  */
 
+ /**************************************************************
+ * Helper function to create an instance of a component
+ * using only the component definition.
+ */
+struct bl_instance_meta_s *bl_default_setup(char const *name, bl_comp_def_t const *comp_def);
+
 /**************************************************************
  * Helper function to create a new instance and reserve RAM
  * for its instance data.  

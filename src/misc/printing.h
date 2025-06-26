@@ -26,7 +26,8 @@
 
 #include <stdint.h>
 
-#define PRINTING_TEST
+// FIXME - getting pico SDK working, broke regular STM32
+//#define PRINTING_TEST
 
 /***************************************************************
  * writes 'string' to 'buf', truncating if needed to fit in 'size'
@@ -229,7 +230,13 @@ void print_double_sci(double value, int precision, char sign);
  *             2^32 or smaller than approximately 1e-6
  * it does NOT return the number of characters or any error code
  */
+
+#ifdef PICO_BUILD
+#include <stdio.h>
+#else
 #define printf printf_
+#endif
+
 void printf_(char const *fmt, ...);
 
 // memory dump
