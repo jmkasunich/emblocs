@@ -41,13 +41,13 @@
 /* the memory pools */
 extern uint32_t bl_rt_pool[];
 extern uint32_t *bl_rt_pool_next;
-extern int32_t bl_rt_pool_avail;
-extern const int32_t bl_rt_pool_size;
+extern uint32_t bl_rt_pool_avail;
+extern const uint32_t bl_rt_pool_size;
 
 extern uint32_t bl_meta_pool[];
 extern uint32_t *bl_meta_pool_next;
-extern int32_t bl_meta_pool_avail;
-extern const int32_t bl_meta_pool_size;
+extern uint32_t bl_meta_pool_avail;
+extern const uint32_t bl_meta_pool_size;
 
 /* These asserts verify that the specified number of bits can 
    be used to address the specified pool size. */

@@ -55,8 +55,8 @@ static char const * const dirs_sp[] = {
 
 void bl_show_memory_status(void)
 {
-    printf("RT pool:   %d/%d, %d free\n", bl_rt_pool_size-bl_rt_pool_avail, bl_rt_pool_size, bl_rt_pool_avail);
-    printf("Meta pool: %d/%d, %d free\n", bl_meta_pool_size-bl_meta_pool_avail, bl_meta_pool_size, bl_meta_pool_avail);
+    printf("RT pool:   %u/%u, %u free\n", bl_rt_pool_size-bl_rt_pool_avail, bl_rt_pool_size, bl_rt_pool_avail);
+    printf("Meta pool: %u/%u, %u free\n", bl_meta_pool_size-bl_meta_pool_avail, bl_meta_pool_size, bl_meta_pool_avail);
 }
 
 void bl_show_instance(struct bl_instance_meta_s const *inst)
@@ -236,7 +236,7 @@ static void bl_show_sig_data_t_value(bl_sig_data_t const *data, bl_type_t type)
         }
         break;
     case BL_TYPE_FLOAT:
-        printf("%f", data->f);
+        printf("%f", (double)data->f);
         break;
     case BL_TYPE_S32:
         printf("%d", data->s);
@@ -304,7 +304,7 @@ void bl_show_thread(struct bl_thread_meta_s const *thread)
     } else {
         fp_str = "has fp";
     }
-    printf("  %-12s = %s : %10d nsec\n", thread->name, fp_str, data->period_ns);
+    printf("  %-12s = %s : %10u nsec\n", thread->name, fp_str, data->period_ns);
     while ( funct_data != NULL ) {
         bl_show_function_rtdata(funct_data);
         funct_data = funct_data->next;

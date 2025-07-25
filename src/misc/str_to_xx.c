@@ -69,13 +69,13 @@ bool str_to_s32(char const *str, int32_t *dest)
         if ( utmp > 0x80000000 ) {
             return false;
         } else {
-            result = -utmp;
+            result = -(int32_t)utmp;
         }
     } else {
         if ( utmp > 0x7FFFFFFF ) {
             return false;
         } else {
-            result = utmp;
+            result = (int32_t)utmp;
         }
     }
     if ( dest != NULL ) {
@@ -134,7 +134,7 @@ bool str_to_float(char const *str, float *dest)
         }
         shift += exponent;
     }
-    uint32_t shift_abs = abs(shift);
+    uint32_t shift_abs = (uint32_t)abs(shift);
     if ( shift_abs > 60 ) {
         return false;
     }
