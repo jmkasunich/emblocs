@@ -61,7 +61,7 @@ bl_comp_def_t const bl_perftimer_def = {
 
 #ifdef PICO_BUILD
 // setup function - in this case the only custom thing we need to do is make sure the timer is running
-struct bl_instance_meta_s *bl_perftimer_setup (char const *instance_name, struct bl_comp_def_s const *comp_def, void const *personality)
+struct bl_instance_meta_s *bl_perftimer_setup (char const *instance_name, struct bl_comp_def_s const *comp_def, __attribute__((unused)) void const *personality)
 {
     // start the systick timer
     systick_hw->csr = 0x5;  // enable timer, use system clock

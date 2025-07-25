@@ -41,13 +41,13 @@ char const *bl_errstr(void)
 
 uint32_t bl_rt_pool[BL_RT_POOL_SIZE >> 2]  __attribute__ ((aligned(4)));
 uint32_t *bl_rt_pool_next = bl_rt_pool;
-int32_t bl_rt_pool_avail = sizeof(bl_rt_pool);
-const int32_t bl_rt_pool_size = sizeof(bl_rt_pool);
+uint32_t bl_rt_pool_avail = sizeof(bl_rt_pool);
+const uint32_t bl_rt_pool_size = sizeof(bl_rt_pool);
 
 uint32_t bl_meta_pool[BL_META_POOL_SIZE >> 2]  __attribute__ ((aligned(4)));
 uint32_t *bl_meta_pool_next = bl_meta_pool;
-int32_t bl_meta_pool_avail = sizeof(bl_meta_pool);
-const int32_t bl_meta_pool_size = sizeof(bl_meta_pool);
+uint32_t bl_meta_pool_avail = sizeof(bl_meta_pool);
+const uint32_t bl_meta_pool_size = sizeof(bl_meta_pool);
 
 /* memory allocation functions */
 
@@ -55,7 +55,7 @@ const int32_t bl_meta_pool_size = sizeof(bl_meta_pool);
    and type-punning in this file */
 #pragma GCC optimize ("no-strict-aliasing")
 
-static void *alloc_from_rt_pool(int32_t size)
+static void *alloc_from_rt_pool(uint32_t size)
 {
     void *retval;
 
@@ -63,7 +63,7 @@ static void *alloc_from_rt_pool(int32_t size)
     // round size up to multiple of 4
     if ( size & 3 ) {
         size += 4;
-        size &= ~3;
+        size &= ~3u;
     }
     if ( bl_rt_pool_avail < size) ERROR_RETURN(BL_ERR_NO_RT_RAM);
     retval = bl_rt_pool_next;
@@ -72,7 +72,7 @@ static void *alloc_from_rt_pool(int32_t size)
     return retval;
 }
 
-static void *alloc_from_meta_pool(int32_t size)
+static void *alloc_from_meta_pool(uint32_t size)
 {
     void *retval;
 
@@ -80,7 +80,7 @@ static void *alloc_from_meta_pool(int32_t size)
     // round size up to multiple of 4
     if ( size & 3 ) {
         size += 4;
-        size &= ~3;
+        size &= ~3u;
     }
     if ( bl_meta_pool_avail < size) ERROR_RETURN(BL_ERR_NO_META_RAM);
     retval = bl_meta_pool_next;

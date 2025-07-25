@@ -144,7 +144,7 @@ static void bl_watch_update_function(void *ptr, uint32_t period_ns)
             printf(watch_pin->format, watch_pin->pin->b);
             break;
         case BL_TYPE_FLOAT:
-            printf(watch_pin->format, watch_pin->pin->f);
+            printf(watch_pin->format, (double)watch_pin->pin->f);
             break;
         case BL_TYPE_S32:
             printf(watch_pin->format, watch_pin->pin->s);

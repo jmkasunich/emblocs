@@ -25,6 +25,9 @@
 #define PRINTING_H
 
 #include <stdint.h>
+#ifndef uint
+#define uint unsigned int
+#endif
 
 // FIXME - getting pico SDK working, broke regular STM32
 //#define PRINTING_TEST
@@ -33,7 +36,7 @@
  * writes 'string' to 'buf', truncating if needed to fit in 'size'
  * returns number of characters written, not including terminating '\0'
  */
-int snprint_string(char *buf, int size, const char *string);
+uint snprint_string(char *buf, uint size, const char *string);
 
 /***************************************************************
  * writes 'value' to 'buf' in decimal
@@ -43,7 +46,7 @@ int snprint_string(char *buf, int size, const char *string);
  * numbers have no prefix.  
  * returns number of characters written, not including terminating '\0'
  */
-int snprint_int_dec(char *buf, int size, int32_t value, char sign);
+uint snprint_int_dec(char *buf, uint size, int32_t value, char sign);
 #define PRINT_INT_DEC_MAXLEN    (12)
 
 /***************************************************************
@@ -51,7 +54,7 @@ int snprint_int_dec(char *buf, int size, int32_t value, char sign);
  * 'size' must be at least 11 (10 digits plus terminator)
  * returns number of characters written, not including terminating '\0'
  */
-int snprint_uint_dec(char *buf, int size, uint32_t value);
+uint snprint_uint_dec(char *buf, uint size, uint32_t value);
 #define PRINT_UINT_DEC_MAXLEN    (11)
 
 /***************************************************************
@@ -64,7 +67,7 @@ int snprint_uint_dec(char *buf, int size, uint32_t value);
  * if 'uc' is non-zero, uses uppercase for a-f
  * returns number of characters written, not including terminating '\0'
  */
-int snprint_uint_hex(char *buf, int size, uint32_t value, int digits, int group, int uc);
+uint snprint_uint_hex(char *buf, uint size, uint32_t value, uint digits, uint group, uint uc);
 #define PRINT_UINT_HEX_MAXLEN    (16)
 
 /***************************************************************
@@ -77,7 +80,7 @@ int snprint_uint_hex(char *buf, int size, uint32_t value, int digits, int group,
  * if 'group' is non-zero, inserts a '-' between each 'group' digits
  * returns number of characters written, not including terminating '\0'
  */
-int snprint_uint_bin(char *buf, int size, uint32_t value, int digits, int group);
+uint snprint_uint_bin(char *buf, uint size, uint32_t value, uint digits, uint group);
 #define PRINT_UINT_BIN_MAXLEN    (64)
 
 /***************************************************************
@@ -85,7 +88,7 @@ int snprint_uint_bin(char *buf, int size, uint32_t value, int digits, int group)
  * 'size' must be at least 9 characters (8 digits + terminator)
  * returns number of characters written, not including terminating '\0'
  */
-int snprint_ptr(char *buf, int size, void *ptr);
+uint snprint_ptr(char *buf, uint size, void *ptr);
 #define PRINT_PTR_MAXLEN    (9)
 
 /***************************************************************
@@ -102,7 +105,7 @@ int snprint_ptr(char *buf, int size, void *ptr);
  * numbers have no prefix.  
  * returns number of characters written, not including terminating '\0'
  */
-int snprint_double(char *buf, int size, double value, int precision, char sign);
+uint snprint_double(char *buf, uint size, double value, uint precision, char sign);
 #define PRINT_DOUBLE_MAXLEN    (28)
 
 /***************************************************************
@@ -118,7 +121,7 @@ int snprint_double(char *buf, int size, double value, int precision, char sign);
  * numbers have no prefix.  
  * returns number of characters written, not including terminating '\0'
  */
-int snprint_double_sci(char *buf, int size, double value, int precision, char sign);
+uint snprint_double_sci(char *buf, uint size, double value, uint precision, char sign);
 #define PRINT_DOUBLE_SCI_MAXLEN    (24)
 
 
@@ -146,7 +149,7 @@ void print_string(const char *string);
  * just does consecutive calls to print_string()
  * but allows concatenating strings without printf
  */
-void print_strings(int num_strings, ...);
+void print_strings(uint num_strings, ...);
 
 /***************************************************************
  * print a string with padding and/or truncation
@@ -155,7 +158,7 @@ void print_strings(int num_strings, ...);
  *   if 'align' is 'R', prints padding, then string
  *   if 'align' is 'L', prints string, then padding
  */
-void print_string_width(const char *string, int width, int maxlen, char align);
+void print_string_width(const char *string, uint width, uint maxlen, char align);
 
 /***************************************************************
  * sends 'value' to the console as a decimal integer
@@ -177,7 +180,7 @@ void print_uint_dec(uint32_t value);
  * if 'group' is non-zero, inserts a '-' between each 'group' digits
  * if 'uc' is non-zero, uses uppercase for a-f
  */
-void print_uint_hex(uint32_t value, int digits, int group, int uc);
+void print_uint_hex(uint32_t value, uint digits, uint group, uint uc);
 
 /***************************************************************
  * sends 'value' to the console as binary
@@ -185,7 +188,7 @@ void print_uint_hex(uint32_t value, int digits, int group, int uc);
  * requested number of digits (leading zeros are always displayed)
  * if 'group' is non-zero, inserts a '-' between each 'group' digits
  */
-void print_uint_bin(uint32_t value, int digits, int group);
+void print_uint_bin(uint32_t value, uint digits, uint group);
 
 /***************************************************************
  * sends 'ptr' to the console as 8 hex digits
@@ -199,14 +202,14 @@ void print_ptr(void const * ptr);
  * values larger than 2^32 or smaller than 1e-6 are printed
  * in scientific notation using print_double_sci()
  */
-void print_double(double value, int precision, char sign);
+void print_double(double value, uint precision, char sign);
 
 /***************************************************************
  * sends 'value' to the console in scientific notation
  * 'precision' digits are printed after the decimal point;
  * 'precision' can be 0-15, other values become 15
  */
-void print_double_sci(double value, int precision, char sign);
+void print_double_sci(double value, uint precision, char sign);
 
 
 /***************************************************************

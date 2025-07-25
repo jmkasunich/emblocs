@@ -23,10 +23,10 @@
 
 
 
-int snprint_string(char *buf, int size, const char *string)
+uint snprint_string(char *buf, uint size, const char *string)
 {
     char c;
-    int n = 0;
+    uint n = 0;
 
     if ( string == NULL ) return 0;
     // make sure there will be room for the terminating '\0'
@@ -44,9 +44,9 @@ int snprint_string(char *buf, int size, const char *string)
    prints unsigned number, padding with leading zeros if less than 'digits'
    assumes that caller has validated 'size'
  */
-static int snprint_uint_dec_helper(char *buf, int size, uint32_t value, int digits)
+static uint snprint_uint_dec_helper(char *buf, uint size, uint32_t value, uint digits)
 {
-    int digit, len;
+    uint32_t digit, len;
     char *start, *end, tmp;
 
     // largest possible uint32_t fits in 10 digits
@@ -57,7 +57,7 @@ static int snprint_uint_dec_helper(char *buf, int size, uint32_t value, int digi
     start = end = buf;
     // final digit must be printed even if value = 0
     do {
-        digit = value % 10;
+        digit = value % 10u;
         value = value / 10;
         *(end++) = (char)('0' + digit);
         digits--;
@@ -67,7 +67,7 @@ static int snprint_uint_dec_helper(char *buf, int size, uint32_t value, int digi
     while ( digits-- > 0 ) {
         *(end++) = '0';
     }
-    len = end - start;
+    len = (uint32_t)(end - start);
     // terminate the string and point at last non-terminator character
     *(end--) = '\0';
     // reverse the string
@@ -79,9 +79,9 @@ static int snprint_uint_dec_helper(char *buf, int size, uint32_t value, int digi
     return len;
 }
 
-int snprint_int_dec(char *buf, int size, int32_t value, char sign)
+uint snprint_int_dec(char *buf, uint size, int32_t value, char sign)
 {
-    int len = 0;
+    uint len = 0;
 
     assert(size >= PRINT_INT_DEC_MAXLEN);
     if ( value < 0 ) {
@@ -90,22 +90,22 @@ int snprint_int_dec(char *buf, int size, int32_t value, char sign)
     } else if ( ( sign == ' ' ) || ( sign == '+' ) ) {
         buf[len++] = sign;
     }
-    len += snprint_uint_dec_helper(buf+len, size-len, value, 0);
+    len += snprint_uint_dec_helper(buf+len, size-len, (uint32_t)value, 0);
     return len;
 }
 
-int snprint_uint_dec(char *buf, int size, uint32_t value)
+uint snprint_uint_dec(char *buf, uint size, uint32_t value)
 {
     assert(size >= PRINT_UINT_DEC_MAXLEN);
     return snprint_uint_dec_helper(buf, size, value, 0);
 }
 
 // private common code for binary, hex, and pointer printing
-static int snprint_uint_bin_hex(char *buf, int size, uint32_t value, int base, int digits, int group, int uc)
+static uint snprint_uint_bin_hex(char *buf, uint size, uint32_t value, uint base, uint digits, uint group, uint uc)
 {
     char *cp, alpha;
-    int digit, dividers, group_cnt;
-    int mask, shift, maxdigits;
+    uint digit, dividers, group_cnt;
+    uint mask, shift, maxdigits;
 
     if ( base == 2 ) {
         mask = 0x01;
@@ -133,7 +133,7 @@ static int snprint_uint_bin_hex(char *buf, int size, uint32_t value, int base, i
     *(cp--) = '\0';
     group_cnt = group;
     // build the number
-    for ( int n = digits ; n > 0 ; n-- ) {
+    for ( uint n = digits ; n > 0 ; n-- ) {
         if ( group_cnt <= 0 ) {
             *(cp--) = '-';
             group_cnt = group;
@@ -146,19 +146,19 @@ static int snprint_uint_bin_hex(char *buf, int size, uint32_t value, int base, i
     return digits + dividers;
 }
 
-int snprint_uint_hex(char *buf, int size, uint32_t value, int digits, int group, int uc)
+uint snprint_uint_hex(char *buf, uint size, uint32_t value, uint digits, uint group, uint uc)
 {
-    return snprint_uint_bin_hex(buf, size, value, 16, digits, group, uc);
+    return snprint_uint_bin_hex(buf, size, value, 16u, digits, group, uc);
 }
 
-int snprint_uint_bin(char *buf, int size, uint32_t value, int digits, int group)
+uint snprint_uint_bin(char *buf, uint size, uint32_t value, uint digits, uint group)
 {
-    return snprint_uint_bin_hex(buf, size, value, 2, digits, group, 0);
+    return snprint_uint_bin_hex(buf, size, value, 2u, digits, group, 0);
 }
 
-int snprint_ptr(char *buf, int size, void *ptr)
+uint snprint_ptr(char *buf, uint size, void *ptr)
 {
-    return snprint_uint_bin_hex(buf, size, (uint32_t)ptr, 16, 8, 0, 1);
+    return snprint_uint_bin_hex(buf, size, (uint32_t)ptr, 16u, 8u, 0, 1u);
 }
 
 
@@ -209,9 +209,9 @@ typedef union {
  * or '-inf'; this function does not know the buffer size
  */
 
-static int snprint_double_handle_special_cases(char *buf, double *value, int precision, int use_sci, char sign)
+static uint snprint_double_handle_special_cases(char *buf, double *value, uint precision, uint use_sci, char sign)
 {
-    int len = 0;
+    uint len = 0;
     ieee754_double_union_t tmp;
 
     tmp.d = *value;
@@ -239,16 +239,16 @@ static int snprint_double_handle_special_cases(char *buf, double *value, int pre
                 }
             }
             if ( use_sci ) {
-                len += snprint_string(buf+len, 5, "e+0");
+                len += snprint_string(buf+len, 5u, "e+0");
             }
 #ifdef HANDLE_DENORM
         }
 #endif
     } else if ( tmp.raw.exponent == 0x7FF ) {
         if ( tmp.raw.mantissa != 0 ) {
-            len += snprint_string(buf+len, 4, "nan");
+            len += snprint_string(buf+len, 4u, "nan");
         } else {
-            len += snprint_string(buf+len, 4, "inf");
+            len += snprint_string(buf+len, 4u, "inf");
         }
     }
     buf[len] = '\0';
@@ -261,12 +261,12 @@ static int snprint_double_handle_special_cases(char *buf, double *value, int pre
  * assumes that value is greater than zero and less than +4.294967294e+9
  * assumes that appropriate rounding has been done
  */
-static int snprint_double_helper(char *buf, int size, double value, int precision)
+static uint snprint_double_helper(char *buf, uint size, double value, uint precision)
 {
-    int len;
+    uint len;
     uint32_t int_part;
 #ifdef NEW_FRAC_PART
-    int digits;
+    uint digits;
 #else
     char digit;
 #endif
@@ -301,15 +301,13 @@ static int snprint_double_helper(char *buf, int size, double value, int precisio
 }
 
 
-int snprint_double(char *buf, int size, double value, int precision, char sign)
+uint snprint_double(char *buf, uint size, double value, uint precision, char sign)
 {
-    int len;
+    uint len;
     ieee754_double_union_t tmp;
 
     if ( precision > 15 ) {
         precision = 15;
-    } else if ( precision < 0 ) {
-        precision = 0;
     }
     /* check buffer size - worst case is '-' plus 10-digit integer
        plus '.' plus 'precision' trailing digits plus terminator */
@@ -322,20 +320,18 @@ int snprint_double(char *buf, int size, double value, int precision, char sign)
         return len + snprint_double_sci(buf+len, size-len, value, precision, '\0');
     }
     // perform rounding to specified precision
-    value = value + round_factor[precision];
+    value = value + (double)round_factor[precision];
     // print it
     return len + snprint_double_helper(buf+len, size-len, value, precision);
 }
 
-int snprint_double_sci(char *buf, int size, double value, int precision, char sign)
+uint snprint_double_sci(char *buf, uint size, double value, uint precision, char sign)
 {
-    int len;
+    uint len;
     int exponent;
 
     if ( precision > 15 ) {
         precision = 15;
-    } else if ( precision < 0 ) {
-        precision = 0;
     }
     /* check buffer size - worst case is '-' plus 1 digit plus '.' plus
        'precision' trailing digits plus 'e+123' plus terminator */
@@ -353,7 +349,7 @@ int snprint_double_sci(char *buf, int size, double value, int precision, char si
         exponent += 1;
     }
     // perform rounding to specified precision
-    value = value + round_factor[precision];
+    value = value + (double)round_factor[precision];
     // there is a small chance that rounding pushed it over 10.0
     if ( value >= 10.0 ) {
         value *= 0.1;
@@ -392,12 +388,12 @@ void print_string(const char *string)
 }
 
 
-void print_strings(int num_strings, ...)
+void print_strings(uint num_strings, ...)
 {
     va_list ap;
 
     va_start(ap, num_strings);
-    for ( int n = 0 ; n < num_strings ; n++ ) {
+    for ( uint n = 0 ; n < num_strings ; n++ ) {
         print_string((char *)va_arg(ap, char *));
         }
     va_end(ap);
@@ -406,7 +402,7 @@ void print_strings(int num_strings, ...)
 
 // private helper for printing repeated characters
 // prints 'n' copies of 'c'
-static void print_padding(int n, char c)
+static void print_padding(uint n, char c)
 {
     while ( n > 0 ) {
         print_char(c);
@@ -414,13 +410,12 @@ static void print_padding(int n, char c)
     }
 }
 
-void print_string_width(char const *string, int width, int maxlen, char align)
+void print_string_width(char const *string, uint width, uint maxlen, char align)
 {
-    int len;
+    uint len;
 
     if ( string == NULL ) return;
     if ( maxlen <= 0 ) maxlen = 0x7FFFFFFF;
-    if ( width < 0 ) width = 0;
     len = 0;
     while ( string[len] != '\0' ) {
         len++;
@@ -431,7 +426,7 @@ void print_string_width(char const *string, int width, int maxlen, char align)
     if ( align == 'R' ) {
         print_padding(width-len, ' ');
     }
-    for ( int n = 0 ; n < len ; n++ ) {
+    for ( uint n = 0 ; n < len ; n++ ) {
         print_char(string[n]);
     }
     if ( align == 'L' ) {
@@ -453,14 +448,14 @@ void print_uint_dec(uint32_t value)
     print_string(buffer);
 }
 
-void print_uint_hex(uint32_t value, int digits, int group, int uc)
+void print_uint_hex(uint32_t value, uint digits, uint group, uint uc)
 {
     char buffer[PRINT_UINT_HEX_MAXLEN];
     snprint_uint_bin_hex(buffer, 20, value, 16, digits, group, uc);
     print_string(buffer);
 }
 
-void print_uint_bin(uint32_t value, int digits, int group)
+void print_uint_bin(uint32_t value, uint digits, uint group)
 {
     char buffer[PRINT_UINT_BIN_MAXLEN];
     snprint_uint_bin_hex(buffer, 68, value, 2, digits, group, 0);
@@ -472,14 +467,14 @@ void print_ptr(void const * ptr)
     print_uint_hex((uint32_t)ptr, 8, 0, 1);
 }
 
-void print_double(double value, int precision, char sign)
+void print_double(double value, uint precision, char sign)
 {
     char buffer[PRINT_DOUBLE_MAXLEN];
     snprint_double(buffer, 32, value, precision, sign);
     print_string(buffer);
 }
 
-void print_double_sci(double value, int precision, char sign)
+void print_double_sci(double value, uint precision, char sign)
 {
     char buffer[PRINT_DOUBLE_SCI_MAXLEN];
     snprint_double_sci(buffer, 32, value, precision, sign);
@@ -488,9 +483,9 @@ void print_double_sci(double value, int precision, char sign)
 
 
 // private helper for printf
-static unsigned int parse_int(char const ** str)
+static uint parse_uint(char const ** str)
 {
-  unsigned int i = 0U;
+  uint i = 0U;
   while ( (**str >= '0') && (**str <= '9') ) {
     i = i * 10U + (unsigned int)(*((*str)++) - '0');
   }
@@ -502,10 +497,10 @@ static unsigned int parse_int(char const ** str)
 void printf_(char const *fmt, ...)
 {
     va_list ap;
-    int loop, width, prec;
+    uint loop, width, prec;
     char align, sign, pad;
     char buf[PRINT_UINT_BIN_MAXLEN];
-    int len;
+    uint len;
 
     va_start(ap, fmt);
     while ( *fmt != '\0' ) {
@@ -546,11 +541,11 @@ void printf_(char const *fmt, ...)
             }
         } while ( loop );
         width = 0;
-        prec = -1;
-        width = parse_int(&fmt);
+        prec = ~0u;
+        width = parse_uint(&fmt);
         if ( *fmt == '.' ) {
             fmt++;
-            prec = parse_int(&fmt);
+            prec = parse_uint(&fmt);
         }
         len = 0;
         switch (*fmt) {
@@ -579,11 +574,11 @@ void printf_(char const *fmt, ...)
             len = snprint_ptr(buf, sizeof(buf), (void *)va_arg(ap, void *));
             break;
         case 'f':
-            if ( prec < 0 ) prec = 8;
+            if ( prec == ~0u ) prec = 8;
             len = snprint_double(buf, sizeof(buf), (double)va_arg(ap, double), prec, sign);
             break;
         case 'e':
-            if ( prec < 0 ) prec = 8;
+            if ( prec == ~0u ) prec = 8;
             len = snprint_double_sci(buf, sizeof(buf), (double)va_arg(ap, double), prec, sign);
             break;
         default:
