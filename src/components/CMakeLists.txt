@@ -8,6 +8,7 @@ target_sources(components INTERFACE
     perftimer.c
     watch.c
     rp2040_gpio.c
+    not.c
 )
 
 # specify the include path
