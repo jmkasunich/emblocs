@@ -7,6 +7,7 @@ target_sources(components INTERFACE
     sum2.c
     perftimer.c
     watch.c
+    rp2040_gpio.c
 )
 
 # specify the include path
