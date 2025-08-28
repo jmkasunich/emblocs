@@ -222,7 +222,7 @@ static void __time_critical_func(bl_rgb_merge_function)(void *ptr, uint32_t peri
 #pragma GCC reset_options
 
 #pragma GCC optimize ("no-strict-aliasing")
-static void bl_rgb_split_function(void *ptr, uint32_t period_ns)
+static void __time_critical_func(bl_rgb_split_function)(void *ptr, uint32_t period_ns)
 {
     (void)period_ns;  // not used
     bl_rgb_instance_t *p = (bl_rgb_instance_t *)ptr;
