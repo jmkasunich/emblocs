@@ -3,7 +3,9 @@ add_library(components INTERFACE)
 
 # specify the library sources
 target_sources(components INTERFACE
+    convert.c
     mux2.c
+    siggen.c
     sum2.c
     perftimer.c
     watch.c
