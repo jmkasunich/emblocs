@@ -11,6 +11,8 @@ target_sources(components INTERFACE
     watch.c
     rp2040_gpio.c
     not.c
+    limit1.c
+    limit2.c
     bl_rgb.c
 )
 
