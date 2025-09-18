@@ -51,7 +51,6 @@ bl_comp_def_t const bl_limit2_def = {
 // realtime code - one copy in FLASH
 static void bl_limit2_function(void *ptr, uint32_t period_ns)
 {
-    (void)period_ns;  // unused in this component
     float tmp_in, tmp_lim, prev_out, max_step;
 
     bl_limit2_inst_t *p = (bl_limit2_inst_t *)ptr;
