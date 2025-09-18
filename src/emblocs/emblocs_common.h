@@ -90,17 +90,22 @@ typedef bl_sig_data_t *bl_pin_t;
 
 /**************************************************************
  * Data types for pins and signals. 
+ * Type 'raw' can apply to pins only; components with 'raw'
+ * pins pass data without interpreting it (things like 
+ * multiplexors, delay lines, or network interfaces).  A
+ * raw pin can be linked to any signal type.
  */
 
  typedef enum {
 	BL_TYPE_FLOAT    = 0,
 	BL_TYPE_BIT      = 1,
 	BL_TYPE_S32      = 2,
-	BL_TYPE_U32      = 3
+	BL_TYPE_U32      = 3,
+    BL_TYPE_RAW      = 4
 } bl_type_t;
 
 /* type is sometimes stored in a bitfield; declare its size */
-#define BL_TYPE_BITS   (BITS2STORE(BL_TYPE_U32))
+#define BL_TYPE_BITS   (BITS2STORE(BL_TYPE_RAW))
 
 /**************************************************************
  * Data directions for pins.

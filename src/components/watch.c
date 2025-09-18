@@ -6,7 +6,7 @@
 #include "printing.h"
 
 
-#define WATCH_MAX_PINS 14
+#define WATCH_MAX_PINS 9
 #define WATCH_PIN_COUNT_BITS   4
 #define WATCH_PIN_TYPES_BITS  (WATCH_MAX_PINS*BL_TYPE_BITS)
 
@@ -79,6 +79,10 @@ struct bl_instance_meta_s *watch_setup(char const *instance_name, struct bl_comp
     pins = 0;
     types = 0;
     while ( pin_info->name != NULL ) {
+        // FIXME - someday support watching raw pins?
+        if ( pin_info->type >= BL_TYPE_RAW ) {
+            ERROR_RETURN(BL_ERR_TYPE_MISMATCH);
+        }
         types |= pin_info->type << (pins * BL_TYPE_BITS);
         pins++;
         pin_info++;

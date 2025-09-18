@@ -6,9 +6,9 @@
 
 /* instance data structure - one copy per instance in realtime RAM */
 typedef struct bl_mux2_inst_s {
-    bl_pin_float_t in0;
-	bl_pin_float_t in1;
-	bl_pin_float_t out;
+    bl_pin_u32_t in0;
+	bl_pin_u32_t in1;
+	bl_pin_u32_t out;
 	bl_pin_bit_t sel;
 } bl_mux2_inst_t;
 
@@ -17,9 +17,9 @@ _Static_assert((sizeof(bl_mux2_inst_t) < BL_INSTANCE_DATA_MAX_SIZE), "instance s
 
 /* array of pin definitions - one copy in FLASH */
 static bl_pin_def_t const bl_mux2_pins[] = {
-    { "in0", BL_TYPE_FLOAT, BL_DIR_IN, offsetof(bl_mux2_inst_t, in0)},
-    { "in1", BL_TYPE_FLOAT, BL_DIR_IN, offsetof(bl_mux2_inst_t, in1)},
-    { "out", BL_TYPE_FLOAT, BL_DIR_OUT, offsetof(bl_mux2_inst_t, out)},
+    { "in0", BL_TYPE_RAW, BL_DIR_IN, offsetof(bl_mux2_inst_t, in0)},
+    { "in1", BL_TYPE_RAW, BL_DIR_IN, offsetof(bl_mux2_inst_t, in1)},
+    { "out", BL_TYPE_RAW, BL_DIR_OUT, offsetof(bl_mux2_inst_t, out)},
     { "sel", BL_TYPE_BIT, BL_DIR_IN, offsetof(bl_mux2_inst_t, sel)}
 };
 
@@ -30,7 +30,7 @@ static void bl_mux2_function(void *ptr, uint32_t period_ns);
 
 // array of function definitions - one copy in FLASH
 static bl_function_def_t const bl_mux2_functions[] = {
-    { "update", BL_HAS_FP, &bl_mux2_function }
+    { "update", BL_NO_FP, &bl_mux2_function }
 };
 
 _Static_assert((_countof(bl_mux2_functions) < BL_FUNCTION_COUNT_MAX), "too many functions");

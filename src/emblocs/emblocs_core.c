@@ -175,6 +175,10 @@ struct bl_signal_meta_s *bl_signal_new(char const *name, bl_type_t type)
     int ll_result;
 
     CHECK_NULL(name);
+    // signals cannot be 'raw'
+    if ( type >= BL_TYPE_RAW ) {
+        ERROR_RETURN(BL_ERR_TYPE_MISMATCH);
+    }
     // allocate memory for metadata
     meta = alloc_from_meta_pool(sizeof(bl_signal_meta_t));
     CHECK_RETURN(meta);
@@ -202,7 +206,7 @@ bool bl_pin_linkto_signal(bl_pin_meta_t const *pin, bl_signal_meta_t const *sig 
     CHECK_NULL(pin);
     CHECK_NULL(sig);
     // check types
-    if ( pin->data_type != sig->data_type ) {
+    if ( ( pin->data_type != sig->data_type ) && ( pin->data_type != BL_TYPE_RAW ) ) {
         ERROR_RETURN(BL_ERR_TYPE_MISMATCH);
     }
     // convert indexes to addresses

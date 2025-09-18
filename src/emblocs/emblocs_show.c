@@ -32,7 +32,7 @@ static void bl_show_function_rtdata(bl_function_rtdata_t const *funct);
 
 
 static char const * const types[] = {
-    "float", "bit  ", "s32  ", "u32  "
+    "float", "bit  ", "s32  ", "u32  ", "raw  "
 };
 
 #ifdef BL_SHOW_VERBOSE
@@ -244,7 +244,11 @@ static void bl_show_sig_data_t_value(bl_sig_data_t const *data, bl_type_t type)
     case BL_TYPE_U32:
         printf("%u", data->u);
         break;
+    case BL_TYPE_RAW:
+        printf("%08x", data->u);
+        break;
     default:
+        printf("unknown type, panic\n");
         halt();
     }
 }
