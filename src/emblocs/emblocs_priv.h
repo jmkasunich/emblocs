@@ -103,8 +103,8 @@ _Static_assert((BL_RT_INDEX_BITS+BL_INSTANCE_DATA_SIZE_BITS) <= 32, "instance bi
 typedef struct bl_pin_meta_s {
     struct bl_pin_meta_s *next;
     uint32_t ptr_index    : BL_RT_INDEX_BITS;
-    uint32_t dummy_index  : BL_RT_INDEX_BITS;
     uint32_t data_type    : BL_TYPE_BITS;
+    uint32_t dummy_index  : BL_RT_INDEX_BITS;
     uint32_t pin_dir      : BL_DIR_BITS;
     char const *name;
 } bl_pin_meta_t;

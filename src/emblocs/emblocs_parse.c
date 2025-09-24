@@ -167,6 +167,7 @@ bool bl_parse_array(char const * const tokens[], uint32_t count)
 
     CHECK_NULL(tokens);
     for ( uint32_t n = 0 ; n < count ; n++ ) {
+        printf("%s\n", tokens[n]);
         if ( ! bl_parse_token(tokens[n]) ) {
             errors++;
         }

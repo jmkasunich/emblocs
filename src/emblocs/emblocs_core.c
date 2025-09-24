@@ -1,6 +1,7 @@
 #include "emblocs_priv.h"
 #include "linked_list.h"
 #include <string.h>         // strcmp
+#include <stdio.h>      // FIXME - printf for rasp pi
 
 
 /***********************************************
@@ -153,7 +154,7 @@ struct bl_instance_meta_s *bl_instance_new(char const *name, struct bl_comp_def_
             ERROR_RETURN(BL_ERR_NO_PERSONALITY);
         }
         // call default setup function
-        bl_errno = BL_ERRNO_MAX;
+        bl_errno = BL_ERRNO_MAX;  // FIXME - why did I do this?
         retval = bl_default_setup(name, comp_def);
     } else {
         // call component-specific setup function
@@ -162,7 +163,9 @@ struct bl_instance_meta_s *bl_instance_new(char const *name, struct bl_comp_def_
     }
 #ifdef BL_ERROR_HALT
     if ( retval == NULL ) {
-        halt();
+        printf("setup function failed, halting\n");
+        while(1);
+//        halt();
     }
 #endif
     return retval;
