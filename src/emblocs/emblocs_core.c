@@ -91,8 +91,8 @@ static void *alloc_from_meta_pool(uint32_t size)
 }
 
 
-/* root of instance linked list */
-bl_instance_meta_t *instance_root;
+/* root of block linked list */
+bl_block_meta_t *block_root;
 
 /* root of signal linked list */
 bl_signal_meta_t *signal_root;
@@ -102,10 +102,10 @@ bl_thread_meta_t *thread_root;
 
 
 /* linked list callback functions */
-static int instance_meta_compare_names(void *node1, void *node2)
+static int block_meta_compare_names(void *node1, void *node2)
 {
-    bl_instance_meta_t  *np1 = node1;
-    bl_instance_meta_t  *np2 = node2;
+    bl_block_meta_t  *np1 = node1;
+    bl_block_meta_t  *np2 = node2;
     return strcmp(np1->name, np2->name);
 }
 
@@ -142,9 +142,9 @@ static int thread_meta_compare_names(void *node1, void *node2)
  * Top-level EMBLOCS API functions used to build a system     *
  **************************************************************/
 
-struct bl_instance_meta_s *bl_instance_new(char const *name, struct bl_comp_def_s const *comp_def, void const *personality)
+struct bl_block_meta_s *bl_block_new(char const *name, struct bl_comp_def_s const *comp_def, void const *personality)
 {
-    struct bl_instance_meta_s *retval;
+    struct bl_block_meta_s *retval;
 
     CHECK_NULL(name);
     CHECK_NULL(comp_def);
@@ -379,7 +379,7 @@ void bl_thread_run(struct bl_thread_data_s const *thread, uint32_t period_ns)
     function = thread->start;
     while ( function != NULL ) {
         // call the function
-        (*(function->funct))(function->instance_data, period_ns);
+        (*(function->funct))(function->block_data, period_ns);
         function = function->next;
     }
 }
@@ -392,9 +392,9 @@ struct bl_thread_data_s *bl_thread_get_data(struct bl_thread_meta_s *thread)
 
 
 /* linked list callback functions */
-int bl_instance_meta_compare_name_key(void *node, void *key)
+int bl_block_meta_compare_name_key(void *node, void *key)
 {
-    bl_instance_meta_t *np = node;
+    bl_block_meta_t *np = node;
     char *kp = key;
     return strcmp(np->name, kp);
 }
@@ -427,12 +427,12 @@ int bl_function_meta_compare_name_key(void *node, void *key)
     return strcmp(np->name, kp);
 }
 
-struct bl_instance_meta_s *bl_instance_find(char const *name)
+struct bl_block_meta_s *bl_block_find(char const *name)
 {
-    bl_instance_meta_t *retval;
+    bl_block_meta_t *retval;
 
     CHECK_NULL(name);
-    retval = ll_find((void **)(&(instance_root)), (void *)(name), bl_instance_meta_compare_name_key);
+    retval = ll_find((void **)(&(block_root)), (void *)(name), bl_block_meta_compare_name_key);
     if ( retval == NULL ) {
         ERROR_RETURN(BL_ERR_NOT_FOUND);
     }
@@ -463,49 +463,49 @@ struct bl_thread_meta_s *bl_thread_find(char const *name)
     return retval;
 }
 
-struct bl_pin_meta_s *bl_pin_find_in_instance(char const *name, struct bl_instance_meta_s *inst)
+struct bl_pin_meta_s *bl_pin_find_in_block(char const *name, struct bl_block_meta_s *blk)
 {
     bl_pin_meta_t *retval;
 
     CHECK_NULL(name);
-    retval = ll_find((void **)(&(inst->pin_list)), (void *)(name), bl_pin_meta_compare_name_key);
+    retval = ll_find((void **)(&(blk->pin_list)), (void *)(name), bl_pin_meta_compare_name_key);
     if ( retval == NULL ) {
         ERROR_RETURN(BL_ERR_NOT_FOUND);
     }
     return retval;
 }
 
-struct bl_function_meta_s *bl_function_find_in_instance(char const *name, struct bl_instance_meta_s *inst)
+struct bl_function_meta_s *bl_function_find_in_block(char const *name, struct bl_block_meta_s *blk)
 {
     bl_function_meta_t *retval;
 
     CHECK_NULL(name);
-    retval = ll_find((void **)(&(inst->function_list)), (void *)(name), bl_function_meta_compare_name_key);
+    retval = ll_find((void **)(&(blk->function_list)), (void *)(name), bl_function_meta_compare_name_key);
     if ( retval == NULL ) {
         ERROR_RETURN(BL_ERR_NOT_FOUND);
     }
     return retval;
 }
 
-struct bl_instance_meta_s *bl_default_setup(char const *name, bl_comp_def_t const *comp_def)
+struct bl_block_meta_s *bl_default_setup(char const *name, bl_comp_def_t const *comp_def)
 {
-    bl_instance_meta_t *meta;
+    bl_block_meta_t *meta;
     bool retval __attribute__ ((unused));
 
     CHECK_NULL(name);
     CHECK_NULL(comp_def);
-    meta = bl_instance_create(name, comp_def, 0);
+    meta = bl_block_create(name, comp_def, 0);
     CHECK_RETURN(meta);
-    retval = bl_instance_add_pins(meta, comp_def);
+    retval = bl_block_add_pins(meta, comp_def);
     CHECK_RETURN(retval);
-    retval = bl_instance_add_functions(meta, comp_def);
+    retval = bl_block_add_functions(meta, comp_def);
     CHECK_RETURN(retval);
     return meta;
 }
 
-struct bl_instance_meta_s *bl_instance_create(char const *name, bl_comp_def_t const *comp_def, uint32_t data_size)
+struct bl_block_meta_s *bl_block_create(char const *name, bl_comp_def_t const *comp_def, uint32_t data_size)
 {
-    bl_instance_meta_t *meta;
+    bl_block_meta_t *meta;
     void *data;
     int ll_result;
 
@@ -514,11 +514,11 @@ struct bl_instance_meta_s *bl_instance_create(char const *name, bl_comp_def_t co
     if ( data_size == 0 ) {
         data_size = comp_def->data_size;
     }
-    if ( data_size >= BL_INSTANCE_DATA_MAX_SIZE ) {
+    if ( data_size >= BL_BLOCK_DATA_MAX_SIZE ) {
         ERROR_RETURN(BL_ERR_TOO_BIG);
     }
     // allocate memory for metadata
-    meta = alloc_from_meta_pool(sizeof(bl_instance_meta_t));
+    meta = alloc_from_meta_pool(sizeof(bl_block_meta_t));
     CHECK_RETURN(meta);
     // allocate memory for realtime data
     data = alloc_from_rt_pool(data_size);
@@ -526,31 +526,31 @@ struct bl_instance_meta_s *bl_instance_create(char const *name, bl_comp_def_t co
     // initialise metadata fields
     meta->comp_def = comp_def;
     meta->data_index = TO_RT_INDEX(data);
-    meta->data_size = TO_INSTANCE_SIZE(data_size);
+    meta->data_size = TO_BLOCK_SIZE(data_size);
     meta->name = name;
     meta->pin_list = NULL;
-    // add metadata to master instance list
-    ll_result = ll_insert((void **)(&instance_root), (void *)meta, instance_meta_compare_names);
+    // add metadata to master block list
+    ll_result = ll_insert((void **)(&block_root), (void *)meta, block_meta_compare_names);
     if ( ll_result != 0 ) {
         ERROR_RETURN(BL_ERR_NAME_EXISTS);
     }
     return meta;
 }
 
-void *bl_instance_data_addr(struct bl_instance_meta_s *inst)
+void *bl_block_data_addr(struct bl_block_meta_s *blk)
 {
-    CHECK_NULL(inst);
-    return TO_RT_ADDR(inst->data_index);
+    CHECK_NULL(blk);
+    return TO_RT_ADDR(blk->data_index);
 }
 
-bool bl_instance_add_pin(struct bl_instance_meta_s *inst, bl_pin_def_t const *def)
+bool bl_block_add_pin(struct bl_block_meta_s *blk, bl_pin_def_t const *def)
 {
     bl_pin_meta_t *meta;
     bl_sig_data_t *data;
     bl_sig_data_t **ptr_addr;
     int ll_result;
 
-    CHECK_NULL(inst);
+    CHECK_NULL(blk);
     CHECK_NULL(def);
     // allocate memory for metadata
     meta = alloc_from_meta_pool(sizeof(bl_pin_meta_t));
@@ -559,7 +559,7 @@ bool bl_instance_add_pin(struct bl_instance_meta_s *inst, bl_pin_def_t const *de
     data = alloc_from_rt_pool(sizeof(bl_sig_data_t));
     CHECK_RETURN(data);
     // determine address of pin pointer
-    ptr_addr = (bl_sig_data_t **)((char *)(TO_RT_ADDR(inst->data_index)) + def->data_offset);
+    ptr_addr = (bl_sig_data_t **)((char *)(TO_RT_ADDR(blk->data_index)) + def->data_offset);
     // link pin to dummy signal
     *ptr_addr = data;
     // initialize dummy signal to zero (independent of type)
@@ -570,23 +570,23 @@ bool bl_instance_add_pin(struct bl_instance_meta_s *inst, bl_pin_def_t const *de
     meta->data_type = def->data_type;
     meta->pin_dir = def->pin_dir;
     meta->name = def->name;
-    // add metadata to instances's pin list
-    ll_result = ll_insert((void **)(&(inst->pin_list)), (void *)meta, pin_meta_compare_names);
+    // add metadata to block's pin list
+    ll_result = ll_insert((void **)(&(blk->pin_list)), (void *)meta, pin_meta_compare_names);
     if ( ll_result != 0 ) {
         ERROR_RETURN(BL_ERR_NAME_EXISTS);
     }
     return true;
 }
 
-bool bl_instance_add_pins(struct bl_instance_meta_s *inst, bl_comp_def_t const *def)
+bool bl_block_add_pins(struct bl_block_meta_s *blk, bl_comp_def_t const *def)
 {
     bool retval;
     int errors = 0;
 
-    CHECK_NULL(inst);
+    CHECK_NULL(blk);
     CHECK_NULL(def);
     for ( int i = 0 ; i < def->num_pin_defs ; i++ ) {
-        retval = bl_instance_add_pin(inst, &(def->pin_defs[i]));
+        retval = bl_block_add_pin(blk, &(def->pin_defs[i]));
         if ( ! retval ) {
             errors++;
         }
@@ -598,13 +598,13 @@ bool bl_instance_add_pins(struct bl_instance_meta_s *inst, bl_comp_def_t const *
     }
 }
 
-bool bl_instance_add_function(struct bl_instance_meta_s *inst, bl_function_def_t const *def)
+bool bl_block_add_function(struct bl_block_meta_s *blk, bl_function_def_t const *def)
 {
     bl_function_meta_t *meta;
     bl_function_rtdata_t *data;
     int ll_result;
 
-    CHECK_NULL(inst);
+    CHECK_NULL(blk);
     CHECK_NULL(def);
     // allocate memory for metadata
     meta = alloc_from_meta_pool(sizeof(bl_function_meta_t));
@@ -614,30 +614,30 @@ bool bl_instance_add_function(struct bl_instance_meta_s *inst, bl_function_def_t
     CHECK_RETURN(data);
     // initialize realtime data fields
     data->funct = def->fp;
-    data->instance_data = TO_RT_ADDR(inst->data_index);
+    data->block_data = TO_RT_ADDR(blk->data_index);
     data->next = NULL;
     // initialise metadata fields
     meta->rtdata_index = TO_RT_INDEX(data);
     meta->nofp = def->nofp;
     meta->name = def->name;
     meta->thread_index = BL_META_MAX_INDEX;  // MAX means not in a thread
-    // add metadata to instances's function list
-    ll_result = ll_insert((void **)(&(inst->function_list)), (void *)meta, function_meta_compare_names);
+    // add metadata to block's function list
+    ll_result = ll_insert((void **)(&(blk->function_list)), (void *)meta, function_meta_compare_names);
     if ( ll_result != 0 ) {
         ERROR_RETURN(BL_ERR_NAME_EXISTS);
     }
     return true;
 }
 
-bool bl_instance_add_functions(struct bl_instance_meta_s *inst, bl_comp_def_t const *def)
+bool bl_block_add_functions(struct bl_block_meta_s *blk, bl_comp_def_t const *def)
 {
     bool retval;
     int errors = 0;
 
-    CHECK_NULL(inst);
+    CHECK_NULL(blk);
     CHECK_NULL(def);
     for ( int i = 0 ; i < def->num_function_defs ; i++ ) {
-        retval = bl_instance_add_function(inst, &(def->function_defs[i]));
+        retval = bl_block_add_function(blk, &(def->function_defs[i]));
         if ( ! retval ) {
             errors++;
         }

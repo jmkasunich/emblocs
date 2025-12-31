@@ -12,17 +12,17 @@
  * calls a callback functions for each match (if 'callback'
  * is not NULL), and returns the number of matches.
  */
-static bl_instance_meta_t *bl_find_instance_by_data_addr(void *data_addr);
-//static bl_instance_meta_t *bl_find_instance_from_thread_entry(bl_thread_entry_t const *entry);
+static bl_block_meta_t *bl_find_block_by_data_addr(void *data_addr);
+//static bl_block_meta_t *bl_find_block_from_thread_entry(bl_thread_entry_t const *entry);
 static bl_signal_meta_t *bl_find_signal_by_index(uint32_t index);
-static bl_function_def_t *bl_find_function_def_in_instance_by_address(bl_rt_function_t *addr, bl_instance_meta_t const *inst);
+static bl_function_def_t *bl_find_function_def_in_block_by_address(bl_rt_function_t *addr, bl_block_meta_t const *blk);
 //static bl_function_def_t *bl_find_function_def_from_thread_entry(bl_thread_entry_t const *entry);
 
-static int bl_find_pins_linked_to_signal(bl_signal_meta_t const *sig, void (*callback)(bl_instance_meta_t *inst, bl_pin_meta_t *pin));
-//static int bl_find_functions_in_thread(bl_thread_meta_t const *thread, void (*callback)(bl_instance_meta_t *inst, bl_function_def_t *funct));
+static int bl_find_pins_linked_to_signal(bl_signal_meta_t const *sig, void (*callback)(bl_block_meta_t *blk, bl_pin_meta_t *pin));
+//static int bl_find_functions_in_thread(bl_thread_meta_t const *thread, void (*callback)(bl_block_meta_t *blk, bl_function_def_t *funct));
 
-static void bl_show_all_pins_of_instance(bl_instance_meta_t const *inst);
-static void bl_show_all_functions_of_instance(bl_instance_meta_t const *inst);
+static void bl_show_all_pins_of_block(bl_block_meta_t const *blk);
+static void bl_show_all_functions_of_block(bl_block_meta_t const *blk);
 static void bl_show_pin_value(bl_pin_meta_t const *pin);
 static void bl_show_pin_linkage(bl_pin_meta_t const *pin);
 static void bl_show_signal_value(bl_signal_meta_t const *sig);
@@ -59,30 +59,30 @@ void bl_show_memory_status(void)
     printf("Meta pool: %u/%u, %u free\n", bl_meta_pool_size-bl_meta_pool_avail, bl_meta_pool_size, bl_meta_pool_avail);
 }
 
-void bl_show_instance(struct bl_instance_meta_s const *inst)
+void bl_show_block(struct bl_block_meta_s const *blk)
 {
 #ifdef BL_SHOW_VERBOSE
-    printf("INST: %20s <= %20s @ %p, %d RT bytes @ [%3d]=%p\n", inst->name, inst->comp_def->name,
-                    inst, inst->data_size, inst->data_index, TO_RT_ADDR(inst->data_index) );
+    printf("BLK:  %20s <= %20s @ %p, %d RT bytes @ [%3d]=%p\n", blk->name, blk->comp_def->name,
+                    blk, blk->data_size, blk->data_index, TO_RT_ADDR(blk->data_index) );
 #else
-    printf("instance '%s' of component '%s'\n", inst->name, inst->comp_def->name);
+    printf("block '%s' of component '%s'\n", blk->name, blk->comp_def->name);
 #endif
-    bl_show_all_pins_of_instance(inst);
-    bl_show_all_functions_of_instance(inst);
+    bl_show_all_pins_of_block(blk);
+    bl_show_all_functions_of_block(blk);
 }
 
-static void instance_meta_print_node(void *node)
+static void block_meta_print_node(void *node)
 {
-    bl_show_instance((bl_instance_meta_t *)node);
+    bl_show_block((bl_block_meta_t *)node);
 }
 
-void bl_show_all_instances(void)
+void bl_show_all_blocks(void)
 {
     int ll_result;
 
-    printf("List of all instances:\n");
-    ll_result = ll_traverse((void **)(&instance_root), instance_meta_print_node);
-    printf("Total of %d instances\n", ll_result);
+    printf("List of all blocks:\n");
+    ll_result = ll_traverse((void **)(&block_root), block_meta_print_node);
+    printf("Total of %d blocks\n", ll_result);
 }
 
 void bl_show_pin(bl_pin_meta_t const *pin)
@@ -115,11 +115,11 @@ static void pin_meta_print_node(void *node)
     bl_show_pin((bl_pin_meta_t *)node);
 }
 
-static void bl_show_all_pins_of_instance(bl_instance_meta_t const *inst)
+static void bl_show_all_pins_of_block(bl_block_meta_t const *blk)
 {
     int ll_result;
 
-    ll_result = ll_traverse((void **)(&inst->pin_list), pin_meta_print_node);
+    ll_result = ll_traverse((void **)(&blk->pin_list), pin_meta_print_node);
     printf("    %d pins\n", ll_result);
 }
 
@@ -177,11 +177,11 @@ static void function_meta_print_node(void *node)
     bl_show_function((bl_function_meta_t *)node);
 }
 
-static void bl_show_all_functions_of_instance(bl_instance_meta_t const *inst)
+static void bl_show_all_functions_of_block(bl_block_meta_t const *blk)
 {
     int ll_result;
 
-    ll_result = ll_traverse((void **)(&inst->function_list), function_meta_print_node);
+    ll_result = ll_traverse((void **)(&blk->function_list), function_meta_print_node);
     printf("    %d functions\n", ll_result);
 }
 
@@ -212,12 +212,12 @@ static void bl_show_signal_value(bl_signal_meta_t const *sig)
     bl_show_sig_data_t_value(data, sig->data_type);
 }
 
-static void signal_linkage_callback(bl_instance_meta_t *inst, bl_pin_meta_t *pin)
+static void signal_linkage_callback(bl_block_meta_t *blk, bl_pin_meta_t *pin)
 {
     char const *dir;
 
     dir = dirs_sp[pin->pin_dir];
-    printf("     %s %s.%s\n", dir, inst->name, pin->name);
+    printf("     %s %s.%s\n", dir, blk->name, pin->name);
 }
 
 static void bl_show_signal_linkage(bl_signal_meta_t const *sig)
@@ -270,14 +270,14 @@ void bl_show_all_signals(void)
 static void bl_show_function_rtdata(bl_function_rtdata_t const *rtdata)
 {
 #ifdef BL_SHOW_VERBOSE
-    printf("  function_rtdata @[%d]=%p, calls %p, inst data @%p\n", TO_RT_INDEX(rtdata), rtdata, rtdata->funct, rtdata->instance_data);
+    printf("  function_rtdata @[%d]=%p, calls %p, blk data @%p\n", TO_RT_INDEX(rtdata), rtdata, rtdata->funct, rtdata->block_data);
 #else
-    bl_instance_meta_t *inst;
+    bl_block_meta_t *blk;
     bl_function_def_t *funct;
 
-    inst = bl_find_instance_by_data_addr(rtdata->instance_data);
-    funct = bl_find_function_def_in_instance_by_address(rtdata->funct, inst);
-    printf("     %s.%s\n", inst->name, funct->name);
+    blk = bl_find_block_by_data_addr(rtdata->block_data);
+    funct = bl_find_function_def_in_block_by_address(rtdata->funct, blk);
+    printf("     %s.%s\n", blk->name, funct->name);
 #endif
 }
 
@@ -332,9 +332,9 @@ void bl_show_all_threads(void)
 
 
 /* linked list callback functions */
-static int instance_meta_compare_index_key(void *node, void *key)
+static int block_meta_compare_index_key(void *node, void *key)
 {
-    bl_instance_meta_t *np = node;
+    bl_block_meta_t *np = node;
     uint32_t *kp = key;
     return (np->data_index - *kp);
 }
@@ -347,13 +347,13 @@ static int sig_meta_compare_index_key(void *node, void *key)
 }
 
 /* "find" functions */
-static bl_instance_meta_t *bl_find_instance_by_data_addr(void *data_addr)
+static bl_block_meta_t *bl_find_block_by_data_addr(void *data_addr)
 {
     uint32_t index;
-    bl_instance_meta_t *retval;
+    bl_block_meta_t *retval;
 
     index = TO_RT_INDEX(data_addr);
-    retval = ll_find((void **)(&(instance_root)), (void *)(&index), instance_meta_compare_index_key);
+    retval = ll_find((void **)(&(block_root)), (void *)(&index), block_meta_compare_index_key);
     if ( retval == NULL ) {
         #ifdef BL_PRINT_ERRORS
         print_string("data corruption\n");
@@ -364,9 +364,9 @@ static bl_instance_meta_t *bl_find_instance_by_data_addr(void *data_addr)
 }
 
 #if 0
-static bl_instance_meta_t *bl_find_instance_from_thread_entry(bl_thread_entry_t const *entry)
+static bl_block_meta_t *bl_find_block_from_thread_entry(bl_thread_entry_t const *entry)
 {
-    return bl_find_instance_by_data_addr(entry->instance_data);
+    return bl_find_block_by_data_addr(entry->block_data);
 }
 #endif
 
@@ -384,12 +384,12 @@ static bl_signal_meta_t *bl_find_signal_by_index(uint32_t index)
     return retval;
 }
 
-static bl_function_def_t *bl_find_function_def_in_instance_by_address(bl_rt_function_t *addr, bl_instance_meta_t const *inst)
+static bl_function_def_t *bl_find_function_def_in_block_by_address(bl_rt_function_t *addr, bl_block_meta_t const *blk)
 {
     bl_comp_def_t const *comp;
     bl_function_def_t const *fdef;
 
-    comp = inst->comp_def;
+    comp = blk->comp_def;
     for ( int n = 0 ; n < comp->num_function_defs ; n++ ) {
         fdef = &(comp->function_defs[n]);
         if ( addr == fdef->fp ) {
@@ -405,46 +405,46 @@ static bl_function_def_t *bl_find_function_def_in_instance_by_address(bl_rt_func
 #if 0
 static bl_function_def_t *bl_find_function_def_from_thread_entry(bl_thread_entry_t const *entry)
 {
-    bl_instance_meta_t *inst;
+    bl_block_meta_t *blk;
 
-    inst = bl_find_instance_by_data_addr(entry->instance_data);
-    return bl_find_function_def_in_instance_by_address(entry->funct, inst);
+    blk = bl_find_block_by_data_addr(entry->block_data);
+    return bl_find_function_def_in_block_by_address(entry->funct, blk);
 }
 #endif
 
-static int bl_find_pins_linked_to_signal(bl_signal_meta_t const *sig, void (*callback)(bl_instance_meta_t *inst, bl_pin_meta_t *pin))
+static int bl_find_pins_linked_to_signal(bl_signal_meta_t const *sig, void (*callback)(bl_block_meta_t *blk, bl_pin_meta_t *pin))
 {
-    bl_instance_meta_t *inst;
+    bl_block_meta_t *blk;
     bl_pin_meta_t *pin;
     bl_sig_data_t *sp, **pp;
     int matches;
 
     sp = TO_RT_ADDR(sig->data_index);
-    inst = instance_root;
+    blk = block_root;
     matches = 0;
-    while ( inst != NULL ) {
-        pin = inst->pin_list;
+    while ( blk != NULL ) {
+        pin = blk->pin_list;
         while ( pin != NULL ) {
             pp = TO_RT_ADDR(pin->ptr_index);
             if ( *pp == sp ) {
                 matches++;
                 if ( callback != NULL ) {
-                    callback(inst, pin);
+                    callback(blk, pin);
                 }
             }
             pin = pin->next;
         }
-        inst = inst->next;
+        blk = blk->next;
     }
     return matches;
 }
 
 #if 0
-static int bl_find_functions_in_thread(bl_thread_meta_t const *thread, void (*callback)(bl_instance_meta_t *inst, bl_function_def_t *funct))
+static int bl_find_functions_in_thread(bl_thread_meta_t const *thread, void (*callback)(bl_block_meta_t *blk, bl_function_def_t *funct))
 {
     bl_thread_data_t *data;
     bl_thread_entry_t *entry;
-    bl_instance_meta_t *inst;
+    bl_block_meta_t *blk;
     bl_function_def_t *funct;
     int matches;
 
@@ -452,11 +452,11 @@ static int bl_find_functions_in_thread(bl_thread_meta_t const *thread, void (*ca
     entry = data->start;
     matches = 0;
     while ( entry != NULL ) {
-        inst = bl_find_instance_by_data_addr(entry->instance_data);
-        funct = bl_find_function_def_in_instance_by_address(entry->funct, inst);
+        blk = bl_find_block_by_data_addr(entry->block_data);
+        funct = bl_find_function_def_in_block_by_address(entry->funct, blk);
         matches++;
         if ( callback != NULL ) {
-            callback(inst, funct);
+            callback(blk, funct);
         }
     }
     return matches;

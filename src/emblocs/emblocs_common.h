@@ -139,7 +139,7 @@ typedef enum {
  * API functions pass and return pointers to these structures,
  * but the internal data is private and not declared here.
  */
-struct bl_instance_meta_s;
+struct bl_block_meta_s;
 struct bl_pin_meta_s;
 struct bl_function_meta_s;
 struct bl_signal_meta_s;

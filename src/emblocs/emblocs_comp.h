@@ -53,19 +53,19 @@
 #endif
 
 /**************************************************************
- * Each instance of a component has "instance data" which is
- * in the RT memory pool.  The instance data size is specified
- * in bytes, and the size is stored in a bitfield.
+ * Each block has internal data which is in the RT memory pool.
+ * The block data size is specified in bytes, and the size
+ * is stored in a bitfield.
  */
-#ifndef BL_INSTANCE_DATA_SIZE_BITS
-#define BL_INSTANCE_DATA_SIZE_BITS  10
+#ifndef BL_BLOCK_DATA_SIZE_BITS
+#define BL_BLOCK_DATA_SIZE_BITS  10
 #endif
 
-#define BL_INSTANCE_DATA_MAX_SIZE (1<<(BL_INSTANCE_DATA_SIZE_BITS))
-#define BL_INSTANCE_DATA_SIZE_MASK ((BL_INSTANCE_DATA_MAX_SIZE)-1)
+#define BL_BLOCK_DATA_MAX_SIZE (1<<(BL_BLOCK_DATA_SIZE_BITS))
+#define BL_BLOCK_DATA_SIZE_MASK ((BL_BLOCK_DATA_MAX_SIZE)-1)
 
 /* masks 'size' so it can go into a bit field without a conversion warning */
-#define TO_INSTANCE_SIZE(size) ((size) & BL_INSTANCE_DATA_SIZE_MASK)
+#define TO_BLOCK_SIZE(size) ((size) & BL_BLOCK_DATA_SIZE_MASK)
 
 /* A field in the component definition determines whether the
  * component needs personality data */
@@ -76,7 +76,7 @@ typedef enum {
 
 #define BL_PERSONALITY_FLAG_BITS (BITS2STORE(BL_NEEDS_PERSONALITY))
 
-/* pin count (number of pins in a component instance)
+/* pin count (number of pins in a block)
  * is stored in bitfields, need to specify the size
  */
 #ifndef BL_PIN_COUNT_BITS
@@ -96,28 +96,28 @@ typedef enum {
 
 /**************************************************************
  * The following data structures are used by components to    *
- * describe themselves and allow component instances to be    *
- * created.  Most of them typically live in FLASH memory.     *
+ * describe themselves and allow blocks (component instances) *
+ * to be created.  Most of them typically live in flash.      *
  **************************************************************/
 
 /**************************************************************
  * Data structure that defines a component.  These typically
  * exist in flash, but in theory could be built on-the-fly in
- * RAM.  Component instances are created using the data in a
- * component definition plus an optional personality that can
- * customize the basic component.
- * If 'setup' is NULL, then bl_instance_new() will call
- * 'bl_default_setup()' to create an instance of the component
- * using only the data in the component definition.
- * Otherwise, bl_instance_new() will call setup(), which
- * should parse 'personality' as needed and create the instance
+ * RAM.  Blocks are created using the data in a component
+ * definition plus an optional personality that can customize
+ * the basic component.
+ * If 'setup' is NULL, then bl_block_new() will call
+ * 'bl_default_setup()' to create block using only the data
+ * in the component definition.
+ * Otherwise, bl_block_new() will call setup(), which
+ * should parse 'personality' as needed and create the block
  * by calling the helper functions defined later.
  */
 
 typedef struct bl_comp_def_s {
     char const *name;
-    struct bl_instance_meta_s * (*setup) (char const *instance_name, struct bl_comp_def_s const *comp_def, void const *personality);
-    uint32_t data_size          : BL_INSTANCE_DATA_SIZE_BITS;
+    struct bl_block_meta_s  * (*setup) (char const *block_name, struct bl_comp_def_s const *comp_def, void const *personality);
+    uint32_t data_size          : BL_BLOCK_DATA_SIZE_BITS;
     uint32_t needs_pers         : BL_PERSONALITY_FLAG_BITS;
     uint32_t num_pin_defs       : BL_PIN_COUNT_BITS;
     uint32_t num_function_defs  : BL_FUNCTION_COUNT_BITS;
@@ -126,7 +126,7 @@ typedef struct bl_comp_def_s {
 } bl_comp_def_t;
 
 /* Verify that bitfields fit in one uint32_t */
-_Static_assert((BL_INSTANCE_DATA_SIZE_BITS+BL_PERSONALITY_FLAG_BITS+\
+_Static_assert((BL_BLOCK_DATA_SIZE_BITS+BL_PERSONALITY_FLAG_BITS+\
                 BL_PIN_COUNT_BITS+BL_FUNCTION_COUNT_BITS) <= 32, "comp_def bitfields too big");
 
 /**************************************************************
@@ -137,7 +137,7 @@ _Static_assert((BL_INSTANCE_DATA_SIZE_BITS+BL_PERSONALITY_FLAG_BITS+\
  * init() function can set the fields of one (or more) of these
  * structs in RAM (probably a local variable on stack), then
  * pass it to bl_pin_new() to create the pin.
- * The data offset is in bytes from the beginning of the instance
+ * The data offset is in bytes from the beginning of the block
  * data, so the standard offsetof() can be used to set it.
  */
 
@@ -145,18 +145,18 @@ typedef struct bl_pin_def_s {
     char const *name;
     uint32_t data_type    : BL_TYPE_BITS;
     uint32_t pin_dir      : BL_DIR_BITS;
-    uint32_t data_offset  : BL_INSTANCE_DATA_SIZE_BITS;
+    uint32_t data_offset  : BL_BLOCK_DATA_SIZE_BITS;
 } bl_pin_def_t;
 
 /* Verify that bitfields fit in one uint32_t */
-_Static_assert((BL_INSTANCE_DATA_SIZE_BITS+BL_TYPE_BITS+BL_DIR_BITS) <= 32, "pin_def bitfields too big");
+_Static_assert((BL_BLOCK_DATA_SIZE_BITS+BL_TYPE_BITS+BL_DIR_BITS) <= 32, "pin_def bitfields too big");
 
 /**************************************************************
  * A realtime function to be called from a thread.
- * The function is passed a pointer to the instance data
+ * The function is passed a pointer to the block data
  * and the calling period in nano-seconds.
  */
-typedef void (bl_rt_function_t)(void *instance_data, uint32_t period_ns);
+typedef void (bl_rt_function_t)(void *block_data, uint32_t period_ns);
 
 /**************************************************************
  * Data structure that defines a realtime function.
@@ -174,72 +174,71 @@ typedef struct bl_function_def_s {
 _Static_assert((BL_NOFP_BITS) <= 32, "function_def bitfields too big");
 
 /**************************************************************
- * Helper functions for bl_instance_new()
+ * Helper functions for bl_block_new()
  * The following functions are called from bl_default_setup()
  * or from a component-specific setup() function to perform
- * various steps in the process of creating a new component
- * instance
+ * various steps in the process of creating a new block
  */
 
  /**************************************************************
- * Helper function to create an instance of a component
+ * Helper function to create a block (instance of a component)
  * using only the component definition.
  */
-struct bl_instance_meta_s *bl_default_setup(char const *name, bl_comp_def_t const *comp_def);
+struct bl_block_meta_s *bl_default_setup(char const *name, bl_comp_def_t const *comp_def);
 
 /**************************************************************
- * Helper function to create a new instance and reserve RAM
- * for its instance data.  
- * If 'data_size' is zero, the size of the instance data will
+ * Helper function to create a new block and reserve RAM
+ * for its data.
+ * If 'data_size' is zero, the size of the block data will
  * be based on the component definition; this happens when
  * called from bl_default_setup().  If 'data_size' is non-zero,
  * it overrides the size in the component definition.  This
  * allows a component-specific setup function to modify the
- * size based on the instance personality.
+ * size based on the block personality.
  */
-struct bl_instance_meta_s *bl_instance_create(char const *name, bl_comp_def_t const *comp_def, uint32_t data_size);
+struct bl_block_meta_s *bl_block_create(char const *name, bl_comp_def_t const *comp_def, uint32_t data_size);
 
 /**************************************************************
- * Helper function to get the address of the instance data
- * for a particular instance
+ * Helper function to get the address of the block data
+ * for a particular block
  */  
-void *bl_instance_data_addr(struct bl_instance_meta_s *inst);
+void *bl_block_data_addr(struct bl_block_meta_s *blk);
 
 /**************************************************************
- * Helper functions for new instance:
+ * Helper functions for new block:
  */
 
-/* Adds a pin as defined by 'def' to instance 'inst'
+/* Adds a pin as defined by 'def' to block 'blk'
  * allocates a new bl_pin_meta_t struct in meta RAM 
  * allocates a dummy signal in RT ram
  * fills in all fields in the meta struct
  * links the pin to the dummy signal
- * adds the meta struct to 'inst' pin list
+ * adds the meta struct to 'blk' pin list
  */
-bool bl_instance_add_pin(struct bl_instance_meta_s *inst, bl_pin_def_t const *def);
+bool bl_block_add_pin(struct bl_block_meta_s *blk, bl_pin_def_t const *def);
 
-/* Adds all pins defined by 'def' to instance 'inst'.
- * This function calls bl_instance_add_pin() for each pin
+/* Adds all pins defined by 'def' to block 'blk'.
+ * This function calls bl_block_add_pin() for each pin
  * definition in 'def'.  It is called by bl_default_setup()
  * and can be called from component-specific setup functions.
  */
-bool bl_instance_add_pins(struct bl_instance_meta_s *inst, bl_comp_def_t const *def);
+bool bl_block_add_pins(struct bl_block_meta_s *blk, bl_comp_def_t const *def);
 
-/* Adds a function as defined by 'def' to instance 'inst'
+/* Adds a function as defined by 'def' to block 'blk'
  * allocates a new bl_function_meta_t struct in meta RAM
  * allocates a bl_function_rtdata_t struct in RT ram
  * fills in all fields in both structures
  * links the meta struct to the rtdata struct
- * adds the meta struct to 'inst' function list
+ * adds the meta struct to 'blk' function list
  */
-bool bl_instance_add_function(struct bl_instance_meta_s *inst, bl_function_def_t const *def);
+bool bl_block_add_function(struct bl_block_meta_s *blk, bl_function_def_t const *def);
 
-/* Adds all functions defined by 'def' to instance 'inst'.
- * This function calls bl_instance_add_function() for each
+/* Adds all functions defined by 'def' to block 'blk'.
+ * This function calls bl_block_add_function() for each
  * function definition in 'def'.  It is called by
  * bl_default_setup() and can be called from component-
  * specific setup functions.
  */
-bool bl_instance_add_functions(struct bl_instance_meta_s *inst, bl_comp_def_t const *def);
+bool bl_block_add_functions(struct bl_block_meta_s *blk, bl_comp_def_t const *def);
 
 #endif // EMBLOCS_COMP_H

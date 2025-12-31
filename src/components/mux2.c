@@ -4,23 +4,23 @@
 
 #include "emblocs_comp.h"
 
-/* instance data structure - one copy per instance in realtime RAM */
-typedef struct bl_mux2_inst_s {
+/* block data structure - one copy per block in realtime RAM */
+typedef struct bl_mux2_block_s {
     bl_pin_u32_t in0;
 	bl_pin_u32_t in1;
 	bl_pin_u32_t out;
 	bl_pin_bit_t sel;
-} bl_mux2_inst_t;
+} bl_mux2_block_t;
 
-_Static_assert((sizeof(bl_mux2_inst_t) < BL_INSTANCE_DATA_MAX_SIZE), "instance structure too large");
+_Static_assert((sizeof(bl_mux2_block_t) < BL_BLOCK_DATA_MAX_SIZE), "block structure too large");
 
 
 /* array of pin definitions - one copy in FLASH */
 static bl_pin_def_t const bl_mux2_pins[] = {
-    { "in0", BL_TYPE_RAW, BL_DIR_IN, offsetof(bl_mux2_inst_t, in0)},
-    { "in1", BL_TYPE_RAW, BL_DIR_IN, offsetof(bl_mux2_inst_t, in1)},
-    { "out", BL_TYPE_RAW, BL_DIR_OUT, offsetof(bl_mux2_inst_t, out)},
-    { "sel", BL_TYPE_BIT, BL_DIR_IN, offsetof(bl_mux2_inst_t, sel)}
+    { "in0", BL_TYPE_RAW, BL_DIR_IN, offsetof(bl_mux2_block_t, in0)},
+    { "in1", BL_TYPE_RAW, BL_DIR_IN, offsetof(bl_mux2_block_t, in1)},
+    { "out", BL_TYPE_RAW, BL_DIR_OUT, offsetof(bl_mux2_block_t, out)},
+    { "sel", BL_TYPE_BIT, BL_DIR_IN, offsetof(bl_mux2_block_t, sel)}
 };
 
 _Static_assert((_countof(bl_mux2_pins) < BL_PIN_COUNT_MAX), "too many pins");
@@ -40,7 +40,7 @@ _Static_assert((_countof(bl_mux2_functions) < BL_FUNCTION_COUNT_MAX), "too many 
 bl_comp_def_t const bl_mux2_def = { 
     "mux2",
     NULL,
-    sizeof(bl_mux2_inst_t),
+    sizeof(bl_mux2_block_t),
     BL_NO_PERSONALITY,
     _countof(bl_mux2_pins),
     _countof(bl_mux2_functions),
@@ -53,7 +53,7 @@ static void bl_mux2_function(void *ptr, uint32_t period_ns)
 {
     (void)period_ns;  // unused in this component
 
-    bl_mux2_inst_t *p = (bl_mux2_inst_t *)ptr;
+    bl_mux2_block_t *p = (bl_mux2_block_t *)ptr;
     if ( *(p->sel) ) {
         *(p->out) = *(p->in1);
     } else {
