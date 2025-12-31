@@ -4,19 +4,19 @@
 
 #include "emblocs_comp.h"
 
-/* instance data structure - one copy per instance in realtime RAM */
-typedef struct bl_not_inst_s {
+/* block data structure - one copy per block in realtime RAM */
+typedef struct bl_not_block_s {
     bl_pin_bit_t in;
     bl_pin_bit_t out;
-} bl_not_inst_t;
+} bl_not_block_t;
 
-_Static_assert((sizeof(bl_not_inst_t) < BL_INSTANCE_DATA_MAX_SIZE), "instance structure too large");
+_Static_assert((sizeof(bl_not_block_t) < BL_BLOCK_DATA_MAX_SIZE), "block structure too large");
 
 
 /* array of pin definitions - one copy in FLASH */
 static bl_pin_def_t const bl_not_pins[] = {
-    { "in", BL_TYPE_BIT, BL_DIR_IN, offsetof(bl_not_inst_t, in)},
-    { "out", BL_TYPE_BIT, BL_DIR_OUT, offsetof(bl_not_inst_t, out)}
+    { "in", BL_TYPE_BIT, BL_DIR_IN, offsetof(bl_not_block_t, in)},
+    { "out", BL_TYPE_BIT, BL_DIR_OUT, offsetof(bl_not_block_t, out)}
 };
 
 _Static_assert((_countof(bl_not_pins) < BL_PIN_COUNT_MAX), "too many pins");
@@ -36,7 +36,7 @@ _Static_assert((_countof(bl_not_functions) < BL_FUNCTION_COUNT_MAX), "too many f
 bl_comp_def_t const bl_not_def = {
     "not",
     NULL,
-    sizeof(bl_not_inst_t),
+    sizeof(bl_not_block_t),
     BL_NO_PERSONALITY,
     _countof(bl_not_pins),
     _countof(bl_not_functions),
@@ -49,7 +49,7 @@ static void bl_not_function(void *ptr, uint32_t period_ns)
 {
     (void)period_ns;  // unused in this component
 
-    bl_not_inst_t *p = (bl_not_inst_t *)ptr;
+    bl_not_block_t *p = (bl_not_block_t *)ptr;
     if ( *(p->in) ) {
         *(p->out) = 0;
     } else {

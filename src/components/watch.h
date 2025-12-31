@@ -12,8 +12,8 @@
  * structures.  The end of the array is marked by an
  * entry with NULL in the 'name' and 'format' fields.
  *
- * A single instance of 'watch' is limited to 14 pins,
- * but you can have as many instances as you want.
+ * A single 'watch' block is limited to 9 pins,
+ * but you can have as many blocks as you want.
  *
  */
 

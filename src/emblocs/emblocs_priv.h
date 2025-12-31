@@ -72,30 +72,31 @@ _Static_assert((4<<(BL_META_INDEX_BITS)) >= (BL_META_POOL_SIZE), "not enough met
  **************************************************************/
 
 /**************************************************************
- * Data structure that describes a single component instance.
+ * Data structure that describes a single block (component
+ * instance).
  * A list of these structures lives in the metadata pool, but
- * they point to instance data in the realtime pool.
- * 'data_index' and 'data_size' refer to the realtime instance
+ * they point to block data in the realtime pool.
+ * 'data_index' and 'data_size' refer to the realtime block
  * data; size is in bytes, while index is a uint32_t offset
  * from the base of the RT pool.  'pin_list' is a list of pins
- * that belong to this specific instance.
+ * that belong to this specific block.
  */
 
-typedef struct bl_instance_meta_s {
-    struct bl_instance_meta_s *next;
+typedef struct bl_block_meta_s {
+    struct bl_block_meta_s *next;
     struct bl_comp_def_s const *comp_def;
     uint32_t data_index  : BL_RT_INDEX_BITS;
-    uint32_t data_size   : BL_INSTANCE_DATA_SIZE_BITS;
+    uint32_t data_size   : BL_BLOCK_DATA_SIZE_BITS;
     char const *name;
     struct bl_pin_meta_s *pin_list;
     struct bl_function_meta_s *function_list;
-} bl_instance_meta_t;
+} bl_block_meta_t;
 
 /* Verify that bitfields fit in one uint32_t */
-_Static_assert((BL_RT_INDEX_BITS+BL_INSTANCE_DATA_SIZE_BITS) <= 32, "instance bitfields too big");
+_Static_assert((BL_RT_INDEX_BITS+BL_BLOCK_DATA_SIZE_BITS) <= 32, "block bitfields too big");
 
 /**************************************************************
- * Data structure that describes a pin.  Each instance has a
+ * Data structure that describes a pin.  Each block has a
  * list of pins.  These structures live in the metadata pool,
  * but point to data in the realtime pool.
  */
@@ -113,7 +114,7 @@ typedef struct bl_pin_meta_s {
 _Static_assert((BL_RT_INDEX_BITS*2+BL_TYPE_BITS+BL_DIR_BITS) <= 32, "pin bitfields too big");
 
 /**************************************************************
- * Data structure that describes a function.  Each instance
+ * Data structure that describes a function.  Each block
  * has a list of functions.  These structures live in the
  * metadata pool, but point to data in the realtime pool.
  * (note: thread_index is set to BL_META_MAX_INDEX if the
@@ -135,14 +136,14 @@ _Static_assert((BL_RT_INDEX_BITS+BL_NOFP_BITS+BL_META_INDEX_BITS) <= 32, "functi
 
 /**************************************************************
  * Realtime data for a function.  These structures are created
- * when the instance is created.  Later, when the function is
+ * when the block is created.  Later, when the function is
  * added to a realtime thread, the 'next' field is used to
  * link this structure into the list that corresponds to the
  * thread.
  */
 typedef struct bl_function_rtdata_s {
     bl_rt_function_t *funct;
-    void *instance_data;
+    void *block_data;
     struct bl_function_rtdata_s *next;
 } bl_function_rtdata_t;
 
@@ -184,8 +185,8 @@ typedef struct bl_thread_data_s {
     struct bl_function_rtdata_s *start;
 } bl_thread_data_t;
 
-/* root of instance linked list */
-extern bl_instance_meta_t *instance_root;
+/* root of block linked list */
+extern bl_block_meta_t *block_root;
 
 /* root of signal linked list */
 extern bl_signal_meta_t *signal_root;
@@ -200,7 +201,7 @@ extern bl_thread_meta_t *thread_root;
  **************************************************************/
 
 /* callback functions for linked lists */
-int bl_instance_meta_compare_name_key(void *node, void *key);
+int bl_block_meta_compare_name_key(void *node, void *key);
 int bl_sig_meta_compare_name_key(void *node, void *key);
 int bl_thread_meta_compare_name_key(void *node, void *key);
 int bl_pin_meta_compare_name_key(void *node, void *key);

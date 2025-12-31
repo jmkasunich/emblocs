@@ -118,7 +118,7 @@ watch_pin_config_t const watch_pers[] = {
 };
 
 char const * const tokens[] = {
-  "instance",
+  "block",
     "PortA", "gpio", (char const *)&portA,
     "PortB", "gpio", (char const *)&portB,
     "PortC", "gpio", (char const *)&portC,
@@ -166,7 +166,7 @@ char const * const tokens[] = {
     "timer", "stop", "main_thread",
   "show",
     "thread",
-    "instance",
+    "blocks",
     "timer",
     "signal",
     "oe",
@@ -218,7 +218,7 @@ int main (void) {
     printf("Parse time        Clocks      uSec\n");
     printf("  Total:        %8d  %8d\n\n", t_init, t_init/CLK_MHZ);
     bl_show_memory_status();
-    bl_show_all_instances();
+    bl_show_all_blocks();
     bl_show_all_signals();
     bl_show_all_threads();
 #endif // PRINT_INIT

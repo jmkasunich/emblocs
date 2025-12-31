@@ -23,16 +23,16 @@
 /**************************************************************
  * A structure that defines a component.
  * The component creates the structure, an application merely
- * refers to it when creating an instance of the component.
+ * refers to it when creating a block (instance of component).
  * Its internals are unimportant and not declared here.
  */
 struct bl_comp_def_s;
 
 /**************************************************************
- * Create an instance of a component, using a component 
+ * Create a block (a component instance), using a component
  * definition (typically in flash) and an optional personality.
  */
-struct bl_instance_meta_s *bl_instance_new(char const *name, struct bl_comp_def_s const *comp_def, void const *personality);
+struct bl_block_meta_s *bl_block_new(char const *name, struct bl_comp_def_s const *comp_def, void const *personality);
 
 /**************************************************************
  * Create a signal of the specified name and type
@@ -50,11 +50,11 @@ struct bl_thread_meta_s *bl_thread_new(char const *name, uint32_t period_ns, bl_
 /**************************************************************
  * Functions to find object metadata by name
  */
-struct bl_instance_meta_s *bl_instance_find(char const *name);
+struct bl_block_meta_s *bl_block_find(char const *name);
 struct bl_signal_meta_s *bl_signal_find(char const *name);
 struct bl_thread_meta_s *bl_thread_find(char const *name);
-struct bl_pin_meta_s *bl_pin_find_in_instance(char const *name, struct bl_instance_meta_s *inst);
-struct bl_function_meta_s *bl_function_find_in_instance(char const *name, struct bl_instance_meta_s *inst);
+struct bl_pin_meta_s *bl_pin_find_in_block(char const *name, struct bl_block_meta_s *blk);
+struct bl_function_meta_s *bl_function_find_in_block(char const *name, struct bl_block_meta_s *blk);
 
 /**************************************************************
  * Link the specified pin to the specified signal
@@ -122,10 +122,10 @@ struct bl_thread_data_s *bl_thread_get_data(struct bl_thread_meta_s *thread);
  **************************************************************/
 
 void bl_show_memory_status(void);
-void bl_show_all_instances(void);
+void bl_show_all_blocks(void);
 void bl_show_all_signals(void);
 void bl_show_all_threads(void);
-void bl_show_instance(struct bl_instance_meta_s const *inst);
+void bl_show_block(struct bl_block_meta_s const *blk);
 void bl_show_pin(struct bl_pin_meta_s const *pin);
 void bl_show_function(struct bl_function_meta_s const *funct);
 void bl_show_signal(struct bl_signal_meta_s const *sig);
@@ -151,7 +151,7 @@ bool bl_parse_string(char const * const string);
  * to link by creating a NULL terminated constant array of
  * pointers to comp_def_s structures and initializing it with
  * the desired component definitions.  Only components in this
- * array can be instantiated by the 'instance' command.
+ * array can be instantiated by the 'block' command.
  */
 extern struct bl_comp_def_s * const bl_comp_defs[];
 

@@ -6,24 +6,24 @@
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
 
-// instance data structure - one copy per instance in RAM
-typedef struct bl_rp2040_gpio_instance_s {
+// block data structure - one copy per block in RAM
+typedef struct bl_rp2040_gpio_block_s {
     bl_pin_bit_t *output_pins;
     bl_pin_bit_t *out_ena_pins;
     uint32_t output_bitmask;
     uint32_t out_ena_bitmask;
     bl_pin_bit_t *input_pins;
     uint32_t input_bitmask;
-} bl_rp2040_gpio_instance_t;
+} bl_rp2040_gpio_block_t;
 
 // we can have up to 3 blocs pins (in, out, output enable) per hardware pin
 // and 30 hardware pins on the RP2040
 #define GPIO_MAX_HW_PINS (30)
 #define GPIO_MAX_BL_PINS (3*GPIO_MAX_HW_PINS)
-#define GPIO_MAX_INSTANCE_SIZE (sizeof(bl_rp2040_gpio_instance_t)+GPIO_MAX_BL_PINS*sizeof(bl_pin_t))
+#define GPIO_MAX_BLOCK_SIZE (sizeof(bl_rp2040_gpio_block_t)+GPIO_MAX_BL_PINS*sizeof(bl_pin_t))
 
 _Static_assert((GPIO_MAX_BL_PINS < BL_PIN_COUNT_MAX), "too many pins");
-_Static_assert((GPIO_MAX_INSTANCE_SIZE < BL_INSTANCE_DATA_MAX_SIZE), "instance structure too large");
+_Static_assert((GPIO_MAX_BLOCK_SIZE < BL_BLOCK_DATA_MAX_SIZE), "block structure too large");
 
 // pin name strings
 // (pin definitions are created dynamically, but the strings must exist in flash)
@@ -72,14 +72,14 @@ static bl_function_def_t const bl_gpio_functions[] = {
 
 
 /* component-specific setup function */
-struct bl_instance_meta_s *rp2040_gpio_setup(char const *instance_name, struct bl_comp_def_s const *comp_def, void const *personality);
+struct bl_block_meta_s *rp2040_gpio_setup(char const *block_name, struct bl_comp_def_s const *comp_def, void const *personality);
 
 
 // component definition - one copy in FLASH
 bl_comp_def_t const bl_rp2040_gpio_def = {
     "rp2040_gpio",
     rp2040_gpio_setup,
-    sizeof(bl_rp2040_gpio_instance_t),
+    sizeof(bl_rp2040_gpio_block_t),
     BL_NEEDS_PERSONALITY,
     0,
     _countof(bl_gpio_functions),
@@ -89,13 +89,13 @@ bl_comp_def_t const bl_rp2040_gpio_def = {
 
 #pragma GCC optimize ("no-strict-aliasing")
 /* component-specific setup function */
-struct bl_instance_meta_s *rp2040_gpio_setup(char const *instance_name, struct bl_comp_def_s const *comp_def, void const *personality)
+struct bl_block_meta_s *rp2040_gpio_setup(char const *block_name, struct bl_comp_def_s const *comp_def, void const *personality)
 {
     rp2040_gpio_config_t *p = (rp2040_gpio_config_t *)personality;
     uint pins_in, pins_out, pins_oe, pins_total;
     uint32_t input_bitmask, output_bitmask, used_bitmask, bidir_bitmask, active_bit;
-    bl_rp2040_gpio_instance_t *data;
-    struct bl_instance_meta_s *meta;
+    bl_rp2040_gpio_block_t *data;
+    struct bl_block_meta_s *meta;
     bl_pin_t *next_pin;
     bl_pin_def_t pindef;
     bool result;
@@ -128,19 +128,19 @@ struct bl_instance_meta_s *rp2040_gpio_setup(char const *instance_name, struct b
         }
         active_bit <<= 1;
     }
-    // now the emblocs setup - create an instance of the proper size to include all pins
+    // now the emblocs setup - create a block of the proper size to include all pins
     pins_total = pins_in + pins_out + pins_oe;
-    meta = bl_instance_create(instance_name, comp_def, comp_def->data_size+pins_total*sizeof(bl_pin_t));
+    meta = bl_block_create(block_name, comp_def, comp_def->data_size+pins_total*sizeof(bl_pin_t));
     CHECK_RETURN(meta);
-    data = bl_instance_data_addr(meta);
+    data = bl_block_data_addr(meta);
     CHECK_RETURN(data);
-    // fill in instance data fields
+    // fill in block data fields
     data->input_bitmask = input_bitmask;
     data->output_bitmask = output_bitmask;
     data->out_ena_bitmask = bidir_bitmask;
     // prepare for pin creation
-    // dynamic pins follow the main instance data structure
-    next_pin = (bl_pin_t *)((char *)data + sizeof(bl_rp2040_gpio_instance_t));
+    // dynamic pins follow the main block data structure
+    next_pin = (bl_pin_t *)((char *)data + sizeof(bl_rp2040_gpio_block_t));
     pindef.data_type = BL_TYPE_BIT;
     // hardware input pins result in data flow out of the driver
     pindef.pin_dir = BL_DIR_OUT;
@@ -150,8 +150,8 @@ struct bl_instance_meta_s *rp2040_gpio_setup(char const *instance_name, struct b
         if ( input_bitmask & active_bit ) {
             // create a pin
             pindef.name = &(pin_names_in[n][0]);
-            pindef.data_offset = TO_INSTANCE_SIZE((uint32_t)((char *)next_pin - (char *)data));
-            result = bl_instance_add_pin(meta, &pindef);
+            pindef.data_offset = TO_BLOCK_SIZE((uint32_t)((char *)next_pin - (char *)data));
+            result = bl_block_add_pin(meta, &pindef);
             CHECK_RETURN(result);
             next_pin++;
         }
@@ -165,8 +165,8 @@ struct bl_instance_meta_s *rp2040_gpio_setup(char const *instance_name, struct b
         if ( output_bitmask & active_bit ) {
             // create a pin
             pindef.name = &(pin_names_out[n][0]);
-            pindef.data_offset = TO_INSTANCE_SIZE((uint32_t)((char *)next_pin - (char *)data));
-            result = bl_instance_add_pin(meta, &pindef);
+            pindef.data_offset = TO_BLOCK_SIZE((uint32_t)((char *)next_pin - (char *)data));
+            result = bl_block_add_pin(meta, &pindef);
             CHECK_RETURN(result);
             next_pin++;
         }
@@ -178,15 +178,15 @@ struct bl_instance_meta_s *rp2040_gpio_setup(char const *instance_name, struct b
         if ( bidir_bitmask & active_bit ) {
             // create a pin
             pindef.name = &(pin_names_oe[n][0]);
-            pindef.data_offset = TO_INSTANCE_SIZE((uint32_t)((char *)next_pin - (char *)data));
-            result = bl_instance_add_pin(meta, &pindef);
+            pindef.data_offset = TO_BLOCK_SIZE((uint32_t)((char *)next_pin - (char *)data));
+            result = bl_block_add_pin(meta, &pindef);
             CHECK_RETURN(result);
             next_pin++;
         }
         active_bit <<= 1;
     }
     // finally, create the functions; nothing custom here
-    result = bl_instance_add_functions(meta, comp_def);
+    result = bl_block_add_functions(meta, comp_def);
     CHECK_RETURN(result);
     return meta;
 }
@@ -197,7 +197,7 @@ struct bl_instance_meta_s *rp2040_gpio_setup(char const *instance_name, struct b
 static void bl_gpio_read_function(void *ptr, uint32_t period_ns)
 {
     (void)period_ns;  // not used
-    bl_rp2040_gpio_instance_t *p = (bl_rp2040_gpio_instance_t *)ptr;
+    bl_rp2040_gpio_block_t *p = (bl_rp2040_gpio_block_t *)ptr;
     uint32_t in_data, in_mask;
     bl_pin_bit_t *pin;
 
@@ -221,7 +221,7 @@ static void bl_gpio_read_function(void *ptr, uint32_t period_ns)
 static void bl_gpio_write_function(void *ptr, uint32_t period_ns)
 {
     (void)period_ns;  // not used
-    bl_rp2040_gpio_instance_t *p = (bl_rp2040_gpio_instance_t *)ptr;
+    bl_rp2040_gpio_block_t *p = (bl_rp2040_gpio_block_t *)ptr;
     uint32_t bitmask, active_bit;
     bl_pin_bit_t *pin;
 
