@@ -13,7 +13,8 @@
 #ifndef EMBLOCS_COMMON_H
 #define EMBLOCS_COMMON_H
 
-#include "emblocs_config.h"
+// use <> to fetch project specific config if present
+#include <emblocs_config.h>
 
 #ifdef BL_ENABLE_IMPLICIT_UNLINK
 #ifndef BL_ENABLE_UNLINK
