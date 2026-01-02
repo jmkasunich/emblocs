@@ -607,6 +607,12 @@ ST_FUNC(SET_2)
                 return true;
             }
             ERROR_EXPECT("u32 value", token);
+        case BL_TYPE_RAW:
+            if ( str_to_u32(token, &(pd.set_target->u)) ) {
+                pd.state = ST_NAME(SET_DONE);
+                return true;
+            }
+            ERROR_EXPECT("raw (u32) value", token);
         default:
             ERROR_INTERNAL();
     }
@@ -708,7 +714,7 @@ static void error_internal(void)
 
 static void error_expect(char const *expect, char const *token)
 {
-    print_strings(3, "ERROR: expected ", expect, "found " );
+    print_strings(3, "ERROR: expected ", expect, " found " );
     print_token(token);
     print_string("\n");
     pd.state = ST_NAME(IDLE);

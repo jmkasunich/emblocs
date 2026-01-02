@@ -22,6 +22,7 @@ static char const *error_strings[] = {
     "already linked",
     "not found",
     "object too large",
+    "signal cannot be 'raw'",
     "internal data structure error",
     "unknown error"
 };
@@ -180,7 +181,7 @@ struct bl_signal_meta_s *bl_signal_new(char const *name, bl_type_t type)
     CHECK_NULL(name);
     // signals cannot be 'raw'
     if ( type >= BL_TYPE_RAW ) {
-        ERROR_RETURN(BL_ERR_TYPE_MISMATCH);
+        ERROR_RETURN(BL_ERR_RAW_SIGNAL);
     }
     // allocate memory for metadata
     meta = alloc_from_meta_pool(sizeof(bl_signal_meta_t));
