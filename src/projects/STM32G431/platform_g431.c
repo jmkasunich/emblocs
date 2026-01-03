@@ -81,6 +81,16 @@ void platform_init(void)
     LL_RCC_SetAPB1Prescaler(LL_RCC_APB1_DIV_1);
     LL_RCC_SetAPB2Prescaler(LL_RCC_APB2_DIV_1);
 
+    /* GPIO Configuration
+     *
+     *  These pins are specific to the B-G631B-ESC1 dev board
+     *   ENC_A = PB6
+     *   ENC_B = PB7
+     *   ENC_Z = PB8
+     *   PWM = PA15
+     *
+     */
+
     // Turn on clocks to all GPIO modules
     RCC->AHB2ENR |= RCC_AHB2ENR_GPIOAEN;
     RCC->AHB2ENR |= RCC_AHB2ENR_GPIOBEN;
@@ -89,6 +99,35 @@ void platform_init(void)
     RCC->AHB2ENR |= RCC_AHB2ENR_GPIOEEN;
     RCC->AHB2ENR |= RCC_AHB2ENR_GPIOFEN;
     RCC->AHB2ENR |= RCC_AHB2ENR_GPIOGEN;
+
+    // delay for clock activation
+    reg = READ_REG(RCC->AHB2ENR);
+    (void)reg;
+
+    // Put pins PB6-8 in general purpose output mode
+    reg = GPIOB->MODER;
+    reg &= ~GPIO_MODER_MODE6_Msk;
+    reg |= 0x1 << GPIO_MODER_MODE6_Pos;
+    reg &= ~GPIO_MODER_MODE7_Msk;
+    reg |= 0x1 << GPIO_MODER_MODE7_Pos;
+    reg &= ~GPIO_MODER_MODE8_Msk;
+    reg |= 0x1 << GPIO_MODER_MODE8_Pos;
+    GPIOB->MODER = reg;
+    // likewise for PA15
+    reg = GPIOA->MODER;
+    reg &= ~GPIO_MODER_MODE15_Msk;
+    reg |= 0x1 << GPIO_MODER_MODE15_Pos;
+    GPIOA->MODER = reg;
+
+    // test them
+    PB6_OUT(1);
+    PB7_OUT(1);
+    PB8_OUT(1);
+    PA15_OUT(1);
+    PB6_OUT(0);
+    PB7_OUT(0);
+    PB8_OUT(0);
+    PA15_OUT(0);
 
     // turn on clock to timestamp counter (TIM2)
     RCC->APB1ENR1 |= RCC_APB1ENR1_TIM2EN;
@@ -122,6 +161,8 @@ void platform_init(void)
     USART2->CR1 = 0; // all bits in default mode, UART still disabled
     USART2->CR2 = 0; // all bits in default mode
     USART2->CR3 = 0; // all bits in default mode
+    USART2->CR1 |= USART_CR1_FIFOEN; // enable hardware FIFO
+    USART2->CR3 |= (0x2u << USART_CR3_TXFTCFG_Pos); // set TX FIFO threshold to 50%
     // set baud rate
     // we have 170MHz clock and want 115200 baud
     //   170,000,000 / 115,200 = 1475.69, so use 1476
@@ -130,6 +171,13 @@ void platform_init(void)
     USART2->CR1 |= USART_CR1_UE;
     // enable reciever and transmitter
     USART2->CR1 |= USART_CR1_TE | USART_CR1_RE;
+    // enable reciever not-empty interrupt
+    USART2->CR1 |= USART_CR1_RXNEIE_RXFNEIE;
+    // enable UART master interrupt
+    __NVIC_EnableIRQ(USART2_IRQn);
+
+    // enable global interrupts
+    __enable_irq();
 
     /* Timestamp Counter Configuration
      *      Counter           = TIM2
@@ -149,29 +197,118 @@ void platform_init(void)
  * hard-code the UART handle for convenience and speed.
  */
 
-/* returns non-zero if transmitter can accept a character */
-/*   note: defined as a macro in platform_g431.h, this is here
- *         in case someone wants a pointer to the function
- */
-int (cons_tx_ready)(void)
+ /* This implementation is interrupt driven with buffers in RAM. */
+
+#define UART_TX_BUF_LEN  1000
+#define UART_RX_BUF_LEN  100
+
+/*  buffer notes
+ *
+ * 'in' always points to an empty location
+ * 'out' points to a filled location, unless 'out' == 'in',
+ * in which case the whole buffer is empty.  So empty is
+ * easy to detect, full is a bit more complicated.
+ * Full is when (in+1) == out  (must do wrap on in+1)
+ *           or in == (out-1)  (must to wrap on out-1)
+ *
+ * This buffer implementation does not disable interrupts
+ * and is thread-safe for concurrent reading and writing.
+ * But the individual read and write functions are not
+ * re-entrant.  Should have only one reader and only one
+ * writer.
+*/
+
+static volatile char uart_tx_buf[UART_TX_BUF_LEN];
+static volatile uint uart_tx_index_in = 0;
+static volatile uint uart_tx_index_out = 0;
+
+static volatile char uart_rx_buf[UART_RX_BUF_LEN];
+static volatile uint uart_rx_index_in = 0;
+static volatile uint uart_rx_index_out = 0;
+
+void USART2_IRQHandler(void)
 {
-    return cons_tx_ready();
+    uint in, out;
+    char c;
+
+    // check for UART received data
+    if ( (USART2)->ISR & (USART_ISR_RXNE_RXFNE_Msk) ) {
+        in = uart_rx_index_in;
+        out = uart_rx_index_out;
+        // buffer full if in == (out-1)
+        // decrement 'out' with wrap
+        out = ( out != 0 ) ? (out-1) : (UART_RX_BUF_LEN-1);
+        do {
+            // get the data
+            c = (char)((USART2)->RDR);
+            if ( in != out ) {
+                // space available in buffer, store the character
+                uart_rx_buf[in] = c;
+                // increment 'in' with wrap
+                in = ( in < (UART_RX_BUF_LEN-1) ) ? (in+1) : 0;
+            }
+        } while ( ((USART2)->ISR) & (USART_ISR_RXNE_RXFNE_Msk) );
+        uart_rx_index_in = in;
+    }
+    // check for UART ready to send data
+    if ( (USART2)->ISR & (USART_ISR_TXE_TXFNF_Msk) ) {
+        in = uart_tx_index_in;
+        out = uart_tx_index_out;
+        do {
+            if ( in == out ) {
+                // no data in buffer, nothing else to do
+                // disable TX FIFO threshold interrupt
+                (USART2)->CR3 &= ~(USART_CR3_TXFTIE);
+                // exit do {} while (); loop
+                break;
+            }
+            // data in buffer, send to UART
+            c = uart_tx_buf[out];
+            ((USART2)->TDR) = c;
+            // increment 'out' with wrap
+            out = ( out < (UART_TX_BUF_LEN-1) ) ? (out+1) : 0;
+        } while ( (USART2)->ISR & (USART_ISR_TXE_TXFNF_Msk) );
+        uart_tx_index_out = out;
+    }
+}
+
+
+/* returns non-zero if transmitter can accept a character */
+int cons_tx_ready(void)
+{
+    uint in = uart_tx_index_in;
+    // increment 'in' with wrap
+    in = ( in < (UART_TX_BUF_LEN-1) ) ? (in+1) : 0;
+    return ( in != uart_tx_index_out );
 }
 
 /* transmits a character without waiting; data can be lost if transmitter is not ready */
-/*   note: defined as a macro in platform_g431.h, this is here
- *         in case someone wants a pointer to the function
- */
-void (cons_tx)(char c)
+void cons_tx(char c)
 {
-    cons_tx(c);
+    uint in = uart_tx_index_in;
+    uart_tx_buf[in] = c;
+    // increment 'in' with wrap
+    in = ( in < (UART_TX_BUF_LEN-1) ) ? (in+1) : 0;
+    if ( in != uart_tx_index_out ) {
+        // buffer not full, update index to queue data
+        uart_tx_index_in = in;
+    }
+    // enable TX FIFO threshold interrupt to kick things off
+    USART2->CR3 |= USART_CR3_TXFTIE;
 }
 
 /* waits until transmitter is ready, then transmits character */
 void cons_tx_wait(char c)
 {
-    while ( ! cons_tx_ready() ) {};
-    cons_tx(c);
+    uint in = uart_tx_index_in;
+    uart_tx_buf[in] = c;
+    // increment 'in' with wrap
+    in = ( in < (UART_TX_BUF_LEN-1) ) ? (in+1) : 0;
+    while ( in == uart_tx_index_out ); // wait if buffer full
+    // update index to queue data
+    uart_tx_index_in = in;
+    // enable TX FIFO threshold interrupt to kick things off
+    USART2->CR3 |= USART_CR3_TXFTIE;
 }
 
 /* returns non-zero if transmitter is idle (all characters sent) */
@@ -183,30 +320,37 @@ int (cons_tx_idle)(void)
     return cons_tx_idle();
 }
 
-
 /* returns non-zero if reciever has a character available */
-/*   note: defined as a macro in platform_g431.h, this is here
- *         in case someone wants a pointer to the function
- */
-int (cons_rx_ready)(void)
+int cons_rx_ready(void)
 {
-    return cons_rx_ready();
+    return ( uart_rx_index_in != uart_rx_index_out );
 }
 
 /* gets a character without waiting, may return garbage if reciever is not ready */
-/*   note: defined as a macro in platform_g431.h, this is here
- *         in case someone wants a pointer to the function
- */
-char (cons_rx)(void)
+char cons_rx(void)
 {
-    return cons_rx();
+    char c = 0;
+    uint out = uart_rx_index_out;
+    if ( out != uart_rx_index_in) {
+        // there is something, get it
+        c = uart_rx_buf[out];
+        // increment 'out' with wrap
+        out = ( out < (UART_RX_BUF_LEN-1) ) ? (out+1) : 0;
+        uart_rx_index_out = out;
+    }
+    return c;
 }
 
 /* waits until receiver is ready, then gets character */
 char cons_rx_wait(void)
 {
-    while ( ! cons_rx_ready() ) {};
-    return cons_rx();
+    uint out = uart_rx_index_out;
+    while ( out == uart_rx_index_in); // wait for data available
+    char c = uart_rx_buf[out];
+    // increment 'out' with wrap
+    out = ( out < (UART_RX_BUF_LEN-1) ) ? (out+1) : 0;
+    uart_rx_index_out = out;
+    return c;
 }
 
 /* time stamp counter
