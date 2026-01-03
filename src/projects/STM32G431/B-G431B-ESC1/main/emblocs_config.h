@@ -51,10 +51,10 @@
 #define BL_NULL_POINTER_CHECKS
 
 /* size of the memory pool for realtime data */
-#define BL_RT_POOL_SIZE     (16000)
+#define BL_RT_POOL_SIZE     (2000)
 
 /* size of the memory pool for object metadata */
-#define BL_META_POOL_SIZE   (32000)
+#define BL_META_POOL_SIZE   (3000)
 
 /* maximum length of object names */
 #define BL_MAX_NAME_LEN     (40)

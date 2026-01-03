@@ -2,25 +2,25 @@
 
 #include "emblocs_comp.h"
 
-// instance data structure - one copy per instance in RAM
-typedef struct bl_limit2_inst_s {
+// block data structure - one copy per block in RAM
+typedef struct bl_limit2_block_s {
     bl_pin_float_t in;
     bl_pin_float_t max;
 	bl_pin_float_t min;
 	bl_pin_float_t max_v;
 	bl_pin_float_t out;
-} bl_limit2_inst_t;
+} bl_limit2_block_t;
 
-_Static_assert((sizeof(bl_limit2_inst_t) < BL_INSTANCE_DATA_MAX_SIZE), "instance structure too large");
+_Static_assert((sizeof(bl_limit2_block_t) < BL_BLOCK_DATA_MAX_SIZE), "block structure too large");
 
 
 // array of pin definitions - one copy in FLASH
 static bl_pin_def_t const bl_limit2_pins[] = {
-    { "in", BL_TYPE_FLOAT, BL_DIR_IN, offsetof(bl_limit2_inst_t, in)},
-    { "max", BL_TYPE_FLOAT, BL_DIR_IN, offsetof(bl_limit2_inst_t, max)},
-    { "min", BL_TYPE_FLOAT, BL_DIR_IN, offsetof(bl_limit2_inst_t, min)},
-    { "max_v", BL_TYPE_FLOAT, BL_DIR_IN, offsetof(bl_limit2_inst_t, max_v)},
-    { "out", BL_TYPE_FLOAT, BL_DIR_OUT, offsetof(bl_limit2_inst_t, out)}
+    { "in", BL_TYPE_FLOAT, BL_DIR_IN, offsetof(bl_limit2_block_t, in)},
+    { "max", BL_TYPE_FLOAT, BL_DIR_IN, offsetof(bl_limit2_block_t, max)},
+    { "min", BL_TYPE_FLOAT, BL_DIR_IN, offsetof(bl_limit2_block_t, min)},
+    { "max_v", BL_TYPE_FLOAT, BL_DIR_IN, offsetof(bl_limit2_block_t, max_v)},
+    { "out", BL_TYPE_FLOAT, BL_DIR_OUT, offsetof(bl_limit2_block_t, out)}
 };
 
 _Static_assert((_countof(bl_limit2_pins) < BL_PIN_COUNT_MAX), "too many pins");
@@ -40,7 +40,7 @@ _Static_assert((_countof(bl_limit2_functions) < BL_FUNCTION_COUNT_MAX), "too man
 bl_comp_def_t const bl_limit2_def = { 
     "limit2",
     NULL,
-    sizeof(bl_limit2_inst_t),
+    sizeof(bl_limit2_block_t),
     BL_NO_PERSONALITY,
     _countof(bl_limit2_pins),
     _countof(bl_limit2_functions),
@@ -53,7 +53,7 @@ static void bl_limit2_function(void *ptr, uint32_t period_ns)
 {
     float tmp_in, tmp_lim, prev_out, max_step;
 
-    bl_limit2_inst_t *p = (bl_limit2_inst_t *)ptr;
+    bl_limit2_block_t *p = (bl_limit2_block_t *)ptr;
     tmp_in = *(p->in);
     if ( tmp_in > (tmp_lim = *(p->max)) ) {
         tmp_in = tmp_lim;

@@ -15,9 +15,8 @@
  * One element defines the bit depth of the individual
  * color components, and a second defines the number
  * of channels (up to 32) that are processed in parallel.
- * (Having one component instance process multiple 
- * signals allows for a shorter function list and less
- * overhead.)
+ * (Having one block process multiple channels allows
+ * for a shorter function list and less overhead.)
  * 
  */
 

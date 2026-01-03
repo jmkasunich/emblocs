@@ -13,7 +13,8 @@
 #ifndef EMBLOCS_COMMON_H
 #define EMBLOCS_COMMON_H
 
-#include "emblocs_config.h"
+// use <> to fetch project specific config if present
+#include <emblocs_config.h>
 
 #ifdef BL_ENABLE_IMPLICIT_UNLINK
 #ifndef BL_ENABLE_UNLINK
@@ -54,6 +55,7 @@ typedef enum {
     BL_ERR_ALREADY_LINKED,  // pin/function already linked to signal/thread
     BL_ERR_NOT_FOUND,       // object not found
     BL_ERR_TOO_BIG,         // object size exceeds limit
+    BL_ERR_RAW_SIGNAL,      // signals cannot be of type 'raw', only pins
     BL_ERR_INTERNAL,        // internal error in emblocs data structures
     BL_ERRNO_MAX
 } bl_errno_t;
@@ -139,7 +141,7 @@ typedef enum {
  * API functions pass and return pointers to these structures,
  * but the internal data is private and not declared here.
  */
-struct bl_instance_meta_s;
+struct bl_block_meta_s;
 struct bl_pin_meta_s;
 struct bl_function_meta_s;
 struct bl_signal_meta_s;

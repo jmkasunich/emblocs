@@ -60,7 +60,7 @@ static uint snprint_uint_dec_helper(char *buf, uint size, uint32_t value, uint d
         digit = value % 10u;
         value = value / 10;
         *(end++) = (char)('0' + digit);
-        digits--;
+        if ( digits > 0 ) digits--;
         // loop till no more digits
     } while ( value > 0 );
     // pad if needed
@@ -402,7 +402,7 @@ void print_strings(uint num_strings, ...)
 
 // private helper for printing repeated characters
 // prints 'n' copies of 'c'
-static void print_padding(uint n, char c)
+static void print_padding(int n, char c)
 {
     while ( n > 0 ) {
         print_char(c);
