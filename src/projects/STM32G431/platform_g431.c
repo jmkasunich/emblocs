@@ -198,8 +198,8 @@ void platform_init(void)
  * hard-code the UART handle for convenience and speed.
  */
 
- #ifndef CONSOLE_POLLED
- /* This implementation is interrupt driven with buffers in RAM. */
+#ifndef CONSOLE_POLLED
+/* This implementation is interrupt driven with buffers in RAM. */
 
 #define UART_TX_BUF_LEN  1000
 #define UART_RX_BUF_LEN  100
