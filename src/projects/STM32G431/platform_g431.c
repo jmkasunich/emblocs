@@ -171,13 +171,14 @@ void platform_init(void)
     USART2->CR1 |= USART_CR1_UE;
     // enable reciever and transmitter
     USART2->CR1 |= USART_CR1_TE | USART_CR1_RE;
-    // enable reciever not-empty interrupt
-    USART2->CR1 |= USART_CR1_RXNEIE_RXFNEIE;
-    // enable UART master interrupt
-    __NVIC_EnableIRQ(USART2_IRQn);
-
-    // enable global interrupts
-    __enable_irq();
+    #ifndef CONSOLE_POLLED
+        // enable reciever not-empty interrupt
+        USART2->CR1 |= USART_CR1_RXNEIE_RXFNEIE;
+        // enable UART master interrupt
+        __NVIC_EnableIRQ(USART2_IRQn);
+        // enable global interrupts
+        __enable_irq();
+    #endif
 
     /* Timestamp Counter Configuration
      *      Counter           = TIM2
@@ -197,6 +198,7 @@ void platform_init(void)
  * hard-code the UART handle for convenience and speed.
  */
 
+ #ifndef CONSOLE_POLLED
  /* This implementation is interrupt driven with buffers in RAM. */
 
 #define UART_TX_BUF_LEN  1000
@@ -312,12 +314,9 @@ void cons_tx_wait(char c)
 }
 
 /* returns non-zero if transmitter is idle (all characters sent) */
-/*   note: defined as a macro in platform_g431.h, this is here
- *         in case someone wants a pointer to the function
- */
-int (cons_tx_idle)(void)
+int cons_tx_idle(void)
 {
-    return cons_tx_idle();
+    return ( USART2->ISR & USART_ISR_TC_Msk );
 }
 
 /* returns non-zero if reciever has a character available */
@@ -352,6 +351,55 @@ char cons_rx_wait(void)
     uart_rx_index_out = out;
     return c;
 }
+#endif  // not CONSOLE_POLLED
+
+#ifdef CONSOLE_POLLED
+/* This implementation is polled, using only the 8-byte hardware FIFO. */
+
+/* returns non-zero if transmitter can accept a character */
+int cons_tx_ready(void)
+{
+    return ( USART2->ISR & USART_ISR_TXE_TXFNF_Msk );
+}
+
+/* transmits a character without waiting; data can be lost if transmitter is not ready */
+void cons_tx(char c)
+{
+    USART2->TDR = c;
+}
+
+/* waits until transmitter is ready, then transmits character */
+void cons_tx_wait(char c)
+{
+    while ( !(USART2->ISR & USART_ISR_TXE_TXFNF_Msk) );
+    USART2->TDR = c;
+}
+
+/* returns non-zero if transmitter is idle (all characters sent) */
+int cons_tx_idle(void)
+{
+    return ( USART2->ISR & USART_ISR_TC_Msk );
+}
+
+/* returns non-zero if reciever has a character available */
+int cons_rx_ready(void)
+{
+    return ( USART2->ISR & USART_ISR_RXNE_RXFNE_Msk );
+}
+
+/* gets a character without waiting, may return garbage if reciever is not ready */
+char cons_rx(void)
+{
+    return (char)((USART2)->RDR);
+}
+
+/* waits until receiver is ready, then gets character */
+char cons_rx_wait(void)
+{
+    while ( !(USART2->ISR & USART_ISR_RXNE_RXFNE_Msk) );
+    return (char)((USART2)->RDR);
+}
+#endif // CONSOLE_POLLED
 
 /* time stamp counter
  *

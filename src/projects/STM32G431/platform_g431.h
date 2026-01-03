@@ -18,10 +18,14 @@
 #define uint unsigned int
 #endif
 
+#pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wsign-conversion"
 #include "stm32g4xx.h"
 #pragma GCC diagnostic pop
 #include "platform.h"
+
+// uncomment to avoid using interrupts for console I/O
+//#define CONSOLE_POLLED
 
 // GPIO macros
 
@@ -31,8 +35,6 @@
 #define PA15_OUT(v)  (GPIOA->BSRR = v ? (1<<15) : (1<<(15+16)));
 
 /* some of the functions declared in platform.h are implemented here as macros */
-
-#define cons_tx_idle()              ((USART2)->ISR & (USART_ISR_TC_Msk))
 
 #define tsc_read()                  ((TIM2)->CNT)
 
