@@ -5,6 +5,8 @@ from tkinter import messagebox
 from serial import Serial, SerialException
 import serial.tools.list_ports
 import threading
+import queue
+from datetime import datetime
 
 import time
 
@@ -30,7 +32,7 @@ class SerPort(ttk.Frame):
         self.port_var = tk.StringVar(value=port)
         self.port_old = self.port_var.get()
         self.port_var.trace_add('write', self.port_changed)
-        self.port_combobox = ttk.Combobox(self, postcommand=self.check_ports, textvariable=self.port_var, state="readonly")
+        self.port_combobox = ttk.Combobox(self, postcommand=self.check_ports, textvariable=self.port_var, state="normal")
 
         self.baud_label = ttk.Label(self, text="Baud Rate:")
 
@@ -43,20 +45,29 @@ class SerPort(ttk.Frame):
         self.connect_button = ttk.Button(self, text="Connect", command=self.connect)
         self.connected = False
 
-        self.test_button = ttk.Button(self, text="Test", command=self.test)
-
         self.port_label.grid(row=0, column=0, padx=padx, pady=pady)
         self.port_combobox.grid(row=0, column=1, padx=padx, pady=pady)
         self.baud_label.grid(row=0, column=2, padx=padx, pady=pady)
         self.baud_combobox.grid(row=0, column=3, padx=padx, pady=pady)
         self.connect_button.grid(row=0, column=4, padx=padx, pady=pady)
-        self.test_button.grid(row=0, column=5, padx=padx, pady=pady)
 
         self.stop_event = threading.Event()
         self.thread = None
 
+        self.text_list = list()
+        self.text_queue = queue.Queue()
+        self.text_partial_new = False
+        self.binary_list = list()
+        self.binary_queue = queue.Queue()
+        self.binary_bytes = 0
 
     def connect(self):
+        '''
+        attempts to connect to the selected serial port at the
+        selected baud rate
+        if successfull, kicks off a thread to manage serial
+        port data and changes the 'connect' button to 'disconnect'
+        '''
         print("SerPort.connect() called")
         if self.connected :
             self.disconnect
@@ -66,6 +77,7 @@ class SerPort(ttk.Frame):
             return
         self.serport.baudrate = baudrate
         self.serport.port = self.port_var.get()
+        self.serport.timeout = 0.1
         try :
             self.serport.open()
         except ValueError :
@@ -86,19 +98,12 @@ class SerPort(ttk.Frame):
         self.connect_button['text'] = 'Disconnect'
         self.connected = True
 
-    def read_thread(self):
-        print("start of thread loop")
-        while not self.stop_event.is_set() :
-            print("read_thread...")
-            time.sleep(0.1)
-        print("end of thread loop")
-
-
     def disconnect_ignore_widgets(self):
         '''
-        disconnects from the serial port, but doesn't
-        touch any TkInter widgets; this method can safely
-        be called after the main loop exits.
+        disconnects from the serial port and stops the data
+        processing thread, but doesn't touch any TkInter
+        widgets; this method can safely be called after
+        the main loop exits.
         '''
         print("SerPort.disconnect_ignore_widgets() called")
         if self.thread != None and self.thread.is_alive() :
@@ -111,7 +116,6 @@ class SerPort(ttk.Frame):
             self.serport.close()
         self.connected = False
 
-
     def disconnect(self):
         '''
         disconnects from serial port and changes the
@@ -121,6 +125,59 @@ class SerPort(ttk.Frame):
         self.disconnect_ignore_widgets()
         self.connect_button['command'] = self.connect
         self.connect_button['text'] = 'Connect'
+
+    def read_thread(self):
+        print("start of thread loop")
+        self.binary_bytes = 0
+        self.binary_list.clear()
+        self.text_list.clear()
+        while not self.stop_event.is_set() :
+            c = self.serport.read(1)
+#            print(f"{c=}")
+            if c != b'' :
+                if self.binary_bytes > 0 :
+                    # currently in a binary block
+                    self.binary_list.append(c)
+                    self.binary_bytes -= 1
+                    if self.binary_bytes == 0 :
+                        binary = b''.join(self.binary_list)
+                        self.binary_queue.put(binary)
+                        self.binary_list.clear()
+                elif c < b'\x80' :
+                    # currently in text
+                    self.text_list.append(c)
+                    self.text_partial_new = True
+                    if c == b'\n' :
+                        s = b''.join(self.text_list).decode()
+                        text_tuple = (s, datetime.now())
+                        self.text_queue.put(text_tuple)
+                        self.text_list.clear()
+                else :
+                    # start a new binary block
+                    self.binary_bytes = c - 128
+        self.binary_bytes = 0
+        self.binary_list.clear()
+        self.text_list.clear()
+        print("end of thread loop")
+
+    def get_text_tuple(self):
+        try :
+            return self.text_queue.get_nowait()
+        except queue.Empty :
+            return None
+
+    def get_partial_text(self):
+        if self.text_partial_new :
+            self.text_partial_new = False
+            return b''.join(self.text_list).decode()
+        else:
+            return None
+
+    def get_binary_block(self):
+        try :
+            return self.binary_queue.get_nowait()
+        except queue.Empty :
+            return None
 
     def port_changed(self, *arg):
         print("port_changed() called")
@@ -165,7 +222,3 @@ class SerPort(ttk.Frame):
         checks the OS for available serial ports and updates the drop-down list
         '''
         self.port_combobox['values'] = [port.device for port in serial.tools.list_ports.comports()]
-
-    def test(self) :
-        print(f"{self.serport.in_waiting=}")
-
