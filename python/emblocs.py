@@ -10,6 +10,7 @@ from tkinter import ttk
 #import threading
 
 from bl_console import Console
+from bl_command import Command
 from bl_serial import SerPort
 
 
@@ -21,7 +22,7 @@ class EmblocsGUI:
 
         self.port_ctrl = SerPort(master, port="COM3", baud="115200")
         self.notebook = ttk.Notebook(master)
-        self.cmd_frame = ttk.Label(master, text='command frame')
+        self.cmd_frame = Command(master, callback=self.command_callback, fontfamily="Consolas", fontsize=10)
 
         self.port_ctrl.grid(row=0, column=0, sticky='ew')
         self.notebook.grid(row=1, column=0, sticky='nsew')
@@ -51,9 +52,9 @@ class EmblocsGUI:
         self.style.theme_use("clam")
 #        self.style.theme_use("alt")
 
-        self.port_ctrl.after(100, self.transfer_console_data)
+        self.port_ctrl.after(100, self.update_console)
 
-    def transfer_console_data(self) :
+    def update_console(self) :
         while True :
             text_tuple = self.port_ctrl.get_text_tuple()
             if text_tuple :
@@ -63,15 +64,19 @@ class EmblocsGUI:
                 partial = self.port_ctrl.get_partial_text()
                 if partial :
                     print(f"{partial=}")
-                self.port_ctrl.after(100, self.transfer_console_data)
+                self.port_ctrl.after(100, self.update_console)
                 break
+
+    def command_callback(self, command):
+        print(f"command_callback called with {command=}")
+        self.tab_console.tx_append(command)
+        self.port_ctrl.send_text(command)
 
 
 if __name__ == "__main__":
     print("hello\n")
     root = tk.Tk()
     app = EmblocsGUI(root)
-    app.tab_console.rx_append("this is content!")
     root.mainloop()
     print("cleanup\n")
     app.port_ctrl.disconnect_ignore_widgets()

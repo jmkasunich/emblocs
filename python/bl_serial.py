@@ -222,3 +222,10 @@ class SerPort(ttk.Frame):
         checks the OS for available serial ports and updates the drop-down list
         '''
         self.port_combobox['values'] = [port.device for port in serial.tools.list_ports.comports()]
+
+    def send_text(self, command):
+        if self.connected:
+            print("send_text() called")
+            command = command.encode('ascii', errors='replace')
+            print(f"{command=}")
+            self.serport.write(command)
