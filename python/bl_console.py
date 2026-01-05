@@ -107,7 +107,7 @@ class Console(ttk.Frame):
         self.rx_check.grid(row=0, column=4)
         self.tx_check.grid(row=0, column=5)
 
-        self.checkframe.grid(row=0, column=0, sticky='nsew')
+        self.checkframe.grid(row=0, column=0, columnspan=2, sticky='nsew')
         self.text.grid(row=1, column=0, sticky='nsew')
         self.ys.grid(row=1, column=1, sticky='nsew')
         self.xs.grid(row=2, column=0, sticky='nsew')
@@ -139,7 +139,7 @@ class Console(ttk.Frame):
         '''
         timestr = self.make_timestr(timestamp)
         self.text.configure(state='normal')
-        for line in content.split('\n'):
+        for line in content.splitlines():
             self.linecount = self.linecount + 1
             self.text.insert('end', f"{self.linecount:0{self.linenum_len}d}:", "rx_linenum")
             self.text.insert('end', f"{timestr}:", "rx_timestamp")
@@ -157,7 +157,7 @@ class Console(ttk.Frame):
         '''
         timestr = self.make_timestr(timestamp)
         self.text.configure(state='normal')
-        for line in content.split('\n'):
+        for line in content.splitlines():
             self.linecount = self.linecount + 1
             self.text.insert('end', f"{self.linecount:0{self.linenum_len}d}:", "tx_linenum")
             self.text.insert('end', f"{timestr}:", "tx_timestamp")
