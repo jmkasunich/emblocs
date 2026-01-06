@@ -23,26 +23,17 @@ class SerPort(ttk.Frame):
         super().__init__(parent, **kwargs)
 
         self.cfgdata = config.data
-        port = self.cfgdata['port']['port']
-        baud = self.cfgdata['port']['baud']
-
         self.serport = Serial()
 
         padx=5
         pady=5
 
         self.port_label = ttk.Label(self, text="Port:")
-
-        self.port_var = tk.StringVar(value=port)
-        self.port_old = self.port_var.get()
-        self.port_var.trace_add('write', self.port_changed)
+        self.port_var = tk.StringVar(value=self.cfgdata['port']['port'])
         self.port_combobox = ttk.Combobox(self, postcommand=self.check_ports, textvariable=self.port_var, state="normal")
 
         self.baud_label = ttk.Label(self, text="Baud Rate:")
-
-        self.baud_var = tk.StringVar(value=baud)
-        self.baud_old = self.baud_var.get()
-        self.baud_var.trace_add('write', self.baud_changed)
+        self.baud_var = tk.StringVar(value=self.cfgdata['port']['baud'])
         self.baudrates = ('2400', '4800', '9600', '115.2K', '1.0M')
         self.baud_combobox = ttk.Combobox(self, values=self.baudrates, textvariable=self.baud_var, state="normal")
 
@@ -91,6 +82,8 @@ class SerPort(ttk.Frame):
             messagebox.showerror(title="Error", message="SerialException opening port.")
             return
         print(f"connected to {self.serport.port} at {self.serport.baudrate}")
+        self.port_combobox.config(state="disabled")
+        self.baud_combobox.config(state="disabled")
         self.cfgdata['port']['port'] = self.port_var.get()
         self.cfgdata['port']['baud'] = self.baud_var.get()
 
@@ -132,6 +125,9 @@ class SerPort(ttk.Frame):
         self.disconnect_ignore_widgets()
         self.connect_button['command'] = self.connect
         self.connect_button['text'] = 'Connect'
+        self.port_combobox.config(state="normal")
+        self.baud_combobox.config(state="normal")
+
 
     def read_thread(self):
         print("start of thread loop")
@@ -185,28 +181,6 @@ class SerPort(ttk.Frame):
             return self.binary_queue.get_nowait()
         except queue.Empty :
             return None
-
-    def port_changed(self, *arg):
-        print("port_changed() called")
-        if self.connected :
-            print("popping dialog")
-            if messagebox.askyesno(title="Serial Port", message="Disconnect?") :
-                self.disconnect()
-            else :
-                print("restoring port")
-                self.port_var.set(self.port_old)
-                print("port restored")
-
-    def baud_changed(self, *arg):
-        print("port_changed() called")
-        if self.connected :
-            print("popping dialog")
-            if messagebox.askyesno(title="Serial Port", message="Disconnect?") :
-                self.disconnect()
-            else :
-                print("restoring baud rate")
-                self.baud_var.set(self.baud_old)
-                print("baud rate restored")
 
     def validate_baud(self, baud_str):
         baud_str = baud_str.strip()
