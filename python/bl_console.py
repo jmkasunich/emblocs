@@ -184,15 +184,17 @@ class Console(ttk.Frame):
         turns linenumber display on or off based on checkbox
         '''
         self.set_lmargin2()
-        self.text.tag_configure("rx_linenum", elide=not self.show_linenum.get())
-        self.text.tag_configure("tx_linenum", elide=not self.show_linenum.get())
+        hide = not self.show_linenum.get()
+        self.text.tag_configure("rx_linenum", elide=hide)
+        self.text.tag_configure("tx_linenum", elide=hide)
 
     def timestamp_changed(self):
         '''
         turns timestamp display on or off based on checkbox
         '''
-        self.text.tag_configure("rx_timestamp", elide=not self.show_timestamp.get())
-        self.text.tag_configure("tx_timestamp", elide=not self.show_timestamp.get())
+        hide = not self.show_timestamp.get()
+        self.text.tag_configure("rx_timestamp", elide=hide)
+        self.text.tag_configure("tx_timestamp", elide=hide)
         self.set_lmargin2()
 
     def wrap_changed(self):
@@ -208,17 +210,31 @@ class Console(ttk.Frame):
         '''
         turns received text display on or off based on checkbox
         '''
-        self.text.tag_configure("rx_linenum", elide=not self.show_rx.get())
-        self.text.tag_configure("rx_timestamp", elide=not self.show_rx.get())
-        self.text.tag_configure("rx_text", elide=not self.show_rx.get())
+        if self.show_rx.get() :
+            # show
+            self.text.tag_configure("rx_linenum", elide=not self.show_linenum.get())
+            self.text.tag_configure("rx_timestamp", elide=not self.show_timestamp.get())
+            self.text.tag_configure("rx_text", elide=False)
+        else:
+            # hide
+            self.text.tag_configure("rx_linenum", elide=True)
+            self.text.tag_configure("rx_timestamp", elide=True)
+            self.text.tag_configure("rx_text", elide=True)
 
     def tx_changed(self):
         '''
         turns transmitted text display on or off based on checkbox
         '''
-        self.text.tag_configure("tx_linenum", elide=not self.show_tx.get())
-        self.text.tag_configure("tx_timestamp", elide=not self.show_tx.get())
-        self.text.tag_configure("tx_text", elide=not self.show_tx.get())
+        if self.show_tx.get() :
+            # show
+            self.text.tag_configure("tx_linenum", elide=not self.show_linenum.get())
+            self.text.tag_configure("tx_timestamp", elide=not self.show_timestamp.get())
+            self.text.tag_configure("tx_text", elide=False)
+        else:
+            # hide
+            self.text.tag_configure("tx_linenum", elide=True)
+            self.text.tag_configure("tx_timestamp", elide=True)
+            self.text.tag_configure("tx_text", elide=True)
 
     def copy_displayed(self):
         '''
