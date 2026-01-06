@@ -34,7 +34,7 @@ class EmblocsGUI:
         self.master.grid_rowconfigure(0, weight=0)
         self.master.grid_columnconfigure(0, weight=1)
 
-        self.tab_console = Console(self.notebook, fontfamily="Consolas", fontsize=10)
+        self.tab_console = Console(self.notebook, config, fontfamily="Consolas", fontsize=10)
         self.tab_scope = ttk.Label(self.notebook, text="Scope")
         self.tab_meters = ttk.Label(self.notebook, text="Meters")
 
@@ -90,6 +90,13 @@ class AppConfig:
         self.data['port']={}
         self.data['port']['port']=''
         self.data['port']['baud']='115.2K'
+        self.data['console']={}
+        self.data['console']['show_linenum']=True
+        self.data['console']['show_timestamp']=True
+        self.data['console']['show_rx_text']=True
+        self.data['console']['show_tx_text']=True
+        self.data['console']['wrap_lines']=False
+        self.data['console']['autoscroll']=True
         # other class members
         self.cfgfile='emblocs.json'
 

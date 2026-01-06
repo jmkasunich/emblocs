@@ -15,7 +15,7 @@ class Console(ttk.Frame):
 
     This class handles the display and user interface, not the serial port
     '''
-    def __init__(self, parent, linenum_len=6, timestamp_len1=8, timestamp_len2=3, fontfamily='Courier', fontsize=12, **kwargs):
+    def __init__(self, parent, config, linenum_len=6, timestamp_len1=8, timestamp_len2=3, fontfamily='Courier', fontsize=12, **kwargs):
         '''
         :param linenum_len: length of line number field
         :param timestamp_len1: length of timestamp field before seconds decimal point
@@ -26,6 +26,8 @@ class Console(ttk.Frame):
         '''
         # Call the parent class (ttk.Frame) constructor
         super().__init__(parent, **kwargs)
+
+        self.cfgdata = config.data
 
         # init line counter
         self.linecount = 0
@@ -65,22 +67,22 @@ class Console(ttk.Frame):
         # control checkboxes
         self.checkframe = ttk.Frame(self)
 
-        self.show_linenum = tk.BooleanVar(value=True)
+        self.show_linenum = tk.BooleanVar(value=self.cfgdata['console']['show_linenum'])
         self.linenum_check = ttk.Checkbutton(self.checkframe, text='Line Numbers',
             command=self.linenum_changed, variable=self.show_linenum)
-        self.show_timestamp = tk.BooleanVar(value=True)
+        self.show_timestamp = tk.BooleanVar(value=self.cfgdata['console']['show_timestamp'])
         self.timestamp_check = ttk.Checkbutton(self.checkframe, text='Timestamps',
             command=self.timestamp_changed, variable=self.show_timestamp)
-        self.wrap = tk.BooleanVar(value=False)
+        self.wrap = tk.BooleanVar(value=self.cfgdata['console']['wrap_lines'])
         self.wrap_check = ttk.Checkbutton(self.checkframe, text='Wrap Long Lines',
             command=self.wrap_changed, variable=self.wrap)
-        self.autoscroll = tk.BooleanVar(value=True)
+        self.autoscroll = tk.BooleanVar(value=self.cfgdata['console']['autoscroll'])
         self.autoscroll_check = ttk.Checkbutton(self.checkframe, text='Autoscroll',
-            command=self.wrap_changed, variable=self.autoscroll)
-        self.show_rx = tk.BooleanVar(value=True)
+            command=self.scroll_changed, variable=self.autoscroll)
+        self.show_rx = tk.BooleanVar(value=self.cfgdata['console']['show_rx_text'])
         self.rx_check = ttk.Checkbutton(self.checkframe, text='RX',
             command=self.rx_changed, variable=self.show_rx)
-        self.show_tx = tk.BooleanVar(value=True)
+        self.show_tx = tk.BooleanVar(value=self.cfgdata['console']['show_tx_text'])
         self.tx_check = ttk.Checkbutton(self.checkframe, text='TX',
             command=self.tx_changed, variable=self.show_tx)
 
@@ -183,58 +185,65 @@ class Console(ttk.Frame):
         '''
         turns linenumber display on or off based on checkbox
         '''
+        show = self.show_linenum.get()
         self.set_lmargin2()
-        hide = not self.show_linenum.get()
-        self.text.tag_configure("rx_linenum", elide=hide)
-        self.text.tag_configure("tx_linenum", elide=hide)
+        self.text.tag_configure("rx_linenum", elide=not show)
+        self.text.tag_configure("tx_linenum", elide=not show)
+        self.cfgdata['console']['show_linenum'] = show
 
     def timestamp_changed(self):
         '''
         turns timestamp display on or off based on checkbox
         '''
-        hide = not self.show_timestamp.get()
-        self.text.tag_configure("rx_timestamp", elide=hide)
-        self.text.tag_configure("tx_timestamp", elide=hide)
+        show = self.show_timestamp.get()
+        self.text.tag_configure("rx_timestamp", elide=not show)
+        self.text.tag_configure("tx_timestamp", elide=not show)
         self.set_lmargin2()
+        self.cfgdata['console']['show_timestamp'] = show
 
     def wrap_changed(self):
         '''
         turns wrapping on or off based on checkbox
         '''
-        if self.wrap.get():
+        wrap = self.wrap.get()
+        if wrap:
             self.text.config(wrap='char')
         else:
             self.text.config(wrap='none')
+        self.cfgdata['console']['wrap_lines'] = wrap
+
+    def scroll_changed(self):
+        self.cfgdata['console']['autoscroll'] = self.autoscroll.get()
 
     def rx_changed(self):
         '''
         turns received text display on or off based on checkbox
         '''
-        if self.show_rx.get() :
-            # show
+        show = self.show_rx.get()
+        if show:
             self.text.tag_configure("rx_linenum", elide=not self.show_linenum.get())
             self.text.tag_configure("rx_timestamp", elide=not self.show_timestamp.get())
             self.text.tag_configure("rx_text", elide=False)
         else:
-            # hide
             self.text.tag_configure("rx_linenum", elide=True)
             self.text.tag_configure("rx_timestamp", elide=True)
             self.text.tag_configure("rx_text", elide=True)
+        self.cfgdata['console']['show_rx_text'] = show
 
     def tx_changed(self):
         '''
         turns transmitted text display on or off based on checkbox
         '''
-        if self.show_tx.get() :
-            # show
+        show = self.show_tx.get()
+        if show:
             self.text.tag_configure("tx_linenum", elide=not self.show_linenum.get())
             self.text.tag_configure("tx_timestamp", elide=not self.show_timestamp.get())
             self.text.tag_configure("tx_text", elide=False)
         else:
-            # hide
             self.text.tag_configure("tx_linenum", elide=True)
             self.text.tag_configure("tx_timestamp", elide=True)
             self.text.tag_configure("tx_text", elide=True)
+        self.cfgdata['console']['show_tx_text'] = show
 
     def copy_displayed(self):
         '''
