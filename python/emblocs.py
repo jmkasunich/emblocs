@@ -2,12 +2,9 @@
 
 import tkinter as tk
 from tkinter import ttk
+import argparse
+import json
 #import tkinter.font as tkfont
-
-
-#from datetime import datetime
-
-#import threading
 
 from bl_console import Console
 from bl_command import Command
@@ -15,12 +12,12 @@ from bl_serial import SerPort
 
 
 class EmblocsGUI:
-    def __init__(self, master):
+    def __init__(self, master, config):
         self.master = master
         self.master.title("EMBLOCS")
         #self.master.geometry("800x600")
 
-        self.port_ctrl = SerPort(master, port="COM3", baud="115200")
+        self.port_ctrl = SerPort(master, config)
         self.notebook = ttk.Notebook(master)
         self.cmd_frame = Command(master, callback=self.command_callback, fontfamily="Consolas", fontsize=10)
 
@@ -73,14 +70,75 @@ class EmblocsGUI:
         self.port_ctrl.send_text(command)
 
 
+class AppConfig:
+    """Class for managing application config (args and JSON config file)"""
+
+    def __init__(self):
+        self.data={}
+        # define fields that will be in the config file, and their default values
+        self.data['port']={}
+        self.data['port']['port']=''
+        self.data['port']['baud']='115.2K'
+        # other class members
+        self.cfgfile='emblocs.json'
+
+    def read(self):
+        # parse command line first in case it calls out a non-standard config file
+        arg_parser = argparse.ArgumentParser(description="emblocs dev tool")
+        # define the command line arguments
+        arg_parser.add_argument('-c', '--cfgfile', help=f"use CFGFILE instead of {self.cfgfile}")
+        arg_parser.add_argument('-p', '--port', help="serial port name")
+        arg_parser.add_argument('-b', '--baud', help=f"baud rate, default {self.data['port']['baud']}")
+        args = arg_parser.parse_args()
+        if args.cfgfile:
+            self.cfgfile = args.cfgfile
+        # parse the config file
+        filedata = {}
+        try:
+            with open(self.cfgfile, 'r', encoding='utf-8') as cfgfile:
+                filedata = json.load(cfgfile)
+        except FileNotFoundError:
+            print(f"Warning: config file '{self.cfgfile}' was not found.")
+        except OSError as e:
+            print(f"Error reading config file '{self.cfgfile}': {e}")
+        except json.JSONDecodeError as e:
+            print(f"Error decoding config file '{self.cfgfile}': {e}")
+        self.copy_matching_keys(filedata, self.data)
+        # apply the command line args last so they override config file values
+        if args.port:
+            self.data['port']['port'] = args.port
+        if args.baud:
+            self.data['port']['baud'] = args.baud
+
+    def write(self):
+        try:
+            with open(self.cfgfile, 'w') as json_file:
+                json.dump(self.data, json_file, indent=4)
+        except OSError as e:
+            print(f"Error writing to config file '{self.cfgfile}': {e}")
+
+    def copy_matching_keys(self, source :dict, dest :dict):
+        '''
+        source and dest are both dicts (maybe nested)
+        for each key that exists in both dicts, copy
+        the value from source to dest, recursing if
+        the values are also dicts
+        '''
+        for key in dest.keys():
+            if isinstance(dest[key], dict):
+                if key in source and isinstance(source[key], dict):
+                    self.copy_matching_keys(source[key], dest[key])
+            else:
+                if key in source:
+                    dest[key] = source[key]
+
+
 if __name__ == "__main__":
-    print("hello\n")
+    config = AppConfig()
+    config.read()
     root = tk.Tk()
-    app = EmblocsGUI(root)
+    app = EmblocsGUI(root, config)
     root.mainloop()
-    print("cleanup\n")
     app.port_ctrl.disconnect_ignore_widgets()
-    print("goodbye\n")
-
-
+    config.write()
 

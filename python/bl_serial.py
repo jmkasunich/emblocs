@@ -14,13 +14,17 @@ class SerPort(ttk.Frame):
     '''
     serial port selection/access widget
     '''
-    def __init__(self, parent, port='', baud='115.2K', **kwargs):
+    def __init__(self, parent, config, **kwargs):
         '''
         :param port: desired COM port name
         :param baud: desired baud rate (must appear in list below)
         '''
         # Call the parent class (ttk.Frame) constructor
         super().__init__(parent, **kwargs)
+
+        self.cfgdata = config.data
+        port = self.cfgdata['port']['port']
+        baud = self.cfgdata['port']['baud']
 
         self.serport = Serial()
 
@@ -87,6 +91,9 @@ class SerPort(ttk.Frame):
             messagebox.showerror(title="Error", message="SerialException opening port.")
             return
         print(f"connected to {self.serport.port} at {self.serport.baudrate}")
+        self.cfgdata['port']['port'] = self.port_var.get()
+        self.cfgdata['port']['baud'] = self.baud_var.get()
+
         self.port_old = self.serport.port
         self.baud_old = baudstring
         # create a thread to monitor the port
