@@ -17,19 +17,20 @@ class Command(ttk.Frame):
 
     This class handles the display and user interface, not the serial port
     '''
-    def __init__(self, parent, callback=None, fontfamily='Courier', fontsize=12, **kwargs):
+    def __init__(self, parent, config, callback=None, **kwargs):
         '''
+        :param config: instance of AppConfig with config data
         :param callback: function to be called when user wants to send a command
-        :param fontfamily: font name, must be a monospaced font
-        :param fontsize: font size in points
         '''
         # Call the parent class (ttk.Frame) constructor
         super().__init__(parent, **kwargs)
 
+        self.cfgdata = config.data
         self.callback = callback
 
         # font for text display
-        self.font = tkfont.Font(family=fontfamily, size=fontsize, weight="normal")
+        self.font = tkfont.Font(family=self.cfgdata['text']['font_family'],
+                                 size=self.cfgdata['text']['font_size'], weight="normal")
 #        self.charwidth = self.font.measure('0')
 
         self.entry_var = tk.StringVar(value='')

@@ -15,14 +15,13 @@ class Console(ttk.Frame):
 
     This class handles the display and user interface, not the serial port
     '''
-    def __init__(self, parent, config, linenum_len=6, timestamp_len1=8, timestamp_len2=3, fontfamily='Courier', fontsize=12, **kwargs):
+    def __init__(self, parent, config, linenum_len=6, timestamp_len1=8, timestamp_len2=3, **kwargs):
         '''
+        :param config: instance of AppConfig with config data
         :param linenum_len: length of line number field
         :param timestamp_len1: length of timestamp field before seconds decimal point
             (base format is yyyy-mm-ddThh:mm:ss.ffffff; 19 shows all, 8 shows time only, etc.)
         :param timestamp_len2: length of fractional second part of timestamp (3 = milliseconds)
-        :param fontfamily: font name, must be a monospaced font
-        :param fontsize: font size in points
         '''
         # Call the parent class (ttk.Frame) constructor
         super().__init__(parent, **kwargs)
@@ -39,7 +38,8 @@ class Console(ttk.Frame):
             # if no digits after the decimal we don't want to display the decimal either
             self.timestamp_len2 = -1
         # font for text display
-        self.font = tkfont.Font(family=fontfamily, size=fontsize, weight="normal")
+        self.font = tkfont.Font(family=self.cfgdata['text']['font_family'],
+                                 size=self.cfgdata['text']['font_size'], weight="normal")
         self.charwidth = self.font.measure('0')
 
          # text widget with scrollbars for main content

@@ -23,7 +23,7 @@ class EmblocsGUI:
 
         self.port_ctrl = SerPort(master, config)
         self.notebook = ttk.Notebook(master)
-        self.cmd_frame = Command(master, callback=self.command_callback, fontfamily="Consolas", fontsize=10)
+        self.cmd_frame = Command(master, config, callback=self.command_callback)
 
         self.port_ctrl.grid(row=0, column=0, sticky='ew')
         self.notebook.grid(row=1, column=0, sticky='nsew')
@@ -34,7 +34,7 @@ class EmblocsGUI:
         self.master.grid_rowconfigure(0, weight=0)
         self.master.grid_columnconfigure(0, weight=1)
 
-        self.tab_console = Console(self.notebook, config, fontfamily="Consolas", fontsize=10)
+        self.tab_console = Console(self.notebook, config)
         self.tab_scope = ttk.Label(self.notebook, text="Scope")
         self.tab_meters = ttk.Label(self.notebook, text="Meters")
 
@@ -90,6 +90,9 @@ class AppConfig:
         self.data['port']={}
         self.data['port']['port']=''
         self.data['port']['baud']='115.2K'
+        self.data['text']={}
+        self.data['text']['font_family']='courier'
+        self.data['text']['font_size']=12
         self.data['console']={}
         self.data['console']['show_linenum']=True
         self.data['console']['show_timestamp']=True
