@@ -15,7 +15,11 @@ class EmblocsGUI:
     def __init__(self, master, config):
         self.master = master
         self.master.title("EMBLOCS")
-        #self.master.geometry("800x600")
+
+        self.cfgdata = config.data
+        g = self.cfgdata['app']['geometry']
+        if g != '':
+            self.master.geometry(g)
 
         self.port_ctrl = SerPort(master, config)
         self.notebook = ttk.Notebook(master)
@@ -51,6 +55,11 @@ class EmblocsGUI:
 
         self.port_ctrl.after(100, self.update_console)
 
+    def on_close(self):
+        # capture window geometry
+        self.cfgdata['app']['geometry'] = self.master.geometry()
+        self.master.destroy()
+
     def update_console(self) :
         while True :
             text_tuple = self.port_ctrl.get_text_tuple()
@@ -76,6 +85,8 @@ class AppConfig:
     def __init__(self):
         self.data={}
         # define fields that will be in the config file, and their default values
+        self.data['app']={}
+        self.data['app']['geometry']=''
         self.data['port']={}
         self.data['port']['port']=''
         self.data['port']['baud']='115.2K'
@@ -138,6 +149,7 @@ if __name__ == "__main__":
     config.read()
     root = tk.Tk()
     app = EmblocsGUI(root, config)
+    root.protocol("WM_DELETE_WINDOW", app.on_close)
     root.mainloop()
     app.port_ctrl.disconnect_ignore_widgets()
     config.write()
