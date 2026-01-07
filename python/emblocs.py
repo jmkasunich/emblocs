@@ -87,19 +87,11 @@ class AppConfig:
         # define fields that will be in the config file, and their default values
         self.data['app']={}
         self.data['app']['geometry']=''
-        self.data['port']={}
-        self.data['port']['port']=''
-        self.data['port']['baud']='115.2K'
         self.data['text']={}
         self.data['text']['font_family']='courier'
         self.data['text']['font_size']=12
-        self.data['console']={}
-        self.data['console']['show_linenum']=True
-        self.data['console']['show_timestamp']=True
-        self.data['console']['show_rx_text']=True
-        self.data['console']['show_tx_text']=True
-        self.data['console']['wrap_lines']=False
-        self.data['console']['autoscroll']=True
+        SerPort.add_config_data(self)
+        Console.add_config_data(self)
         # other class members
         self.cfgfile='emblocs.json'
 

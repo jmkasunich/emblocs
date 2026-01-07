@@ -120,6 +120,22 @@ class Console(ttk.Frame):
         self.grid_rowconfigure(1, weight=1)
         self.grid_rowconfigure(2, weight=0)
 
+    @staticmethod
+    def add_config_data(config):
+        '''
+        adds config fields needed by a Console object
+        should be called before a Console is created
+
+        :param config: config object to which fields are added
+        '''
+        config.data['console']={}
+        config.data['console']['show_linenum']=True
+        config.data['console']['show_timestamp']=True
+        config.data['console']['show_rx_text']=True
+        config.data['console']['show_tx_text']=True
+        config.data['console']['wrap_lines']=False
+        config.data['console']['autoscroll']=True
+
     def make_timestr(self, timestamp) :
         '''
         convert datetime object to string

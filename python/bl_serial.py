@@ -56,6 +56,18 @@ class SerPort(ttk.Frame):
         self.binary_queue = queue.Queue()
         self.binary_bytes = 0
 
+    @staticmethod
+    def add_config_data(config):
+        '''
+        adds config fields needed by a SerPort object
+        should be called before a SerPort is created
+
+        :param config: config object to which fields are added
+        '''
+        config.data['port']={}
+        config.data['port']['port']=''
+        config.data['port']['baud']='115.2K'
+
     def connect(self):
         '''
         attempts to connect to the selected serial port at the
