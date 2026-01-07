@@ -92,7 +92,7 @@ class Command(ttk.Frame):
 #        self.tx_check.grid(row=0, column=5)
 
 #        self.checkframe.grid(row=0, column=0, columnspan=2, sticky='nsew')
-        self.entry.grid(row=0, column=0, sticky='ew')
+        self.entry.grid(row=0, column=0, sticky='ew', ipadx=5, ipady=3)
         self.xs.grid(row=1, column=0, sticky='ew')
 
         self.grid_columnconfigure(0, weight=1)
