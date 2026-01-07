@@ -56,6 +56,11 @@ class SerPort(ttk.Frame):
         self.binary_queue = queue.Queue()
         self.binary_bytes = 0
 
+        # autoconnect
+        if self.port_var.get() != '':
+            self.after(100, self.connect)
+
+
     @staticmethod
     def add_config_data(config):
         '''
@@ -96,11 +101,9 @@ class SerPort(ttk.Frame):
         print(f"connected to {self.serport.port} at {self.serport.baudrate}")
         self.port_combobox.config(state="disabled")
         self.baud_combobox.config(state="disabled")
-        self.cfgdata['port']['port'] = self.port_var.get()
-        self.cfgdata['port']['baud'] = self.baud_var.get()
+        self.cfgdata['port']['port'] = self.serport.port
+        self.cfgdata['port']['baud'] = self.serport.baudrate
 
-        self.port_old = self.serport.port
-        self.baud_old = baudstring
         # create a thread to monitor the port
         self.thread = threading.Thread(target=self.read_thread)
         print("starting thread")
