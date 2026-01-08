@@ -149,6 +149,7 @@ class SerPort(ttk.Frame):
         self.binary_bytes = 0
         self.binary_list.clear()
         self.text_list.clear()
+        self.last_update = time.perf_counter()
         while not self.stop_event.is_set() :
             c = self.serport.read(1)
 #            print(f"{c=}")
@@ -158,37 +159,40 @@ class SerPort(ttk.Frame):
                     self.binary_list.append(c)
                     self.binary_bytes -= 1
                     if self.binary_bytes == 0 :
-                        binary = b''.join(self.binary_list)
-                        self.binary_queue.put(binary)
-                        self.binary_list.clear()
+                        self.queue_binary_block()
                 elif c < b'\x80' :
                     # currently in text
                     self.text_list.append(c)
-                    self.text_partial_new = True
                     if c == b'\n' :
-                        s = b''.join(self.text_list).decode()
-                        text_tuple = (s, datetime.now())
-                        self.text_queue.put(text_tuple)
-                        self.text_list.clear()
+                        self.queue_text_tuple()
                 else :
                     # start a new binary block
                     self.binary_bytes = c - 128
+            else :
+                elapsed = time.perf_counter() - self.last_update
+                if self.text_list and elapsed > 0.1:
+                    self.queue_text_tuple()
         self.binary_bytes = 0
         self.binary_list.clear()
         self.text_list.clear()
         print("end of thread loop")
 
+    def queue_text_tuple(self):
+        s = b''.join(self.text_list)
+        text_tuple = (s, datetime.now())
+        self.text_queue.put(text_tuple)
+        self.text_list.clear()
+        self.last_update = time.perf_counter()
+
+    def queue_binary_block(self):
+        binary = b''.join(self.binary_list)
+        self.binary_queue.put(binary)
+        self.binary_list.clear()
+
     def get_text_tuple(self):
         try :
             return self.text_queue.get_nowait()
         except queue.Empty :
-            return None
-
-    def get_partial_text(self):
-        if self.text_partial_new :
-            self.text_partial_new = False
-            return b''.join(self.text_list).decode()
-        else:
             return None
 
     def get_binary_block(self):

@@ -228,43 +228,59 @@ int main (void) {
     assert(watch_thread != NULL);
     while (1) {
         print_string("ready... ");
+        uint start = tsc_read();
         // wait for key pressed
-        while ( ! cons_rx_ready() );
+        c = '0';
+        while ( ! cons_rx_ready() ) {
+            uint elapsed = (uint)tsc_read() - start;
+            if ( tsc_to_usec(elapsed) > 1000000 ) {
+                print_char(c);
+                if ( ++c > '9' ) {
+                    c = '0';
+                    print_char('\n');
+                }
+                start = tsc_read();
+            }
+        }
         // read the key
         c = cons_rx();
         switch(c) {
         case '+':
+            // forward
             data.b = 0;
             bl_signal_set(bl_signal_find("dir"), &data);
             break;
         case '-':
+            // reverse
             data.b = 1;
             bl_signal_set(bl_signal_find("dir"), &data);
             break;
         case 'g':
+            // go
             data.b = 1;
             bl_signal_set(bl_signal_find("ramp"), &data);
             break;
         case 's':
+            // stop
             data.b = 0;
             bl_signal_set(bl_signal_find("ramp"), &data);
             break;
-        case 'Z':
-            data.b = 0;
-            bl_signal_set(bl_signal_find("oe"), &data);
-            break;
-        case 'z':
-            data.b = 1;
-            bl_signal_set(bl_signal_find("oe"), &data);
-            break;
-        case 'O':
-            data.b = 1;
-            bl_signal_set(bl_signal_find("out"), &data);
-            break;
-        case 'o':
-            data.b = 0;
-            bl_signal_set(bl_signal_find("out"), &data);
-            break;
+        // case 'Z':
+        //     data.b = 0;
+        //     bl_signal_set(bl_signal_find("oe"), &data);
+        //     break;
+        // case 'z':
+        //     data.b = 1;
+        //     bl_signal_set(bl_signal_find("oe"), &data);
+        //     break;
+        // case 'O':
+        //     data.b = 1;
+        //     bl_signal_set(bl_signal_find("out"), &data);
+        //     break;
+        // case 'o':
+        //     data.b = 0;
+        //     bl_signal_set(bl_signal_find("out"), &data);
+        //     break;
         default:
             break;
         }

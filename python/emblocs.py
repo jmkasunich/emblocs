@@ -65,17 +65,14 @@ class EmblocsGUI:
             text_tuple = self.port_ctrl.get_text_tuple()
             if text_tuple :
                 text, timestamp = text_tuple
-                self.tab_console.rx_append(text, timestamp)
+                self.tab_console.append(text, timestamp, is_tx=False)
             else :
-                partial = self.port_ctrl.get_partial_text()
-                if partial :
-                    print(f"{partial=}")
                 self.port_ctrl.after(100, self.update_console)
                 break
 
     def command_callback(self, command):
         print(f"command_callback called with {command=}")
-        self.tab_console.tx_append(command)
+        self.tab_console.append(command.encode('ascii', errors='replace'), None, is_tx=True)
         self.port_ctrl.send_text(command)
 
 

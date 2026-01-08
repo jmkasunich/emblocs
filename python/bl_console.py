@@ -29,7 +29,8 @@ class Console(ttk.Frame):
         self.cfgdata = config.data
 
         # init line counter
-        self.linecount = 0
+        self.linecount = 1
+        self.new_line = True
 
         self.linenum_len = clamp(linenum_len, 1, 10)
         self.timestamp_len1 = clamp(timestamp_len1, 2, 19)
@@ -69,10 +70,10 @@ class Console(ttk.Frame):
 
         self.show_linenum = tk.BooleanVar(value=self.cfgdata['console']['show_linenum'])
         self.linenum_check = ttk.Checkbutton(self.checkframe, text='Line Numbers',
-            command=self.linenum_changed, variable=self.show_linenum)
+            command=self.show_changed, variable=self.show_linenum)
         self.show_timestamp = tk.BooleanVar(value=self.cfgdata['console']['show_timestamp'])
         self.timestamp_check = ttk.Checkbutton(self.checkframe, text='Timestamps',
-            command=self.timestamp_changed, variable=self.show_timestamp)
+            command=self.show_changed, variable=self.show_timestamp)
         self.wrap = tk.BooleanVar(value=self.cfgdata['console']['wrap_lines'])
         self.wrap_check = ttk.Checkbutton(self.checkframe, text='Wrap Long Lines',
             command=self.wrap_changed, variable=self.wrap)
@@ -81,17 +82,14 @@ class Console(ttk.Frame):
             command=self.scroll_changed, variable=self.autoscroll)
         self.show_rx = tk.BooleanVar(value=self.cfgdata['console']['show_rx_text'])
         self.rx_check = ttk.Checkbutton(self.checkframe, text='RX',
-            command=self.rx_changed, variable=self.show_rx)
+            command=self.show_changed, variable=self.show_rx)
         self.show_tx = tk.BooleanVar(value=self.cfgdata['console']['show_tx_text'])
         self.tx_check = ttk.Checkbutton(self.checkframe, text='TX',
-            command=self.tx_changed, variable=self.show_tx)
+            command=self.show_changed, variable=self.show_tx)
 
         # configure based on initial state of checkbox
-        self.linenum_changed()
-        self.timestamp_changed()
+        self.show_changed()
         self.wrap_changed()
-        self.rx_changed()
-        self.tx_changed()
 
         # geometry
         self.checkframe.grid_columnconfigure(0, weight=3)
@@ -147,42 +145,32 @@ class Console(ttk.Frame):
         timestr = timestr[19-self.timestamp_len1:19+1+self.timestamp_len2]
         return timestr
 
-
-    def rx_append(self, content, timestamp=None):
+    def append(self, content, timestamp, is_tx=False):
         '''
-        add line(s) of received text to the display
+        add text to the display
 
-        :param content: string containing line(s) to display
-        :param timestamp: datetime object for line(s) timestamp, if none, uses datetime.now()
+        :param content: byte string to display
+        :param timestamp: datetime object when last char in content was received
         '''
         timestr = self.make_timestr(timestamp)
+        textstr = content.decode()
+        if is_tx :
+            rxtx = "tx_"
+        else :
+            rxtx = "rx_"
         self.text.configure(state='normal')
-        for line in content.splitlines():
-            self.linecount = self.linecount + 1
-            self.text.insert('end', f"{self.linecount:0{self.linenum_len}d}:", "rx_linenum")
-            self.text.insert('end', f"{timestr}:", "rx_timestamp")
-            self.text.insert('end', line + '\n', "rx_text")
+        if self.new_line :
+            self.text.insert('end', f"{self.linecount:0{self.linenum_len}d}:", rxtx+"linenum" )
+            self.text.insert('end', f"{timestr}:", rxtx+"timestamp" )
+            self.new_line = False
+        self.text.insert('end', textstr, rxtx+"text" )
         self.text.configure(state='disabled')
+        if textstr[-1] == '\n' :
+            self.linecount = self.linecount + 1
+            self.new_line = True
         if self.autoscroll.get() :
             self.text.see(tk.END)
 
-    def tx_append(self, content, timestamp=None):
-        '''
-        add line(s) of transmitted text to the display
-
-        :param content: string containing line(s) to display
-        :param timestamp: datetime object for line(s) timestamp, if none, uses datetime.now()
-        '''
-        timestr = self.make_timestr(timestamp)
-        self.text.configure(state='normal')
-        for line in content.splitlines():
-            self.linecount = self.linecount + 1
-            self.text.insert('end', f"{self.linecount:0{self.linenum_len}d}:", "tx_linenum")
-            self.text.insert('end', f"{timestr}:", "tx_timestamp")
-            self.text.insert('end', line + '\n', "tx_text")
-        self.text.configure(state='disabled')
-        if self.autoscroll.get() :
-            self.text.see(tk.END)
 
     def set_lmargin2(self):
         '''
@@ -194,28 +182,9 @@ class Console(ttk.Frame):
         if self.show_timestamp.get() :
             lmargin = lmargin + self.timestamp_len1 + self.timestamp_len2 + 2
         lmargin = self.charwidth * lmargin
-        self.text.tag_configure("rx_text", lmargin2=lmargin)
-        self.text.tag_configure("tx_text", lmargin2=lmargin)
-
-    def linenum_changed(self):
-        '''
-        turns linenumber display on or off based on checkbox
-        '''
-        show = self.show_linenum.get()
-        self.set_lmargin2()
-        self.text.tag_configure("rx_linenum", elide=not show)
-        self.text.tag_configure("tx_linenum", elide=not show)
-        self.cfgdata['console']['show_linenum'] = show
-
-    def timestamp_changed(self):
-        '''
-        turns timestamp display on or off based on checkbox
-        '''
-        show = self.show_timestamp.get()
-        self.text.tag_configure("rx_timestamp", elide=not show)
-        self.text.tag_configure("tx_timestamp", elide=not show)
-        self.set_lmargin2()
-        self.cfgdata['console']['show_timestamp'] = show
+        for tag in self.text.tag_names() :
+            if 'text' in tag :
+                self.text.tag_configure(tag, lmargin2=lmargin)
 
     def wrap_changed(self):
         '''
@@ -231,35 +200,22 @@ class Console(ttk.Frame):
     def scroll_changed(self):
         self.cfgdata['console']['autoscroll'] = self.autoscroll.get()
 
-    def rx_changed(self):
-        '''
-        turns received text display on or off based on checkbox
-        '''
-        show = self.show_rx.get()
-        if show:
-            self.text.tag_configure("rx_linenum", elide=not self.show_linenum.get())
-            self.text.tag_configure("rx_timestamp", elide=not self.show_timestamp.get())
-            self.text.tag_configure("rx_text", elide=False)
-        else:
-            self.text.tag_configure("rx_linenum", elide=True)
-            self.text.tag_configure("rx_timestamp", elide=True)
-            self.text.tag_configure("rx_text", elide=True)
-        self.cfgdata['console']['show_rx_text'] = show
-
-    def tx_changed(self):
-        '''
-        turns transmitted text display on or off based on checkbox
-        '''
-        show = self.show_tx.get()
-        if show:
-            self.text.tag_configure("tx_linenum", elide=not self.show_linenum.get())
-            self.text.tag_configure("tx_timestamp", elide=not self.show_timestamp.get())
-            self.text.tag_configure("tx_text", elide=False)
-        else:
-            self.text.tag_configure("tx_linenum", elide=True)
-            self.text.tag_configure("tx_timestamp", elide=True)
-            self.text.tag_configure("tx_text", elide=True)
-        self.cfgdata['console']['show_tx_text'] = show
+    def show_changed(self):
+        show_linenum = self.show_linenum.get()
+        show_timestamp = self.show_timestamp.get()
+        show_rx = self.show_rx.get()
+        show_tx = self.show_tx.get()
+        self.text.tag_configure("rx_text", elide=not (show_rx) )
+        self.text.tag_configure("tx_text", elide=not (show_tx) )
+        self.text.tag_configure("rx_linenum", elide=not (show_rx and show_linenum) )
+        self.text.tag_configure("tx_linenum", elide=not (show_tx and show_linenum) )
+        self.text.tag_configure("rx_timestamp", elide=not (show_rx and show_timestamp) )
+        self.text.tag_configure("tx_timestamp", elide=not (show_tx and show_timestamp) )
+        self.set_lmargin2()
+        self.cfgdata['console']['show_timestamp'] = show_linenum
+        self.cfgdata['console']['show_linenum'] = show_timestamp
+        self.cfgdata['console']['show_rx_text'] = show_rx
+        self.cfgdata['console']['show_tx_text'] = show_tx
 
     def copy_displayed(self):
         '''
