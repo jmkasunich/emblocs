@@ -193,6 +193,8 @@ char const * const tokens[] = {
 
 #define CLK_MHZ 170
 
+#define BUF_LEN 50
+
 int main (void) {
     char *hello = "\nHello, world!\n";
     uint32_t t_start, t_end, t_init, t_thread;
@@ -200,6 +202,8 @@ int main (void) {
     struct bl_thread_data_s *watch_thread;
     char c;
     bl_sig_data_t data;
+    char buffer[BUF_LEN];
+    int buf_len = 0;
 
     platform_init();
 
@@ -231,7 +235,9 @@ int main (void) {
         uint start = tsc_read();
         // wait for key pressed
         c = '0';
+    char_loop:
         while ( ! cons_rx_ready() ) {
+#if 0
             uint elapsed = (uint)tsc_read() - start;
             if ( tsc_to_usec(elapsed) > 1000000 ) {
                 print_char(c);
@@ -241,9 +247,19 @@ int main (void) {
                 }
                 start = tsc_read();
             }
+#endif
         }
         // read the key
         c = cons_rx();
+        buffer[buf_len++] = c;
+        if ( ( c != '\n' ) && ( buf_len < BUF_LEN-1 ) ) {
+            goto char_loop;
+        }
+        buffer[buf_len] = '\0';
+        print_string(buffer);
+        buf_len = 0;
+
+#if 0
         switch(c) {
         case '+':
             // forward
@@ -284,6 +300,7 @@ int main (void) {
         default:
             break;
         }
+#endif
         print_string("running...");
         t_start = tsc_read();
         bl_thread_run(main_thread, 1);
@@ -291,8 +308,8 @@ int main (void) {
         print_string("done\n");
         t_thread = t_end - t_start;
         printf("execution time: %d\n", t_thread);
-        bl_thread_run(watch_thread,0);
-        bl_show_all_signals();
+        //bl_thread_run(watch_thread,0);
+        //bl_show_all_signals();
     }
     // Return 0 to satisfy compiler
     return 0;
