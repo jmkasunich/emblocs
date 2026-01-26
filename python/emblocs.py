@@ -9,6 +9,7 @@ import json
 from bl_console import Console
 from bl_command import Command
 from bl_serial import SerPort
+from bl_scope import Scope
 
 
 class EmblocsGUI:
@@ -35,7 +36,7 @@ class EmblocsGUI:
         self.master.grid_columnconfigure(0, weight=1)
 
         self.tab_console = Console(self.notebook, config)
-        self.tab_scope = ttk.Label(self.notebook, text="Scope")
+        self.tab_scope = Scope(self.notebook, config)
         self.tab_meters = ttk.Label(self.notebook, text="Meters")
 
         self.tab_console.pack(fill='both', expand=True)
@@ -89,6 +90,7 @@ class AppConfig:
         self.data['text']['font_size']=12
         SerPort.add_config_data(self)
         Console.add_config_data(self)
+        Scope.add_config_data(self)
         # other class members
         self.cfgfile='emblocs.json'
 
