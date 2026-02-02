@@ -9,6 +9,7 @@ target_sources(components INTERFACE
     sum2.c
     perftimer.c
     watch.c
+    scope.c
     rp2040_gpio.c
     not.c
     limit1.c
