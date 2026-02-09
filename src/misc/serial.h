@@ -32,9 +32,174 @@
 #define SERIAL_H
 
 #include <stdint.h>
+#include <stdbool.h>
+#include <string.h>  // memcpy
 #ifndef uint
 #define uint unsigned int
 #endif
+#ifndef byte
+#define byte unsigned char
+#endif
+
+/* ring buffers
+ *
+ */
+
+struct ringbuf_s {
+    byte *buf;
+    volatile uint in;
+    volatile uint out;
+    uint len;
+};
+
+/* intializes a ringbuffer.
+ * buf must point to len bytes of free space
+ */
+inline void rb_init(struct ringbuf_s *rb, byte *buf, uint len)
+{
+    rb->buf = buf;
+    rb->in = rb->out = 0;
+    rb->len = len;
+}
+
+/* non-blocking put
+ * adds byte to buffer and returns 1, unless buffer is
+ * full, in which case discards byte and returns 0
+ */
+inline int rb_put_nb(struct ringbuf_s *rb, byte b)
+{
+    uint in = rb->in;
+    rb->buf[in++] = b;
+    if ( in >= rb->len ) in = 0;
+    if ( in != rb->out ) {
+        rb->in = in;
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+/* blocking put
+ * adds byte to buffer, blocking if buffer is full
+ */
+inline void rb_put_bl(struct ringbuf_s *rb, byte b)
+{
+    uint in = rb->in;
+    rb->buf[in++] = b;
+    if ( in >= rb->len ) in = 0;
+    while ( in == rb->out );
+    rb->in = in;
+}
+
+/* test for full
+ * returns non-zero if buffer is not full, else returns 0
+ */
+inline int rb_can_put(struct ringbuf_s *rb)
+{
+    // increment 'in' with wrap
+    uint in = rb->in + 1;
+    if ( in >= rb->len ) in = 0;
+    return ( in != rb->out );
+}
+
+/* non-blocking get
+ * if byte is available, returns it, else returns -1
+ */
+inline int rb_get_nb(struct ringbuf_s *rb)
+{
+    uint out = rb->out;
+    if ( out == rb->in ) {
+        return -1;
+    } else {
+        byte b = rb->buf[out++];
+        if ( out >= rb->len ) out = 0;
+        rb->out = out;
+        return b;
+    }
+}
+
+/* blocking get
+ * returns byte from buffer, blocking if buffer is empty
+ */
+byte rb_get_bl(struct ringbuf_s *rb)
+{
+    uint out = rb->out;
+    while ( out == rb->in );
+    byte b = rb->buf[out++];
+    if ( out >= rb->len ) out = 0;
+    rb->out = out;
+    return b;
+}
+
+/* test for empty
+ * returns non-zero if buffer is not empty, else returns 0
+ */
+int rb_can_get_nb(struct ringbuf_s *rb)
+{
+    return ( rb->in != rb->out );
+}
+
+
+/* binary packets
+ *
+ */
+
+#define MAX_BINARY_PACKET_PAYLOAD 50
+
+_Static_assert((MAX_BINARY_PACKET_PAYLOAD <= 250), "binary packet too large");
+
+struct binary_packet_s {
+    byte *buf;
+    volatile uint in;
+    volatile uint out;
+    uint payload_len;
+};
+
+
+/* clears a binary packet
+ */
+inline void bp_init(struct binary_packet_s *bp)
+{
+    bp->in = 0;
+    bp->out = 0;
+    bp->payload_len = 0;
+}
+
+inline bool bp_append8(struct binary_packet_s *bp, uint8_t *src)
+{
+    if ( bp->payload_len < ( MAX_BINARY_PACKET_PAYLOAD - 1)) {
+        bp->buf[bp->payload_len] = *src;
+        bp->payload_len += 1;
+        return true;
+    } else {
+        return false;
+    }
+}
+
+inline bool bp_append16(struct binary_packet_s *bp, uint16_t *src)
+{
+    if ( bp->payload_len < ( MAX_BINARY_PACKET_PAYLOAD - 2)) {
+        //bp->buf[bp->payload_len] = *src;
+        memcpy(&(bp->buf[bp->payload_len]), src, 2);
+        bp->payload_len += 2;
+        return true;
+    } else {
+        return false;
+    }
+}
+
+inline bool bp_append32(struct binary_packet_s *bp, uint32_t *src)
+{
+    if ( bp->payload_len < ( MAX_BINARY_PACKET_PAYLOAD - 4)) {
+        //bp->buf[bp->payload_len] = *src;
+        memcpy(&(bp->buf[bp->payload_len]), src, 4);
+        bp->payload_len += 4;
+        return true;
+    } else {
+        return false;
+    }
+}
+
 
 /* non-blocking ASCII send 
  * if the ASCII buffer is full the character will be discarded
@@ -58,12 +223,12 @@ int serial_char_get_nb(void);
  * if no character is available, the function will block until 
  * there is one
  */
-int serial_char_get_bl(char c);
+int serial_char_get_bl(void);
 
 /* ASCII receive status test
  * if no character is available, returns zero, else returns 1
  */
-int serial_char_avail_nb(void);
+int serial_char_can_get_nb(void);
 
 
 

@@ -45,6 +45,12 @@ static volatile char ascii_rx_buf[SERIAL_ASCII_RX_BUF_LEN];
 static volatile uint ascii_rx_index_in = 0;
 static volatile uint ascii_rx_index_out = 0;
 
+static enum {
+    RX_MODE_ASCII,
+    RX_MODE_PACKET
+} rx_mode = RX_MODE_ASCII;
+
+
 void USART2_IRQHandler(void)
 {
     uint in, out;
