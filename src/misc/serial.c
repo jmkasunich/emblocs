@@ -6,171 +6,289 @@
  * 
  * *************************************************************/
 
-// FIXME - need a better way to include target-specific stuff
-#ifndef STM32G431xx
-#define STM32G431xx
-#endif
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wsign-conversion"
-#include "stm32g4xx.h"
-#pragma GCC diagnostic pop
-
 #include "serial.h"
 
-#define SERIAL_ASCII_TX_BUF_LEN  1000
-#define SERIAL_ASCII_RX_BUF_LEN  100
+#ifndef uint
+#define uint unsigned int
+#endif
 
-/*  buffer notes
+ /* macros for incrementing circular buffer indexes
  *
- * 'in' always points to an empty location
- * 'out' points to a filled location, unless 'out' == 'in',
- * in which case the whole buffer is empty.  So empty is
- * easy to detect, full is a bit more complicated.
- * Full is when (in+1) == out  (must do wrap on in+1)
- *           or in == (out-1)  (must to wrap on out-1)
+ * both of these return 'index' + 1 modulo 'size'
+ * the _C version is better if size is constant at compile time
+ * the _V version is better if size is variable at compile time
  *
- * This buffer implementation does not disable interrupts
- * and is thread-safe for concurrent reading and writing.
- * But the individual read and write functions are not
- * re-entrant.  Should have only one reader and only one
- * writer.
-*/
+ * neither version uses a modulo operation
+ * the _C version uses bitwise AND if 'size' is a power of 2
+ * either version can evaluate 'index' more than once; 'index' should
+ * not be an expression with side effects.  The _C version evaluates
+ * 'size' multiple times, but 'size' is supposed to be a constant
+ * expression which can't have side effects.
+ *
+ */
+#define NEXT_C(index, size) (!((size)&((size)-1)) ? (((index)+1)&((size)-1)) : (((index)+1) < (size) ? (index)+1 : 0))
+#define NEXT_V(index, size) (((index)+1) < (size) ? (index)+1 : 0)
 
-static volatile char ascii_tx_buf[SERIAL_ASCII_TX_BUF_LEN];
-static volatile uint ascii_tx_index_in = 0;
-static volatile uint ascii_tx_index_out = 0;
 
-static volatile char ascii_rx_buf[SERIAL_ASCII_RX_BUF_LEN];
-static volatile uint ascii_rx_index_in = 0;
-static volatile uint ascii_rx_index_out = 0;
+void ser_packet_init(ser_packet_t *p, uint8_t *b, uint8_t len, uint8_t addr)
+{
+    assert(len < 254);
+    assert(addr < 128);
+    p->data = b;
+    p->max_len = len;
+    p->data_len = 0;
+    p->addr = addr;
+    p->state = SP_IDLE;
+    p->cobs_byte = 0;
+    p->prev = p;
+    p->next = p;
+}
+
 
 static enum {
-    RX_MODE_ASCII,
-    RX_MODE_PACKET
-} rx_mode = RX_MODE_ASCII;
+    RX_CHAR_MODE,
+    RX_DISCARD_PACKET,
+    RX_GET_COBS_BYTE,
+    RX_GET_DATA_BYTE
+} rx_state = RX_CHAR_MODE;
+static volatile char rx_buf[SER_ASCII_RX_BUF_SIZE];
+static uint rx_in = 0;
+static uint rx_out = 0;
+static ser_packet_t rx_root = { .state = SP_IDLE,
+                                .max_len = 0,
+                                .data_len = 0,
+                                .addr = 0x80,
+                                .cobs_byte = 0,
+                                .data = NULL,
+                                .prev = &rx_root,
+                                .next = &rx_root };
+static ser_packet_t *rx_packet = &rx_root;
 
-
-void USART2_IRQHandler(void)
+char ser_ascii_get_nb(void)
 {
-    uint in, out;
     char c;
 
-    // check for UART received data
-    if ( uart_rx_char_avail() ) {
-        in = ascii_rx_index_in;
-        out = ascii_rx_index_out;
-        // buffer full if in == (out-1)
-        // decrement 'out' with wrap
-        out = ( out != 0 ) ? (out-1) : (SERIAL_ASCII_RX_BUF_LEN-1);
-        do {
-            // get the data
-            c = uart_rx_get_char();
-            if ( in != out ) {
-                // space available in buffer, store the character
-                ascii_rx_buf[in] = c;
-                // increment 'in' with wrap
-                in = ( in < (SERIAL_ASCII_RX_BUF_LEN-1) ) ? (in+1) : 0;
-            }
-        } while ( uart_rx_char_avail() );
-        ascii_rx_index_in = in;
-    }
-    // check for UART ready to send data
-    if ( uart_tx_ready() ) {
-        in = ascii_tx_index_in;
-        out = ascii_tx_index_out;
-        do {
-            if ( in == out ) {
-                // no data in buffer, nothing else to do
-                // disable TX FIFO threshold interrupt
-                uart_tx_int_dis();
-                // exit do {} while (); loop
-                break;
-            }
-            // data in buffer, send to UART
-            c = ascii_tx_buf[out];
-            uart_tx_send_char(c);
-            // increment 'out' with wrap
-            out = ( out < (SERIAL_ASCII_TX_BUF_LEN-1) ) ? (out+1) : 0;
-        } while ( uart_tx_ready() );
-        ascii_tx_index_out = out;
-    }
-}
-
-
-/* returns non-zero if transmitter can accept a character */
-int cons_tx_ready(void)
-{
-    uint in = ascii_tx_index_in;
-    // increment 'in' with wrap
-    in = ( in < (SERIAL_ASCII_TX_BUF_LEN-1) ) ? (in+1) : 0;
-    return ( in != ascii_tx_index_out );
-}
-
-/* transmits a character without waiting; data can be lost if transmitter is not ready */
-void cons_tx(char c)
-{
-    uint in = ascii_tx_index_in;
-    ascii_tx_buf[in] = c;
-    // increment 'in' with wrap
-    in = ( in < (SERIAL_ASCII_TX_BUF_LEN-1) ) ? (in+1) : 0;
-    if ( in != ascii_tx_index_out ) {
-        // buffer not full, update index to queue data
-        ascii_tx_index_in = in;
-    }
-    // enable TX FIFO threshold interrupt to kick things off
-    uart_tx_int_ena();
-}
-
-/* waits until transmitter is ready, then transmits character */
-void cons_tx_wait(char c)
-{
-    uint in = ascii_tx_index_in;
-    ascii_tx_buf[in] = c;
-    // increment 'in' with wrap
-    in = ( in < (SERIAL_ASCII_TX_BUF_LEN-1) ) ? (in+1) : 0;
-    while ( in == ascii_tx_index_out ); // wait if buffer full
-    // update index to queue data
-    ascii_tx_index_in = in;
-    // enable TX FIFO threshold interrupt to kick things off
-    uart_tx_int_ena();
-}
-
-/* returns non-zero if transmitter is idle (all characters sent) */
-int cons_tx_idle(void)
-{
-    return uart_tx_idle();
-}
-
-/* returns non-zero if reciever has a character available */
-int cons_rx_ready(void)
-{
-    return ( ascii_rx_index_in != ascii_rx_index_out );
-}
-
-/* gets a character without waiting, may return garbage if reciever is not ready */
-char cons_rx(void)
-{
-    char c = 0;
-    uint out = ascii_rx_index_out;
-    if ( out != ascii_rx_index_in) {
-        // there is something, get it
-        c = ascii_rx_buf[out];
-        // increment 'out' with wrap
-        out = ( out < (SERIAL_ASCII_RX_BUF_LEN-1) ) ? (out+1) : 0;
-        ascii_rx_index_out = out;
+    if ( (c = rx_buf[rx_out]) != 0 ) {
+        rx_buf[rx_out] = 0;
+        rx_out = NEXT_C(rx_out, SER_ASCII_RX_BUF_SIZE);
     }
     return c;
 }
 
-/* waits until receiver is ready, then gets character */
-char cons_rx_wait(void)
+char ser_ascii_get_bl(void)
 {
-    uint out = ascii_rx_index_out;
-    while ( out == ascii_rx_index_in); // wait for data available
-    char c = ascii_rx_buf[out];
-    // increment 'out' with wrap
-    out = ( out < (SERIAL_ASCII_RX_BUF_LEN-1) ) ? (out+1) : 0;
-    ascii_rx_index_out = out;
+    char c;
+
+    while ( (c = rx_buf[rx_out]) == 0 );
+    rx_buf[rx_out] = 0;
+    rx_out = NEXT_C(rx_out, SER_ASCII_RX_BUF_SIZE);
     return c;
 }
+
+bool ser_ascii_can_get(void)
+{
+    return ( rx_buf[rx_out] != 0 );
+}
+
+void ser_packet_listen(ser_packet_t *p)
+{
+    assert(p->state == SP_IDLE);
+    assert(p->data != NULL);
+    assert(p->addr < 128);
+    p->data_len = 0;
+    p->state = SP_RX_WAIT;
+    // insert at end of list
+    // this should be a critical region
+    p->next = &rx_root;
+    p->prev = rx_root.prev;
+    p->prev->next = p;
+    rx_root.prev = p;
+    // critical region end
+}
+
+void ser_packet_get(ser_packet_t *p)
+{
+    assert(p->state == SP_RX_DONE);
+    assert(p->data != NULL);
+    assert(p->data_len <= p->max_len);
+    // COBS decode here
+    p->state = SP_IDLE;
+}
+
+void ser_put_rx_byte(uint8_t data)
+{
+    switch (rx_state) {
+        case RX_CHAR_MODE:
+            if ( data & 0x80 ) {
+                // start of packet character
+                // search listen list for matching buffer
+                data &= 0x7f;
+                rx_packet = rx_root.next;
+                while ( ( rx_packet != &rx_root ) && ( rx_packet->addr != data ) ) {
+                    rx_packet = rx_packet->next;
+                }
+                if ( rx_packet->addr == data ) {
+                    // match found, set up buffer for receive
+                    rx_packet->data_len = 0;
+                    rx_packet->state = SP_RX_BUSY;
+                    rx_state = RX_GET_COBS_BYTE;
+                } else {
+                    // no match
+                    rx_state = RX_DISCARD_PACKET;
+                }
+            } else {
+                // ordinary ASCII character
+                if ( rx_buf[rx_in] == 0 ) {
+                    rx_buf[rx_in] = data;
+                    rx_in = NEXT_C(rx_in, SER_ASCII_TX_BUF_SIZE);
+                }
+            }
+            break;
+        case RX_DISCARD_PACKET:
+            if ( data == '\0' ) {
+                rx_state = RX_CHAR_MODE;
+            }
+            break;
+        case RX_GET_COBS_BYTE:
+            if ( data == '\0' ) {
+                // packet ended early
+                rx_packet->state = SP_RX_WAIT;
+                rx_state = RX_CHAR_MODE;
+            } else {
+                rx_packet->cobs_byte = data;
+                rx_state = RX_GET_DATA_BYTE;
+            }
+            break;
+        case RX_GET_DATA_BYTE:
+            if ( data == '\0' ) {
+                // packet finished, unlink buffer from list
+                rx_packet->prev->next = rx_packet->next;
+                rx_packet->next->prev = rx_packet->prev;
+                rx_packet->prev = rx_packet->next = rx_packet;
+                rx_packet->state = SP_RX_DONE;
+                rx_state = RX_CHAR_MODE;
+            } else if ( rx_packet->data_len >= rx_packet->max_len ) {
+                // packet too long
+                rx_packet->state = SP_RX_WAIT;
+                rx_state = RX_DISCARD_PACKET;
+            } else {
+                rx_packet->data[rx_packet->data_len++] = data;
+            }
+            break;
+        default:
+            break;
+    }
+}
+
+
+static enum {
+    TX_CHAR_MODE,
+    TX_SEND_COBS_BYTE,
+    TX_SEND_DATA_BYTE
+} tx_state = TX_CHAR_MODE;
+static volatile char tx_buf[SER_ASCII_TX_BUF_SIZE];
+static uint tx_in = 0;
+static uint tx_out = 0;
+static ser_packet_t tx_root = { .state = SP_IDLE,
+                                .max_len = 0,
+                                .data_len = 0,
+                                .addr = 0x80,
+                                .cobs_byte = 0,
+                                .data = NULL,
+                                .prev = &tx_root,
+                                .next = &tx_root };
+static ser_packet_t *tx_packet = &tx_root;
+static uint tx_data_index = 0;
+
+bool ser_ascii_put_nb(char c)
+{
+    c &= 0x7F;
+    if ( tx_buf[tx_in] == 0 ) {
+        tx_buf[tx_in] = c;
+        tx_in = NEXT_C(tx_in, SER_ASCII_TX_BUF_SIZE);
+        ser_start_tx();
+        return true;
+    }
+    return false;
+}
+
+void ser_ascii_put_bl(char c)
+{
+    c &= 0x7F;
+    while ( tx_buf[tx_in] != 0 );
+    tx_buf[tx_in] = c;
+    tx_in = NEXT_C(tx_in, SER_ASCII_TX_BUF_SIZE);
+    ser_start_tx();
+}
+
+bool ser_ascii_can_put(void)
+{
+    return ( tx_buf[tx_in] == 0 );
+}
+
+void ser_packet_put(ser_packet_t *p)
+{
+    assert(p->state == SP_IDLE);
+    assert(p->data != NULL);
+    assert(p->data_len <= p->max_len);
+    assert(p->addr < 128);
+    p->state = SP_TX_WAIT;
+    // do COBS encoding here
+    // insert at end of list
+    // this should be a critical region
+    p->next = &rx_root;
+    p->prev = rx_root.prev;
+    p->prev->next = p;
+    rx_root.prev = p;
+    // critical region end
+    ser_start_tx();
+}
+
+uint32_t ser_get_tx_byte(void)
+{
+    uint8_t data;
+
+    switch (tx_state) {
+        case TX_CHAR_MODE:
+            // binary packets take precedence over text, check if there is one
+            tx_packet = tx_root.next;
+            if ( tx_packet != &tx_root ) {
+                // there is a packet to send; unlink it from list
+                tx_packet->prev->next = tx_packet->next;
+                tx_packet->next->prev = tx_packet->prev;
+                tx_packet->prev = tx_packet->next = tx_packet;
+                // set up for packet transmit
+                tx_packet->state = SP_TX_BUSY;
+                tx_state = TX_SEND_COBS_BYTE;
+                // send the start of packet byte
+                return (tx_packet->addr | 0x80 );
+            } else if ( (data = tx_buf[tx_out]) != 0 ) {
+                // send a character
+                tx_out = NEXT_C(tx_out, SER_ASCII_TX_BUF_SIZE);
+                return data;
+            } else {
+                // nothing to send
+                return 0x100;
+            }
+            break;
+        case TX_SEND_COBS_BYTE:
+            tx_state = TX_SEND_DATA_BYTE;
+            tx_data_index = 0;
+            return tx_packet->cobs_byte;
+            break;
+        case TX_SEND_DATA_BYTE:
+            if ( tx_data_index < tx_packet->data_len ) {
+                // send data byte
+                return tx_packet->data[tx_data_index++];
+            } else {
+                // end of packet, send terminator byte
+                tx_packet->state = SP_IDLE;
+                tx_state = TX_CHAR_MODE;
+                return 0;
+            }
+            break;
+        default:
+            break;
+    }
+}
+
