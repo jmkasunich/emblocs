@@ -110,7 +110,15 @@ void ser_packet_get(ser_packet_t *p)
     assert(p->state == SP_RX_DONE);
     assert(p->data != NULL);
     assert(p->data_len <= p->max_len);
-    // COBS decode here
+    // COBS decoding
+    uint8_t *bp = p->data + p->cobs_byte - 1;
+    uint8_t * const end = p->data + p->data_len;
+    while (bp < end) {
+        uint8_t code = *bp;
+        *bp = 0;
+        bp += code;
+    }
+    // decoding complete
     p->state = SP_IDLE;
 }
 
@@ -237,7 +245,23 @@ void ser_packet_put(ser_packet_t *p)
     assert(p->data_len <= p->max_len);
     assert(p->header >= 128);
     p->state = SP_TX_WAIT;
-    // do COBS encoding here
+    // COBS encoding
+    uint8_t *bp = p->data;
+    uint8_t * const end = bp + p->data_len;
+    uint8_t code = 1;
+    uint8_t *cp = &p->cobs_byte;
+    while (bp < end) {
+        if (*bp == 0u) {
+            *cp = code;
+            cp = bp;
+            code = 1;
+        } else {
+            code++;
+        }
+        bp++;
+    }
+    *cp = code;
+    // encoding complete
     // insert at end of list
     // FIXME - this should be a critical region
     p->next = &rx_root;
