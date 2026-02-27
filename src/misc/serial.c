@@ -30,14 +30,13 @@
 #define NEXT_V(index, size) (((index)+1) < (size) ? (index)+1 : 0)
 
 
-void ser_packet_init(ser_packet_t *p, uint8_t *b, uint8_t len, uint8_t addr)
+void ser_packet_init_buf(ser_packet_t *p, uint8_t *buf, uint8_t len)
 {
     assert(len < 254);
-    assert(addr < 128);
-    p->data = b;
+    p->data = buf;
     p->max_len = len;
     p->data_len = 0;
-    p->addr = addr;
+    p->header = 0;
     p->state = SP_IDLE;
     p->cobs_byte = 0;
     p->prev = p;
@@ -57,7 +56,7 @@ static uint rx_out = 0;
 static ser_packet_t rx_root = { .state = SP_IDLE,
                                 .max_len = 0,
                                 .data_len = 0,
-                                .addr = 0x80,
+                                .header = 0,
                                 .cobs_byte = 0,
                                 .data = NULL,
                                 .prev = &rx_root,
@@ -94,15 +93,15 @@ void ser_packet_listen(ser_packet_t *p)
 {
     assert(p->state == SP_IDLE);
     assert(p->data != NULL);
-    assert(p->addr < 128);
+    assert(p->header >= 128);
     p->data_len = 0;
     p->state = SP_RX_WAIT;
-    // insert at end of list
-    // this should be a critical region
-    p->next = &rx_root;
-    p->prev = rx_root.prev;
-    p->prev->next = p;
-    rx_root.prev = p;
+    // insert at head of list
+    // FIXME - this should be a critical region
+    p->prev = &rx_root;
+    p->next = rx_root.next;
+    p->next->prev = p;
+    rx_root.next = p;
     // critical region end
 }
 
@@ -122,15 +121,15 @@ void ser_put_rx_byte(uint8_t data)
             if ( data & 0x80 ) {
                 // start of packet character
                 // search listen list for matching buffer
-                data &= 0x7f;
-                rx_packet = rx_root.next;
-                while ( ( rx_packet != &rx_root ) && ( rx_packet->addr != data ) ) {
-                    rx_packet = rx_packet->next;
+                ser_packet_t *p = rx_root.next;
+                while ( ( p->header != 0 ) && ( p->header != data ) ) {
+                    p = p->next;
                 }
-                if ( rx_packet->addr == data ) {
+                if ( p->header == data ) {
                     // match found, set up buffer for receive
-                    rx_packet->data_len = 0;
-                    rx_packet->state = SP_RX_BUSY;
+                    p->data_len = 0;
+                    p->state = SP_RX_BUSY;
+                    rx_packet = p;
                     rx_state = RX_GET_COBS_BYTE;
                 } else {
                     // no match
@@ -150,32 +149,37 @@ void ser_put_rx_byte(uint8_t data)
             }
             break;
         case RX_GET_COBS_BYTE:
+            ser_packet_t * const p = rx_packet;
             if ( data == '\0' ) {
                 // packet ended early
-                rx_packet->state = SP_RX_WAIT;
+                p->state = SP_RX_WAIT;
                 rx_state = RX_CHAR_MODE;
             } else {
-                rx_packet->cobs_byte = data;
+                p->cobs_byte = data;
                 rx_state = RX_GET_DATA_BYTE;
             }
             break;
         case RX_GET_DATA_BYTE:
+            ser_packet_t * const p = rx_packet;
             if ( data == '\0' ) {
                 // packet finished, unlink buffer from list
-                rx_packet->prev->next = rx_packet->next;
-                rx_packet->next->prev = rx_packet->prev;
-                rx_packet->prev = rx_packet->next = rx_packet;
-                rx_packet->state = SP_RX_DONE;
+                // this is a critical region, but we're already in an ISR
+                p->prev->next = p->next;
+                p->next->prev = p->prev;
+                p->prev = p->next = p;
+                // critical region end
+                p->state = SP_RX_DONE;
                 rx_state = RX_CHAR_MODE;
-            } else if ( rx_packet->data_len >= rx_packet->max_len ) {
+            } else if ( p->data_len >= p->max_len ) {
                 // packet too long
-                rx_packet->state = SP_RX_WAIT;
+                p->state = SP_RX_WAIT;
                 rx_state = RX_DISCARD_PACKET;
             } else {
-                rx_packet->data[rx_packet->data_len++] = data;
+                p->data[p->data_len++] = data;
             }
             break;
         default:
+            rx_state = RX_CHAR_MODE;
             break;
     }
 }
@@ -192,7 +196,7 @@ static uint tx_out = 0;
 static ser_packet_t tx_root = { .state = SP_IDLE,
                                 .max_len = 0,
                                 .data_len = 0,
-                                .addr = 0x80,
+                                .header = 0,
                                 .cobs_byte = 0,
                                 .data = NULL,
                                 .prev = &tx_root,
@@ -231,11 +235,11 @@ void ser_packet_put(ser_packet_t *p)
     assert(p->state == SP_IDLE);
     assert(p->data != NULL);
     assert(p->data_len <= p->max_len);
-    assert(p->addr < 128);
+    assert(p->header >= 128);
     p->state = SP_TX_WAIT;
     // do COBS encoding here
     // insert at end of list
-    // this should be a critical region
+    // FIXME - this should be a critical region
     p->next = &rx_root;
     p->prev = rx_root.prev;
     p->prev->next = p;
@@ -251,17 +255,20 @@ uint32_t ser_get_tx_byte(void)
     switch (tx_state) {
         case TX_CHAR_MODE:
             // binary packets take precedence over text, check if there is one
-            tx_packet = tx_root.next;
-            if ( tx_packet != &tx_root ) {
+            ser_packet_t * const p = tx_root.next;
+            if ( p != &tx_root ) {
                 // there is a packet to send; unlink it from list
-                tx_packet->prev->next = tx_packet->next;
-                tx_packet->next->prev = tx_packet->prev;
-                tx_packet->prev = tx_packet->next = tx_packet;
+                // this is a critical region, but we are already in an ISR
+                p->prev->next = p->next;
+                p->next->prev = p->prev;
+                p->prev = p->next = p;
+                // critical region end
                 // set up for packet transmit
-                tx_packet->state = SP_TX_BUSY;
+                p->state = SP_TX_BUSY;
+                tx_packet = p;
                 tx_state = TX_SEND_COBS_BYTE;
                 // send the start of packet byte
-                return (tx_packet->addr | 0x80 );
+                return p->header;
             } else if ( (data = tx_buf[tx_out]) != 0 ) {
                 // send a character
                 tx_out = NEXT_C(tx_out, SER_ASCII_TX_BUF_SIZE);
