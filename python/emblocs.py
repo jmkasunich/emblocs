@@ -62,19 +62,37 @@ class EmblocsGUI:
         self.master.destroy()
 
     def update_console(self) :
+        # process any pending text lines
         while True :
-            text_tuple = self.port_ctrl.get_text_tuple()
+            text_tuple = self.port_ctrl.get_rx_text()
             if text_tuple :
-                text, timestamp = text_tuple
+                timestamp, text = text_tuple
                 self.tab_console.append(text, timestamp, is_tx=False)
             else :
-                self.port_ctrl.after(100, self.update_console)
                 break
+        # also look for binary packets
+        while True:
+            packet_tuple = self.port_ctrl.get_rx_packet()
+            if packet_tuple:
+                timestamp, packet = packet_tuple
+                addr = packet.get_addr()
+                len = packet.get_data_len()
+                # data = packet.get_data_bytes()
+                info = f"<pkt addr={addr} len={len}>\n".encode('ascii')
+                self.tab_console.append(info, timestamp, is_tx=False)
+            else:
+                break
+        # schedule next poll
+        self.port_ctrl.after(100, self.update_console)
 
     def command_callback(self, command):
         print(f"command_callback called with {command=}")
         self.tab_console.append(command.encode('ascii', errors='replace'), None, is_tx=True)
-        self.port_ctrl.send_text(command)
+        self.port_ctrl.put_tx_text(command)
+
+    def send_packet(self, addr, data):
+        """Convenience wrapper to queue a packet through the port control."""
+        self.port_ctrl.put_tx_packet(addr, data)
 
 
 class AppConfig:
