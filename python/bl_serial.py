@@ -169,47 +169,57 @@ class SerPort(ttk.Frame):
         text_buf = bytearray()
         packet_buf = bytearray()
         state = 'text'
-        packet_addr = 0
         while not self.stop_event.is_set():
-            data_len = self.serport.read_into(rx_buf)
+            data_len = self.serport.readinto(rx_buf)
             if data_len == 0:
                 # timeout with no data; flush partial text
                 if len(text_buf) > 0:
-                    self._queue_rx_text_tuple(text_buf)
+                    print(f"{state=} timeout, {len(text_buf)=}")
+                    self.rx_text_queue.put((datetime.now(), bytes(text_buf)))
                     text_buf.clear()
                 continue
             bp = 0
+            print(f"{state=} read {data_len=}")
             while bp < data_len:
                 if state == 'text':
-                    index, char = next(((i, b) for i, b in enumerate(rx_buf[bp:data_len]) if b >= 0x80 or b == b'\n'), (data_len, None))
+                    #print(f"{state=} searching {rx_buf[bp:data_len]=} for newline or packet start")
+                    index, char = next(((i, b) for i, b in enumerate(rx_buf[bp:data_len]) if b >= 0x80 or b == ord('\n')), (data_len, None))
+                    #print(f"{state=} {index=}, {char=}")
                     if char is None:
                         # no packet start or newline found; treat everything as text for now
                         text_buf.extend(rx_buf[bp:data_len])
+                        print(f"{state=} no match, {len(text_buf)=}")
                         bp = data_len
-                    elif char == b'\n':
+                    elif char == ord('\n'):
                         # newline found; treat everything up to and including the newline as text
                         text_buf.extend(rx_buf[bp:bp+index+1])
                         bp += index + 1
                         # and send it to the text queue with a timestamp
+                        print(f"{state=} newline, {len(text_buf)=}")
                         self.rx_text_queue.put((datetime.now(), bytes(text_buf)))
                         text_buf.clear()
                     else:
                         # packet start found; treat everything up to the packet start as text, then switch to packet mode
                         text_buf.extend(rx_buf[bp:bp+index])
+                        print(f"{state=} packet start, {len(text_buf)=}")
                         bp += index + 1
                         packet_buf.clear()
                         packet = BinPacket()
                         packet.set_addr(char & 0x7f)
                         state = 'packet'
                 else:  # in packet
+                    #print(f"{state=} searching {rx_buf[bp:data_len]=} for packet end (0)")
                     index = rx_buf.find(0, bp, data_len)
+                    print(f"{state=} {index=}, {rx_buf[index]=}")
                     if index == -1:
                         # no packet terminator found; treat everything as packet data for now
                         packet_buf.extend(rx_buf[bp:data_len])
+                        print(f"{state=} no match, {len(packet_buf)=}")
                         bp = data_len
                     else:
                         # packet terminator found; treat everything up to the terminator as packet data, then switch to text mode
                         packet_buf.extend(rx_buf[bp:index])
+                        print(f"{state=} end of packet, {len(packet_buf)=}")
                         bp = index + 1
                         if ( len(packet_buf) > 255 ):
                             # packet too long; discard it
