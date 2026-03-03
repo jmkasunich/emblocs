@@ -124,12 +124,14 @@ void ser_packet_get(ser_packet_t *p)
 
 void ser_put_rx_byte(uint8_t data)
 {
+    ser_packet_t *p;
+
     switch (rx_state) {
         case RX_CHAR_MODE:
             if ( data & 0x80 ) {
                 // start of packet character
                 // search listen list for matching buffer
-                ser_packet_t *p = rx_root.next;
+                p = rx_root.next;
                 while ( ( p->header != 0 ) && ( p->header != data ) ) {
                     p = p->next;
                 }
@@ -157,7 +159,7 @@ void ser_put_rx_byte(uint8_t data)
             }
             break;
         case RX_GET_COBS_BYTE:
-            ser_packet_t * const p = rx_packet;
+            p = rx_packet;
             if ( data == '\0' ) {
                 // packet ended early
                 p->state = SP_RX_WAIT;
@@ -168,7 +170,7 @@ void ser_put_rx_byte(uint8_t data)
             }
             break;
         case RX_GET_DATA_BYTE:
-            ser_packet_t * const p = rx_packet;
+            p = rx_packet;
             if ( data == '\0' ) {
                 // packet finished, unlink buffer from list
                 // this is a critical region, but we're already in an ISR
@@ -319,6 +321,8 @@ uint32_t ser_get_tx_byte(void)
             }
             break;
         default:
+            tx_state = TX_CHAR_MODE;
+            return 0;
             break;
     }
 }
