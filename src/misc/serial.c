@@ -7,6 +7,8 @@
  * *************************************************************/
 
 #include "serial.h"
+#include <cmsis_compiler.h> // __disable_irq(), __enable_irq()
+#include <assert.h>
 
 #ifndef uint
 #define uint unsigned int
@@ -110,12 +112,13 @@ void ser_packet_listen(ser_packet_t *p)
     p->data_len = 0;
     p->state = SP_RX_WAIT;
     // insert at head of list
-    // FIXME - this should be a critical region
+    // this is a critical region
+    __disable_irq();
     p->prev = &rx_root;
     p->next = rx_root.next;
     p->next->prev = p;
     rx_root.next = p;
-    // critical region end
+    __enable_irq();
 }
 
 void ser_packet_get(ser_packet_t *p)
@@ -278,12 +281,13 @@ void ser_packet_put(ser_packet_t *p)
     *cp = code;
     // encoding complete
     // insert at end of list
-    // FIXME - this should be a critical region
+    // this is a critical region
+    __disable_irq();
     p->next = &tx_root;
     p->prev = tx_root.prev;
     p->prev->next = p;
     tx_root.prev = p;
-    // critical region end
+    __enable_irq();
     ser_start_tx();
 }
 
