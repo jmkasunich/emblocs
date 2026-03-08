@@ -178,17 +178,8 @@ static inline uint8_t ser_packet_get_len(ser_packet_t *p)
     return p->data_len;
 }
 
-static inline void ser_packet_set_addr(ser_packet_t *p, uint8_t addr)
-{
-    assert(addr <= 0x7F );
-    p->header = addr | 0x80;
-}
-
-static inline void ser_packet_set_len(ser_packet_t *p, uint8_t len)
-{
-    assert(len <= p->max_len);
-    p->data_len = len;
-}
+void ser_packet_set_addr(ser_packet_t *p, uint8_t addr);
+void ser_packet_set_len(ser_packet_t *p, uint8_t len);
 
 void ser_packet_put(ser_packet_t *p);
 void ser_packet_listen(ser_packet_t *p);

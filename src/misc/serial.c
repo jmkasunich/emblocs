@@ -43,6 +43,19 @@ void ser_packet_init_buf(ser_packet_t *p, uint8_t *buf, uint8_t len)
     p->next = p;
 }
 
+void ser_packet_set_addr(ser_packet_t *p, uint8_t addr)
+{
+    assert(addr <= 0x7F );
+    p->header = addr | 0x80;
+}
+
+void ser_packet_set_len(ser_packet_t *p, uint8_t len)
+{
+    assert(len <= p->max_len);
+    p->data_len = len;
+}
+
+
 
 static enum {
     RX_CHAR_MODE,
