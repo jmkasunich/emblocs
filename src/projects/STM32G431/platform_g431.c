@@ -12,6 +12,7 @@
 #include "stm32g4xx_ll_rcc.h"
 #include "stm32g4xx_ll_system.h"
 
+#include "serial.h"
 
 /* platform_init() performs core initialization
  *
@@ -201,116 +202,60 @@ void platform_init(void)
 #ifndef CONSOLE_POLLED
 /* This implementation is interrupt driven with buffers in RAM. */
 
-#define UART_TX_BUF_LEN  1000
-#define UART_RX_BUF_LEN  100
-
-/*  buffer notes
- *
- * 'in' always points to an empty location
- * 'out' points to a filled location, unless 'out' == 'in',
- * in which case the whole buffer is empty.  So empty is
- * easy to detect, full is a bit more complicated.
- * Full is when (in+1) == out  (must do wrap on in+1)
- *           or in == (out-1)  (must to wrap on out-1)
- *
- * This buffer implementation does not disable interrupts
- * and is thread-safe for concurrent reading and writing.
- * But the individual read and write functions are not
- * re-entrant.  Should have only one reader and only one
- * writer.
-*/
-
-static volatile char uart_tx_buf[UART_TX_BUF_LEN];
-static volatile uint uart_tx_index_in = 0;
-static volatile uint uart_tx_index_out = 0;
-
-static volatile char uart_rx_buf[UART_RX_BUF_LEN];
-static volatile uint uart_rx_index_in = 0;
-static volatile uint uart_rx_index_out = 0;
 
 void USART2_IRQHandler(void)
 {
-    uint in, out;
-    char c;
+    uint32_t c;
 
+    PB7_OUT(1);
     // check for UART received data
-    if ( (USART2)->ISR & (USART_ISR_RXNE_RXFNE_Msk) ) {
-        in = uart_rx_index_in;
-        out = uart_rx_index_out;
-        // buffer full if in == (out-1)
-        // decrement 'out' with wrap
-        out = ( out != 0 ) ? (out-1) : (UART_RX_BUF_LEN-1);
-        do {
-            // get the data
-            c = (char)((USART2)->RDR);
-            if ( in != out ) {
-                // space available in buffer, store the character
-                uart_rx_buf[in] = c;
-                // increment 'in' with wrap
-                in = ( in < (UART_RX_BUF_LEN-1) ) ? (in+1) : 0;
-            }
-        } while ( ((USART2)->ISR) & (USART_ISR_RXNE_RXFNE_Msk) );
-        uart_rx_index_in = in;
+    while ( (USART2)->ISR & (USART_ISR_RXNE_RXFNE_Msk) ) {
+        ser_put_rx_byte((uint8_t)((USART2)->RDR));
     }
     // check for UART ready to send data
-    if ( (USART2)->ISR & (USART_ISR_TXE_TXFNF_Msk) ) {
-        in = uart_tx_index_in;
-        out = uart_tx_index_out;
-        do {
-            if ( in == out ) {
-                // no data in buffer, nothing else to do
-                // disable TX FIFO threshold interrupt
-                (USART2)->CR3 &= ~(USART_CR3_TXFTIE);
-                // exit do {} while (); loop
-                break;
-            }
-            // data in buffer, send to UART
-            c = uart_tx_buf[out];
-            ((USART2)->TDR) = c;
-            // increment 'out' with wrap
-            out = ( out < (UART_TX_BUF_LEN-1) ) ? (out+1) : 0;
-        } while ( (USART2)->ISR & (USART_ISR_TXE_TXFNF_Msk) );
-        uart_tx_index_out = out;
+    while ( (USART2)->ISR & (USART_ISR_TXE_TXFNF_Msk) ) {
+        PA15_OUT(1);
+        c = ser_get_tx_byte();
+        PA15_OUT(0);
+        if ( c <= 255 ) {
+            // there is a byte to send, write it to the UART
+            (USART2)->TDR = (uint8_t)c;
+        } else {
+            // no data to send, disable TX FIFO threshold interrupt
+            (USART2)->CR3 &= ~(USART_CR3_TXFTIE);
+            PB8_OUT(0);
+            break;
+        }
     }
+    PB7_OUT(0);
+}
+
+void ser_start_tx(void)
+{
+    // enable TX FIFO threshold interrupt to kick things off
+    PB8_OUT(1);
+    (USART2)->CR3 |= USART_CR3_TXFTIE;
 }
 
 
 /* returns non-zero if transmitter can accept a character */
 int cons_tx_ready(void)
 {
-    uint in = uart_tx_index_in;
-    // increment 'in' with wrap
-    in = ( in < (UART_TX_BUF_LEN-1) ) ? (in+1) : 0;
-    return ( in != uart_tx_index_out );
+    return ser_ascii_can_put();
 }
 
 /* transmits a character without waiting; data can be lost if transmitter is not ready */
 void cons_tx(char c)
 {
-    uint in = uart_tx_index_in;
-    uart_tx_buf[in] = c;
-    // increment 'in' with wrap
-    in = ( in < (UART_TX_BUF_LEN-1) ) ? (in+1) : 0;
-    if ( in != uart_tx_index_out ) {
-        // buffer not full, update index to queue data
-        uart_tx_index_in = in;
-    }
-    // enable TX FIFO threshold interrupt to kick things off
-    USART2->CR3 |= USART_CR3_TXFTIE;
+    ser_ascii_put_nb(c);
 }
 
 /* waits until transmitter is ready, then transmits character */
 void cons_tx_wait(char c)
 {
-    uint in = uart_tx_index_in;
-    uart_tx_buf[in] = c;
-    // increment 'in' with wrap
-    in = ( in < (UART_TX_BUF_LEN-1) ) ? (in+1) : 0;
-    while ( in == uart_tx_index_out ); // wait if buffer full
-    // update index to queue data
-    uart_tx_index_in = in;
-    // enable TX FIFO threshold interrupt to kick things off
-    USART2->CR3 |= USART_CR3_TXFTIE;
+    PB6_OUT(1);
+    ser_ascii_put_bl(c);
+    PB6_OUT(0);
 }
 
 /* returns non-zero if transmitter is idle (all characters sent) */
@@ -322,34 +267,19 @@ int cons_tx_idle(void)
 /* returns non-zero if reciever has a character available */
 int cons_rx_ready(void)
 {
-    return ( uart_rx_index_in != uart_rx_index_out );
+    return ser_ascii_can_get();
 }
 
-/* gets a character without waiting, may return garbage if reciever is not ready */
+/* gets a character without waiting, returns zero if no data available */
 char cons_rx(void)
 {
-    char c = 0;
-    uint out = uart_rx_index_out;
-    if ( out != uart_rx_index_in) {
-        // there is something, get it
-        c = uart_rx_buf[out];
-        // increment 'out' with wrap
-        out = ( out < (UART_RX_BUF_LEN-1) ) ? (out+1) : 0;
-        uart_rx_index_out = out;
-    }
-    return c;
+    return ser_ascii_get_nb();
 }
 
 /* waits until receiver is ready, then gets character */
 char cons_rx_wait(void)
 {
-    uint out = uart_rx_index_out;
-    while ( out == uart_rx_index_in); // wait for data available
-    char c = uart_rx_buf[out];
-    // increment 'out' with wrap
-    out = ( out < (UART_RX_BUF_LEN-1) ) ? (out+1) : 0;
-    uart_rx_index_out = out;
-    return c;
+    return ser_ascii_get_bl();
 }
 #endif  // not CONSOLE_POLLED
 
