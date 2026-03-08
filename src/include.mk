@@ -32,6 +32,10 @@ all : $(BUILD_DIR)/$(TARGET)
 
 .PHONY : all
 
+#flash : $(BUILD_DIR)/$(TARGET)
+#	@echo "Flashing $<"
+#	openocd  $(OPENOCD_CONFIG) -c "program $(BUILD_DIR)/$(TARGET) preverify verify reset exit"
+
 # generate hex file
 $(BUILD_DIR)/%.hex : $(BUILD_DIR)/%.elf
 	@echo ' '
