@@ -229,7 +229,6 @@ class SerPort(ttk.Frame):
                             # decode packet and send it to the packet queue with a timestamp
                             packet.cobs_decode_from_bytes(bytes(packet_buf))
                             self.rx_packet_queue.put((datetime.now(), packet))
-                        text_buf.clear()
                         state = 'text'
         print("end of rx thread")
 

@@ -279,10 +279,10 @@ void ser_packet_put(ser_packet_t *p)
     // encoding complete
     // insert at end of list
     // FIXME - this should be a critical region
-    p->next = &rx_root;
-    p->prev = rx_root.prev;
+    p->next = &tx_root;
+    p->prev = tx_root.prev;
     p->prev->next = p;
-    rx_root.prev = p;
+    tx_root.prev = p;
     // critical region end
     ser_start_tx();
 }
@@ -310,6 +310,7 @@ uint32_t ser_get_tx_byte(void)
                 return p->header;
             } else if ( (data = tx_buf[tx_out]) != 0 ) {
                 // send a character
+                tx_buf[tx_out] = 0;
                 tx_out = NEXT_C(tx_out, SER_ASCII_TX_BUF_SIZE);
                 return data;
             } else {
