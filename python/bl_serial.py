@@ -174,7 +174,7 @@ class SerPort(ttk.Frame):
             if data_len == 0:
                 # timeout with no data; flush partial text
                 if len(text_buf) > 0:
-                    print(f"{state=} timeout, {len(text_buf)=}")
+                    print(f"{state=} timeout, {len(text_buf)=}  {text_buf}")
                     self.rx_text_queue.put((datetime.now(), bytes(text_buf)))
                     text_buf.clear()
                 continue
@@ -188,29 +188,29 @@ class SerPort(ttk.Frame):
                     if char is None:
                         # no packet start or newline found; treat everything as text for now
                         text_buf.extend(rx_buf[bp:data_len])
-                        print(f"{state=} no match, {len(text_buf)=}")
+                        print(f"{state=} no match, {len(text_buf)=}  {text_buf}")
                         bp = data_len
                     elif char == ord('\n'):
                         # newline found; treat everything up to and including the newline as text
                         text_buf.extend(rx_buf[bp:bp+index+1])
                         bp += index + 1
                         # and send it to the text queue with a timestamp
-                        print(f"{state=} newline, {len(text_buf)=}")
+                        print(f"{state=} newline, {len(text_buf)=}  {text_buf}")
                         self.rx_text_queue.put((datetime.now(), bytes(text_buf)))
                         text_buf.clear()
                     else:
                         # packet start found; treat everything up to the packet start as text, then switch to packet mode
                         text_buf.extend(rx_buf[bp:bp+index])
-                        print(f"{state=} packet start, {len(text_buf)=}")
+                        print(f"{state=} packet start, {len(text_buf)=}  {text_buf}")
                         bp += index + 1
                         packet_buf.clear()
                         packet = BinPacket()
                         packet.set_addr(char & 0x7f)
                         state = 'packet'
-                else:  # in packet
+                else:  # state == 'packet'
                     #print(f"{state=} searching {rx_buf[bp:data_len]=} for packet end (0)")
                     index = rx_buf.find(0, bp, data_len)
-                    print(f"{state=} {index=}, {rx_buf[index]=}")
+                    #print(f"{state=} {index=}, {rx_buf[index]=}")
                     if index == -1:
                         # no packet terminator found; treat everything as packet data for now
                         packet_buf.extend(rx_buf[bp:data_len])
@@ -223,9 +223,10 @@ class SerPort(ttk.Frame):
                         bp = index + 1
                         if ( len(packet_buf) > 255 ):
                             # packet too long; discard it
+                            print(f"{state=} packet too long, discarding {len(packet_buf)=}")
                             packet_buf.clear()
                         else:
-                            # decode packet and send it to the packet queue with the address and a timestamp
+                            # decode packet and send it to the packet queue with a timestamp
                             packet.cobs_decode_from_bytes(bytes(packet_buf))
                             self.rx_packet_queue.put((datetime.now(), packet))
                         text_buf.clear()
