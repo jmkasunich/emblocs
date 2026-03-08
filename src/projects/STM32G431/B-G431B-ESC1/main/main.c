@@ -2,11 +2,15 @@
 
 #include "emblocs_api.h"
 #include "printing.h"
+#include "serial.h"
 #include <assert.h>
+#include <string.h>
 #include "tmp_gpio.h"
 #include "watch.h"
 
 #define PRINT_INIT
+
+#define CLK_MHZ 170
 
 #ifndef _countof
 #define _countof(array) (sizeof(array)/sizeof(array[0]))
@@ -34,6 +38,14 @@ void delay (unsigned int time) {
         for (volatile unsigned int j = 0; j < 20000; j++);
 }
 
+void delay_us (unsigned int us) {
+    unsigned int elapsed;
+    unsigned int start = tsc_read();
+    unsigned int target = us * CLK_MHZ;
+    do {
+        elapsed = tsc_read() - start;
+    } while (elapsed < target);
+}
 
 extern struct bl_comp_def_s bl_mux2_def;
 extern struct bl_comp_def_s bl_sum2_def;
@@ -191,7 +203,6 @@ char const * const tokens[] = {
 //    "all"
 };
 
-#define CLK_MHZ 170
 
 #define BUF_LEN 50
 
@@ -201,12 +212,13 @@ int main (void) {
     struct bl_thread_data_s *main_thread;
     struct bl_thread_data_s *watch_thread;
     char c;
-    bl_sig_data_t data;
+    // bl_sig_data_t data;
     char buffer[BUF_LEN];
     int buf_len = 0;
+    ser_packet_t packet1, packet2;
+    uint8_t packet1_buf[45], packet2_buf[45];
 
     platform_init();
-
     print_string("BOOT\n");
     print_string(hello);
 //    print_memory((void *)hello, 512);
@@ -230,13 +242,21 @@ int main (void) {
     watch_thread = bl_thread_get_data(bl_thread_find("watch_thread"));
     assert(main_thread != NULL);
     assert(watch_thread != NULL);
+    ser_packet_init_buf(&packet1, packet1_buf, sizeof(packet1_buf));
+    ser_packet_init_buf(&packet2, packet2_buf, sizeof(packet2_buf));
+    strcpy((char *)packet1.data, "PACKET1---*----1----\xA8----1----*-END!");
+    ser_packet_set_len(&packet1, (uint8_t)(strlen((char *)packet1.data)));
+    ser_packet_set_addr(&packet1, 0x28);
+    strcpy((char *)packet2.data, "PACKET2---*----2----\xA9----2----*-END!");
+    ser_packet_set_len(&packet2, (uint8_t)(strlen((char *)packet2.data)));
+    ser_packet_set_addr(&packet2, 0x29);
     while (1) {
         print_string("ready... ");
-        uint start = tsc_read();
+        // uint start = tsc_read();
         // wait for key pressed
         c = '0';
     char_loop:
-        while ( ! cons_rx_ready() ) {
+        while ( ! ser_ascii_can_get() ) {
 #if 0
             uint elapsed = (uint)tsc_read() - start;
             if ( tsc_to_usec(elapsed) > 1000000 ) {
@@ -250,14 +270,37 @@ int main (void) {
 #endif
         }
         // read the key
-        c = cons_rx();
+        c = ser_ascii_get_bl();
+        print_string("got char '");
+        print_char(c);
+        print_string("'\n");
         buffer[buf_len++] = c;
         if ( ( c != '\n' ) && ( buf_len < BUF_LEN-1 ) ) {
             goto char_loop;
         }
         buffer[buf_len] = '\0';
+        print_string("got string '");
         print_string(buffer);
+        print_string("'\n");
         buf_len = 0;
+        print_string("sending packets\n");
+        ser_packet_put(&packet1);
+        ser_packet_put(&packet2);
+        print_string("packet sents\n");
+        int s;
+        do {
+            s = ser_packet_get_state(&packet1);
+//            printf("packet 1 state: %d\n", s);
+        } while (s != SP_IDLE);
+        print_string("packet1 state idle, sending again\n");
+        ser_packet_put(&packet1 );
+        do {
+            s = ser_packet_get_state(&packet2);
+//            printf("packet 2 state: %d\n", s);
+        } while (s != SP_IDLE);
+        print_string("packet2 state idle, sending again\n");
+        ser_packet_put(&packet2 );
+
 
 #if 0
         switch(c) {
