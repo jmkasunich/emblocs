@@ -28,6 +28,8 @@ INC_DIRS				+= $(MCU_PKG)/Drivers/CMSIS/Include
 INC_DIRS				+= $(MCU_PKG)/Drivers/CMSIS/Device/ST/STM32G4xx/Include
 INC_DIRS				+= $(MCU_PKG)/Drivers/STM32G4xx_HAL_Driver/Inc
 
+OPENOCD_CONFIG			:= -f ./openocd.cfg
+
 # -----------------------------------------------------------------------------------------------------------------
 # Defined Symbols
 # -----------------------------------------------------------------------------------------------------------------

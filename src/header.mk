@@ -61,6 +61,6 @@ DIRS			:= $(BUILD_DIR) $(OBJECT_DIR) $(DEPS_DIR) $(TEMP_DIR)
 # define object file groups that projects might want to use
 
 EMBLOCS_OBJS := emblocs_core.o emblocs_parse.o emblocs_show.o \
-			    linked_list.o str_to_xx.o
+			    linked_list.o str_to_xx.o serial.o
 
-COMP_OBJS := mux2.o sum2.o perftimer.o tmp_gpio.o watch.o
+COMP_OBJS := mux2.o sum2.o perftimer.o tmp_gpio.o watch.o scope.o
