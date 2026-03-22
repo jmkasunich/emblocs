@@ -4,7 +4,7 @@ This repository contains two fairly distinct halves: a **host‑side Python tool
 
 ## 🗂️ High‑level architecture
 
-- `python/` – Tkinter GUI, serial port widget, scope display, command console.  All of the host tools live here along with a simple JSON configuration mechanism (`AppConfig`).  `emblocs.py` is the main entry point.
+- `python/` – Tkinter GUI, serial port widget, scope display, command console.  All of the host tools live here along with a simple JSON configuration mechanism (`AppConfig`).  `emblocs_gui.py` is the main entry point.
 - `src/emblocs` – core library implementing the block/thread/signal API (`bl_*` functions) plus parsing and "show" helpers.
 - `src/components` – modular components (mux2, sum2, watch, perftimer, etc.).  Each component is a self‑contained C pair with a setup function, runtime code and metadata definitions.  New components follow this template.
 - `src/misc` – utility code used by both core and projects (linked list, printing, serial, string conversion, etc.).
