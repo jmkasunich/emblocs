@@ -69,6 +69,7 @@ typedef float       bl_float_t;
 typedef bool        bl_bit_t;
 typedef int32_t     bl_s32_t;
 typedef uint32_t    bl_u32_t;
+typedef uint32_t    bl_raw_t;
 
 /* "generic" data; implemented as a union of the four types */
 typedef union bl_sig_data_u {
@@ -83,6 +84,7 @@ typedef bl_bit_t    *bl_pin_bit_t;
 typedef bl_float_t  *bl_pin_float_t;
 typedef bl_s32_t    *bl_pin_s32_t;
 typedef bl_u32_t    *bl_pin_u32_t;
+typedef bl_raw_t    *bl_pin_raw_t;
 
 /* "generic" pin is a pointer to generic data */
 typedef bl_sig_data_t *bl_pin_t;
