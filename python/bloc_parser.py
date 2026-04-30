@@ -184,12 +184,12 @@ def parse_function(path: str, spec: BlockSpec,
 # Statement dispatcher
 # ---------------------------------------------------------------------------
 
-def parse_statement(path, spec, tokens, description):
+def parse_statement_debug(path, spec, tokens, description):
     print(f"STATEMENT: {[t.text for t in tokens]}")
     if description:
         print(f"  DESCRIPTION: {description!r}")
 
-def parse_statement_bak(path: str, spec: BlockSpec,
+def parse_statement(path: str, spec: BlockSpec,
                     tokens: list[Token], description: str) -> None:
     """
     Dispatch a complete statement to the appropriate per-keyword handler.
