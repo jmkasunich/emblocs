@@ -12,17 +12,24 @@
 
 import sys
 from emblocs import BlockSpec, PinSpec, VarDef, FunctDef, PinType, PinDir
+import re
+from collections import namedtuple
 
+Token = namedtuple("Token", ["text", "line", "column"])
 
 # ---------------------------------------------------------------------------
 # Error reporting
 # ---------------------------------------------------------------------------
 
-def parse_error(path: str, lineno: int, message: str) -> None:
-    """Print a parse error with file and line context, then exit."""
-    print(f"{path}:{lineno}: error: {message}", file=sys.stderr)
+def parse_error(path: str, lineno: int, column: int, message: str) -> None:
+    """Print an error message with file and line context, then exit."""
+    print(f"{path}:{lineno}:{column} error: {message}", file=sys.stderr)
     sys.exit(1)
 
+
+def parse_error_tok(path: str, token: Token, message: str) -> None:
+    """Print an error message using Token location"""
+    parse_error(path, token.line, token.column, message)
 
 # ---------------------------------------------------------------------------
 # Keyword tables
@@ -46,44 +53,177 @@ PIN_DIRS = {
 # Line-level helpers
 # ---------------------------------------------------------------------------
 
-def strip_description(line: str) -> tuple[str, str]:
+_TOKEN_RE = re.compile(r"\S+")
+
+def tokenize_line(line: str, line_no: int) -> list[Token]:
     """
-    Split a line into its code portion and its /// description text.
+    Tokenize a single line into whitespace-separated tokens.
 
-    Returns (code, description) where:
-      - description is the text after the first '///' on the line, with one
-        leading separator space removed and trailing whitespace stripped.
-        Remaining leading whitespace is preserved so block authors can indent
-        multi-line descriptions.  Returns "" if no '///' is present.
-      - code is everything before the '///' (stripped), with any trailing
-        '//' comment also removed.
+    Parameters:
+        line (str): The source line to tokenize
+        line_no (int): 1-based line number
 
-    Examples:
-      "pin float input in  /// value to clamp"  -> ("pin float input in", "value to clamp")
-      "pin float input in  // plain comment"     -> ("pin float input in", "")
-      "/// block description"                    -> ("", "block description")
-      "///   indented continuation"              -> ("", "  indented continuation")
+    Returns:
+        list[Token]: Tokens with text, line, and column (1-based)
+        if line is all whitespace, returns an empty list
     """
-    # Look for /// first (/// takes priority over plain //)
-    idx = line.find("///")
-    if idx != -1:
-        description = line[idx + 3:].rstrip()
-        if description.startswith(" "):
-            description = description[1:]   # strip exactly one separator space
-        code = line[:idx].strip()
-        return code, description
-
-    # No ///, strip any plain // comment
-    idx = line.find("//")
-    if idx != -1:
-        line = line[:idx]
-
-    return line.strip(), ""
+    return [
+        Token(
+            text=m.group(),
+            line=line_no,
+            column=m.start() + 1
+        )
+        for m in _TOKEN_RE.finditer(line)
+    ]
 
 
-def tokenize(code: str) -> list[str]:
-    """Split a code string into whitespace-separated tokens."""
-    return code.split()
+# ---------------------------------------------------------------------------
+# Per-keyword parse functions
+# ---------------------------------------------------------------------------
+
+def parse_block(path: str, spec: BlockSpec,
+                tokens: list[Token], description: str) -> None:
+    """Handle the 'block' declaration."""
+    keyword = tokens[0]
+    if spec.name:
+        parse_error_tok(path, keyword, "'block' declared more than once")
+    if len(tokens) < 2:
+        parse_error_tok(path, keyword, "'block' declaration requires a name")
+    name_tok = tokens[1]
+    if not name_tok.text.isidentifier():
+        parse_error_tok(path, name_tok,
+                        f"invalid block name: {name_tok.text!r}")
+    spec.name        = name_tok.text
+    spec.description = description
+
+
+def parse_pin(path: str, spec: BlockSpec,
+              tokens: list[Token], description: str) -> None:
+    """Handle the 'pin' declaration."""
+    keyword   = tokens[0]
+    if len(tokens) < 4:
+        parse_error_tok(path, keyword,
+                        "'pin' declaration needs at least type, direction, "
+                        "and field name")
+    type_tok  = tokens[1]
+    dir_tok   = tokens[2]
+    field_tok = tokens[3]
+
+    if type_tok.text not in PIN_TYPES:
+        parse_error_tok(path, type_tok,
+                        f"unknown pin type {type_tok.text!r}; "
+                        f"expected one of {list(PIN_TYPES)}")
+    if dir_tok.text not in PIN_DIRS:
+        parse_error_tok(path, dir_tok,
+                        f"unknown pin direction {dir_tok.text!r}; "
+                        f"expected 'input' or 'output'")
+    if "[" in field_tok.text:
+        parse_error_tok(path, field_tok,
+                        "array pin dimensions are not yet supported")
+
+    field_name   = field_tok.text
+    emblocs_name = tokens[4].text if len(tokens) >= 5 else field_name
+
+    spec.struct_members.append(PinSpec(
+        field_name   = field_name,
+        emblocs_name = emblocs_name,
+        pin_type     = PIN_TYPES[type_tok.text],
+        direction    = PIN_DIRS[dir_tok.text],
+        dims         = [],
+        description  = description,
+    ))
+
+
+def parse_var(path: str, spec: BlockSpec,
+              tokens: list[Token], description: str) -> None:
+    """Handle the 'var' declaration."""
+    keyword          = tokens[0]
+    c_decl_with_semi = " ".join(t.text for t in tokens[1:])
+    if not c_decl_with_semi.endswith(";"):
+        parse_error_tok(path, keyword,
+                        "'var' declaration must end with a semicolon")
+    c_decl = c_decl_with_semi[:-1].rstrip()
+    if not c_decl:
+        parse_error_tok(path, keyword,
+                        "'var' declaration has no C declaration")
+
+    # Extract the field name from the last token (before the semicolon).
+    # Strip leading '*' (pointer declarations) and trailing '[' (arrays).
+    # Deliberately simple; will need revisiting for complex C types.
+    last_tok = tokens[-1]
+    raw_name = last_tok.text.rstrip(";").lstrip("*").split("[")[0]
+    if not raw_name.isidentifier():
+        parse_error_tok(path, last_tok,
+                        f"could not parse field name from 'var' declaration: "
+                        f"{c_decl!r}")
+
+    spec.struct_members.append(VarDef(
+        field_name = raw_name,
+        c_decl     = c_decl,
+    ))
+
+
+def parse_function(path: str, spec: BlockSpec,
+                   tokens: list[Token], description: str) -> None:
+    """Handle the 'function' declaration."""
+    keyword = tokens[0]
+    if len(tokens) < 2:
+        parse_error_tok(path, keyword,
+                        "'function' declaration requires a name")
+    name_tok = tokens[1]
+    if not name_tok.text.isidentifier():
+        parse_error_tok(path, name_tok,
+                        f"invalid function name: {name_tok.text!r}")
+    spec.functions.append(FunctDef(
+        name        = name_tok.text,
+        description = description,
+    ))
+
+
+# ---------------------------------------------------------------------------
+# Statement dispatcher
+# ---------------------------------------------------------------------------
+
+def parse_statement(path, spec, tokens, description):
+    print(f"STATEMENT: {[t.text for t in tokens]}")
+    if description:
+        print(f"  DESCRIPTION: {description!r}")
+
+def parse_statement_bak(path: str, spec: BlockSpec,
+                    tokens: list[Token], description: str) -> None:
+    """
+    Dispatch a complete statement to the appropriate per-keyword handler.
+
+    tokens is guaranteed non-empty.  description may be "".
+    """
+    keyword = tokens[0]
+
+    if keyword.text == "block":
+        parse_block(path, spec, tokens, description)
+    elif keyword.text == "pin":
+        parse_pin(path, spec, tokens, description)
+    elif keyword.text == "var":
+        parse_var(path, spec, tokens, description)
+    elif keyword.text == "function":
+        parse_function(path, spec, tokens, description)
+
+    # Unsupported but recognized keywords
+    elif keyword.text == "param":
+        parse_error_tok(path, keyword,
+                        "'param' declarations are not yet supported")
+    elif keyword.text == "init":
+        parse_error_tok(path, keyword,
+                        "'init' declarations are not yet supported")
+    elif keyword.text in ("#if", "#endif"):
+        parse_error_tok(path, keyword,
+                        f"'{keyword.text}' is not yet supported")
+    elif keyword.text == "for":
+        parse_error_tok(path, keyword,
+                        "'for' loops are not yet supported")
+
+    else:
+        parse_error_tok(path, keyword,
+                        f"unrecognized declaration: {keyword.text!r}")
 
 
 # ---------------------------------------------------------------------------
@@ -94,218 +234,69 @@ def parse_bloc(path: str) -> BlockSpec:
     """
     Parse a .bloc file and return a populated BlockSpec.
 
-    Every .bloc file must contain exactly one 'block' declaration giving
-    the block's name and optional description.  All other declarations
-    (pin, var, function, param) may appear in any order.
+    This function directly handles line-by-line parsing, tokenization, 
+    and description accumulation, then calls parse_statement() for
+    each complete statement.
 
     Raises SystemExit (via parse_error) on any syntax or semantic error.
     """
     spec = BlockSpec(source_path=path)
+    pending_tokens: list[Token] = []
+    pending_description: str = ""
 
-    # pending_* holds the fields for a declaration that has been parsed but
-    # not yet finalized, because the next line may continue its /// description.
-    #
-    # pending_kind is one of: None, "block", "pin", "function"
-    # (var does not use the pending machinery as it takes no /// description)
-    pending_kind:        str | None = None
-    pending_fields:      dict       = {}
-    pending_description: str        = ""
-
-    def finalize_pending():
-        """Construct and store the object for the current pending declaration."""
-        nonlocal pending_kind, pending_fields, pending_description
-        if pending_kind is None:
-            return
-        if pending_kind == "block":
-            spec.name        = pending_fields["name"]
-            spec.description = pending_description
-        elif pending_kind == "pin":
-            spec.struct_members.append(PinSpec(
-                field_name   = pending_fields["field_name"],
-                emblocs_name = pending_fields["emblocs_name"],
-                pin_type     = pending_fields["pin_type"],
-                direction    = pending_fields["direction"],
-                dims         = pending_fields["dims"],
-                description  = pending_description,
-            ))
-        elif pending_kind == "function":
-            spec.functions.append(FunctDef(
-                name        = pending_fields["name"],
-                description = pending_description,
-            ))
-        pending_kind        = None
-        pending_fields      = {}
+    def flush():
+        """
+        If there are pending tokens, call parse_statement(),
+        then reset to process next statement.
+        """
+        nonlocal pending_tokens, pending_description
+        if pending_tokens:
+            parse_statement(path, spec, pending_tokens, pending_description)
+        pending_tokens      = []
         pending_description = ""
 
-    def set_pending(kind: str, fields: dict, description: str):
-        """Finalize any previous pending item, then set a new one."""
-        finalize_pending()
-        nonlocal pending_kind, pending_fields, pending_description
-        pending_kind        = kind
-        pending_fields      = fields
-        pending_description = description
-
-    # Read the file, checking for non-ASCII bytes
     try:
-        with open(path, "r", encoding="ascii") as f:
-            raw_lines = f.readlines()
-    except UnicodeDecodeError as e:
-        print(f"{path}: error: non-ASCII character in file: {e}", file=sys.stderr)
+        with open(path, "r", encoding="utf-8") as f:
+            for lineno, line in enumerate(f, start=1):
+                if not line.isascii():
+                    parse_error(path, lineno, 1,
+                                "Non-ASCII character found")
+
+                # split token section from comment/description
+                first_part, sep, last_part = line.partition("//")
+                new_tokens = tokenize_line(first_part, lineno)
+                # determine if last part is description or comment/nothing
+                if last_part.startswith("/") :
+                    new_description = last_part[1:]
+                else:
+                    new_description = ""
+
+                # apply language rules
+                if pending_description and new_description and not new_tokens :
+                    # description continuation line
+                    pending_description += new_description
+                else :
+                    # any previous statement is now complete
+                    flush()
+                    if new_description and not new_tokens :
+                        # misplaced description
+                        parse_error(path, lineno, len(first_part) + 1,
+                                    "Misplaced description")
+                    elif new_tokens :
+                        # new statement
+                        pending_tokens = new_tokens
+                        pending_description = new_description
+                    else :
+                        # empty line or comment-only line
+                        pass
+            # end of file, process pending if any
+            flush()
+
+    except UnicodeDecodeError:
+        print(f"{path}: error: Unicode decode error", file=sys.stderr)
         sys.exit(1)
     except FileNotFoundError:
-        print(f"{path}: error: file not found", file=sys.stderr)
-        sys.exit(1)
-
-    for lineno, raw_line in enumerate(raw_lines, start=1):
-        line = raw_line.rstrip("\r\n")
-        code, description = strip_description(line)
-        tokens = tokenize(code)
-
-        # --- Blank line -----------------------------------------------------
-        if not tokens and not description:
-            finalize_pending()
-            continue
-
-        # --- Description-only line (bare ///) --------------------------------
-        if not tokens and description:
-            if pending_kind is not None:
-                # Continue the /// description of the current pending declaration.
-                pending_description = (pending_description + "\n" + description
-                                       if pending_description else description)
-            # A bare /// with no pending declaration is treated as a plain comment.
-            continue
-
-        # --- Declaration line (tokens present) ------------------------------
-        keyword = tokens[0]
-
-        # Unsupported preprocessor directives
-        if keyword in ("#if", "#endif"):
-            parse_error(path, lineno,
-                        f"'{keyword}' is not yet supported by this parser")
-
-        # 'for' loop
-        if keyword == "for":
-            parse_error(path, lineno,
-                        "'for' loops are not yet supported by this parser")
-
-        # 'param' declaration
-        if keyword == "param":
-            parse_error(path, lineno,
-                        "'param' declarations are not yet supported by this parser")
-
-        # 'init' declaration
-        if keyword == "init":
-            parse_error(path, lineno,
-                        "'init' declarations are not yet supported by this parser")
-
-        # 'block' declaration ------------------------------------------------
-        if keyword == "block":
-            if spec.name:
-                parse_error(path, lineno,
-                            "'block' declared more than once")
-            if len(tokens) < 2:
-                parse_error(path, lineno,
-                            "'block' declaration requires a name")
-            block_name = tokens[1]
-            if not block_name.isidentifier():
-                parse_error(path, lineno,
-                            f"invalid block name: {block_name!r}")
-            set_pending("block", {"name": block_name}, description)
-            continue
-
-        # 'pin' declaration --------------------------------------------------
-        if keyword == "pin":
-            if len(tokens) < 4:
-                parse_error(path, lineno,
-                            "'pin' declaration needs at least type, direction, "
-                            f"and field name; got: {code!r}")
-            type_str  = tokens[1]
-            dir_str   = tokens[2]
-            field_str = tokens[3]
-
-            if type_str not in PIN_TYPES:
-                parse_error(path, lineno,
-                            f"unknown pin type {type_str!r}; "
-                            f"expected one of {list(PIN_TYPES)}")
-            if dir_str not in PIN_DIRS:
-                parse_error(path, lineno,
-                            f"unknown pin direction {dir_str!r}; "
-                            f"expected 'input' or 'output'")
-
-            # For now we only support scalar pins (no brackets).
-            if "[" in field_str:
-                parse_error(path, lineno,
-                            "array pin dimensions are not yet supported; "
-                            f"field: {field_str!r}")
-            field_name = field_str
-
-            # Optional name template; defaults to field name for scalar pins.
-            emblocs_name = tokens[4] if len(tokens) >= 5 else field_name
-
-            set_pending("pin", {
-                "field_name":   field_name,
-                "emblocs_name": emblocs_name,
-                "pin_type":     PIN_TYPES[type_str],
-                "direction":    PIN_DIRS[dir_str],
-                "dims":         [],          # [] = scalar
-            }, description)
-            continue
-
-        # 'var' declaration --------------------------------------------------
-        if keyword == "var":
-            # var takes no /// description; finalize any pending item first.
-            finalize_pending()
-
-            rest = code[code.index("var") + 3:].strip()
-            if not rest.endswith(";"):
-                parse_error(path, lineno,
-                            f"'var' declaration must end with a semicolon: {code!r}")
-            c_decl = rest[:-1].strip()
-            if not c_decl:
-                parse_error(path, lineno, "'var' declaration has no C declaration")
-
-            # Extract the field name from the C declaration.
-            # Takes the last whitespace-separated token, strips leading '*'
-            # (pointer declarations) and trailing '[' (array declarations).
-            # Deliberately simple; will need revisiting for complex C types.
-            decl_tokens = c_decl.split()
-            if len(decl_tokens) < 2:
-                parse_error(path, lineno,
-                            f"cannot extract field name from 'var' declaration: "
-                            f"{c_decl!r}")
-            field_name = decl_tokens[-1].lstrip("*").split("[")[0]
-            if not field_name.isidentifier():
-                parse_error(path, lineno,
-                            f"could not parse field name from 'var' declaration: "
-                            f"{c_decl!r}")
-
-            spec.struct_members.append(VarDef(
-                field_name = field_name,
-                c_decl     = c_decl,
-            ))
-            continue
-
-        # 'function' declaration ---------------------------------------------
-        if keyword == "function":
-            if len(tokens) < 2:
-                parse_error(path, lineno,
-                            "'function' declaration requires a name")
-            func_name = tokens[1]
-            if not func_name.isidentifier():
-                parse_error(path, lineno,
-                            f"invalid function name: {func_name!r}")
-            set_pending("function", {"name": func_name}, description)
-            continue
-
-        # Unknown keyword ----------------------------------------------------
-        parse_error(path, lineno, f"unrecognized declaration: {tokens[0]!r}")
-
-    # End of file: finalize any trailing pending item
-    finalize_pending()
-
-    # Every .bloc file must have exactly one 'block' declaration.
-    if not spec.name:
-        print(f"{path}: error: no 'block' declaration found", file=sys.stderr)
+        print(f"{path}: error: File not found", file=sys.stderr)
         sys.exit(1)
 
     return spec

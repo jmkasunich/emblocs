@@ -1,0 +1,11 @@
+﻿// Saved in ANSI as a test
+block limit1 /// Clamps input to [min, max] range.
+/// Both bounds are inclusive. Input and output types are float.
+
+// pins declared in expected access order
+pin float  input   in   /// value to be clamped
+pin float  input   min  /// lower bound (inclusive)
+pin float  input   max  /// upper bound (inclusive)
+pin float  output  out  /// clamped result
+
+function update  /// clamp in to [min, max] and write result to out

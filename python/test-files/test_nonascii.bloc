@@ -1,0 +1,2 @@
+block nonascii
+pin float input in 😊 /// an input pin

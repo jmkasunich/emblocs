@@ -1,0 +1,21 @@
+block lexer_ok /// inline description on block statement
+/// second line of block description
+/// third line of block description
+
+// plain comment, should be ignored
+
+pin float input in /// inline description on pin
+/// second line of pin description
+
+pin float output out
+// plain comment after statement with no description
+
+var float accumulated; // var with plain comment
+
+function update /// inline description on function
+/// second line of function description
+
+function read
+
+function write /// description on one line
+
