@@ -1,0 +1,20 @@
+block integrator /// Integrates input over time.
+/// Optional enable and hold pins control integration behavior.
+
+param HAS_ENABLE  bool  default=0  /// if true, export the enable pin
+param HAS_HOLD    bool  default=0  /// if true, export the hold pin
+
+pin float  input   in      /// value to integrate
+pin float  output  out     /// integral of in over time
+
+#if HAS_ENABLE
+pin bool   input   enable  /// when false, resets out to zero and halts integration
+#endif
+
+#if HAS_HOLD
+pin bool   input   hold    /// when true, holds out constant without resetting
+#endif
+
+var float accumulated;     // integration state
+
+function update  /// periodic integration step
