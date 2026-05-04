@@ -218,7 +218,7 @@ language's identifier rules.
 ### 2.4 Keywords
 
 Reserved keywords: `block`, `param`, `pin`, `var`, `function`, `init`,
-`for`, `in`, `input`, `output`, `bool`, `u32`, `s32`, `float`, `raw`,
+`if`, `input`, `output`, `bool`, `u32`, `s32`, `float`, `raw`,
 `default`, `min`, `max`, `true`, `false`.
 
 ### 2.5 Whitespace
@@ -226,6 +226,51 @@ Reserved keywords: `block`, `param`, `pin`, `var`, `function`, `init`,
 Tokens are separated by spaces or tabs. Leading and trailing whitespace
 around tokens is ignored. Blank lines are ignored.  Whitespace in descriptions
 is preserved for formatting; see section 2.2 for details.
+
+Tokens are atomic: no internal whitespace is permitted within a token.
+This applies to array dimension specifiers (`fieldname[i=16]`), name
+templates (`ch{i:02d}_out`), and expressions (`(INPUTS>>i)&1`).
+
+### 2.6 Expressions
+
+Expressions may appear as the condition n `#if` directives, as array dimensions,
+in `if` clauses on `pin` declarations, and in pin name templates. Because tokens
+may not contain internal whitespace, expressions must be written without
+spaces.  An expression can be a simple numeric constant, a variable name, or
+an expression with multiple operands and operators.
+
+**Operands:**
+- Integer literals (decimal or hexadecimal with `0x` prefix)
+- Parameter names (evaluate to the parameter's integer value)
+- Index variables introduced by array dimension specifiers (see Section 3.3.3)
+
+**Operators**:
+
+| Operator | Meaning |
+|----------|---------|
+| `>>`, `<<` | Bitwise shift |
+| `&` | Bitwise AND |
+| `\|` | Bitwise OR |
+| `^` | Bitwise XOR |
+| `~` | Bitwise NOT (unary) |
+| `+` | Addition |
+| `-` | Subtraction |
+| `*` | Multiplication |
+| `/` | Division |
+| `%` | Modulo |
+| `-` | Negation (unary) |
+| `==`, `!=` | Equality |
+| `>`, `<` | Comparison |
+| `>=`, `<=` | Comparison |
+| `&&` | Logical AND |
+| `\|\|` | Logical OR |
+| `!` | Logical NOT (unary) |
+| `( )` | Grouping |
+
+Expressions use C-style operators such as && and ||, but the parser uses
+Python operator precedence which differs from C in some cases.  Block
+authors should use parentheses in expressions to make operator precedence
+unambiguous.
 
 ---
 
@@ -278,10 +323,30 @@ Examples:
 
 ### 3.3 Pin Declaration
 
-    pin <type> <direction> <field>[<dims>] [<name-template>]  /// description
+    pin <type> <direction> <field-spec> [<name-template>] [if <expr>]  /// description
+
 
 Declares a pin exported by the block. Pins appear in the generated instance
 struct as pointers to the appropriate signal type.
+
+The `#if`/`#endif` construct and the trailing `if` clause are both mechanisms
+for conditionality, but they control different things and serve different
+purposes:
+
+- **`#if`/`#endif`** controls **struct allocation**: whether the field exists
+  in the generated C struct at all. If the enclosing `#if` condition is false,
+  no struct member is emitted, no memory is allocated, and no C code may
+  reference that field name.
+- **Trailing `if <expr>`** controls **EMBLOCS visibility**: whether a pin
+  slot (or array slots) are exported as EMBLOCS pins visible to the system
+  developer. A field may exist in the struct while some or all of its slots
+  are not exported, in which case those slots are initialized to `NULL` in
+  `system.c` and must not be dereferenced at runtime.
+
+For scalar pins, allocating without exporting is wasteful; the `#if`/`#endif`
+form is the natural choice. For array pins, the two mechanisms compose
+naturally: the outer `#if` gates whether the array exists at all, and the
+trailing `if` gates which slots within it are exported.
 
 #### 3.3.1 Pin Type
 
@@ -298,21 +363,31 @@ In generated C code, pin fields use the corresponding typedef from
 
 One of: `input`, `output`.
 
-#### 3.3.3 Field Name and Array Dimensions
+#### 3.3.3 Field Spec
 
-The field name is a C identifier that becomes a struct member in the
-generated instance struct. It may be followed by array dimension specifiers:
+The field specification names the C struct member and optionally declares
+array dimensions.  Each dimension specifier is of the form:
+
+`[varname=size]`
+
+`size` determines the size of an array, and must be an expression
+that evaluates to an integer constant.
+`varname` is an identifier chosen by the block author; it must not be
+a reserved work or collide with a parameter name.  The index
+variable is iterated from 0 to `size`-1, and can be used in name
+templates to specify the emblocs name of each array member, and
+in a trailing `if` clause to determine which array members are
+exported to EMBLOCS.  The name scope is the active pin command.
+Names can be re-used in later pin commands, but a 2D array must have
+different names for the two dimensions.
+
+Resulting field spec forms:
 
 | Form | Meaning |
 |------|---------|
 | `name` | Scalar pin — one pointer |
-| `name[PARAM]` | 1D array — dimension is the value of `PARAM` |
-| `name[PARAM1][PARAM2]` | 2D array — dimensions are parameter values |
-| `name[]` | 1D append array — dimension determined by the block compiler as it counts conditional declarations (see Section 3.3.5) |
-
-Explicit dimensions (`[PARAM]`, `[PARAM1][PARAM2]`) produce `BL_PARAM`
-preprocessor symbols in `<block>.h` and literal integer values in the
-variant-specific header.
+| `name[i=size]` | 1D array — index variable is `i` |
+| `name[i=size1][j=size2]` | 2D array — index variables `i` and `j` both available |
 
 Field names are C identifiers and are subject to collision with platform SDK
 macros, standard library names, and the convenience macros defined in
@@ -325,7 +400,8 @@ workarounds.
 
 #### 3.3.4 Name Template
 
-The name template specifies the pin name or names as visible in the `.blocs`
+The name template specifies the the EMBLOCS-visible pin name or names as
+visible in the `.blocs` 
 system definition language. This is the string stored in JSON metadata and
 used by system authors in signal connection commands. The name template is
 decoupled from the field name, allowing the block author to choose C struct
@@ -337,12 +413,12 @@ name, the template may be omitted.
 For array pins, the template uses Python f-string format specifier syntax
 to generate indexed pin names:
 
-    {<PARAM>:<width>}
+    {<varname>:<width>}A
 
-where `<PARAM>` is a parameter name (or loop variable, inside a `for` loop)
-and `<width>` is the minimum number of digits, zero-padded. This maps
-explicitly to a parameter rather than positionally to an array dimension,
-allowing the name order to differ from the storage order.
+where `<varname>` is an index variable introduced by a `[varname=size]`
+dimension specifier, and `<width>` is the minimum number of digits,
+zero-padded. Multiple format sequences may appear in one template, one per
+array dimension.
 
 Examples:
 
@@ -350,36 +426,45 @@ Examples:
     pin float  input   in   /// input value to be processed
 
     // 1D array: ch00_out, ch01_out, ...
-    pin raw    output  out[NCHANNELS]  ch{NCHANNELS:2}_out  /// mux output
+    pin raw    output  out[c=NUM_CHAN]  ch{c:02d}_out  /// mux output
 
     // 2D array: storage order [NINPUTS][NCHANNELS] for cache efficiency,
     // but EMBLOCS name order is channel-first
-    pin raw    input   in[NINPUTS][NCHANNELS]  ch{NCHANNELS:2}_in{NINPUTS:1}  /// mux input
+    pin raw    input   in[i=NUM_INPUT][c=NUM_CHAN]  ch{c:02d}_in{i:1}  /// mux input
 
-#### 3.3.5 Append Array Syntax
+#### 3.3.5 Trailing Export Condition
 
-When a pin field is declared with `[]` (no dimension expression), it is an
-**append array**. Each time the block compiler encounters a declaration for
-that field name — including conditionally, inside `#if` blocks or `for` loops
-— it assigns the next sequential index and increments an internal counter.
-After all declarations are processed, the compiler knows the final array size
-and emits it in the generated struct.
+    pin <type> <direction> <field-spec> [<name-template>] if <expr>
 
-This is the correct form for irregular pin sets driven by bitmasks or other
-non-rectangular conditions, where the size is not directly expressible as a
-simple parameter value.
+The optional trailing `if <expr>` clause controls which pin slots are
+exported as EMBLOCS pins. The expression is evaluated for each slot using
+the current values of all in-scope index variables. Slots for which the
+expression evaluates to zero (false) are not exported: they receive no
+EMBLOCS-visible name, do not appear in the JSON metadata, and are initialized
+to `NULL` in `system.c`.
 
-Example — dense arrays of GPIO pins, sized by the number of set bits in
-each bitmask parameter:
+The expression is a single token (no internal whitespace) evaluated using
+the same expression language as `#if` directives (see Section 2.6).
 
-    for bit in 0..15 {
-        #if (INPUTS >> bit) & 1
-        pin bool  input   input_pins[]   pin_{bit:02d}_in   /// GPIO input value
-        #endif
-        #if (OUTPUTS >> bit) & 1
-        pin bool  output  output_pins[]  pin_{bit:02d}_out  /// GPIO output value
-        #endif
-    }
+For scalar pins, the trailing `if` clause makes the pin conditionally
+exported while still allocating the struct field. This is useful only in
+unusual cases; the `#if`/`#endif` form is generally preferable for scalar
+pins since it avoids allocating a field that will never be used.
+
+For array pins, the index variable iterates from 0 to `size`-1 and the
+trailing `if` clause is evaluated independently for each array member,
+enabling sparse export from a dense array. Unexported slots are set to
+`NULL` and must be checked before dereferencing in the block's C
+implementation.
+
+Examples:
+
+    // Scalar: conditional export (prefer #if/#endif for scalars unless the
+    // struct field is needed for other reasons)
+    pin bool  input  enable  if HAS_ENABLE  /// enable integration
+
+    // 1D array: export only slots where the corresponding bit in INPUT is set
+    pin bool  output  idr_pins[i=16]  pin_{i:2}_in  if (INPUTS>>i)&1  /// GPIO input
 
 #### 3.3.6 Pin Description
 
@@ -465,71 +550,35 @@ breaking change to the language.
     #endif
 
 Conditionally includes a block of declarations. The expression is evaluated
-by the block compiler against the current parameter values (and loop variable,
-if inside a `for` loop). If the expression is true (non-zero), the enclosed
-declarations are processed; otherwise they are skipped.
+by the block compiler against the current parameter values. If the expression
+is true (non-zero), the enclosed declarations are processed and the
+corresponding struct fields are emitted; otherwise they are skipped entirely.
 
-`#if`/`#endif` blocks may appear at the top level of the file or inside
-`for` loops. They may not be nested (this restriction may be relaxed in a
-future version).
+`#if`/`#endif` blocks may appear at the top level of the file or nested
+inside other `#if`/`#endif` blocks. Nesting is fully supported.
 
 The `#if` directive also appears verbatim in the generated `<block>.h`
-surrounding the corresponding struct fields, so the C compiler sees the same
-conditional structure using the `BL_` preprocessor symbols.
+surrounding the corresponding struct fields, using `BL_` preprocessor symbols,
+so the C compiler sees the same conditional structure during compilation.
 
-### 4.2 For Loops
+The expression must be a single token (no internal whitespace). See Section 2.6
+for the expression language.
 
-    for <var> in <low>..<high> {
-        ... declarations ...
-    }
+### 4.2 Choosing Between `#if`/`#endif` and Trailing `if`
 
-Iterates over an inclusive integer range, executing the enclosed declarations
-once for each value of `<var>` from `<low>` to `<high>` inclusive. Both
-`<low>` and `<high>` may be integer literals or parameter names.
+The two conditionality mechanisms serve distinct purposes and are not
+interchangeable:
 
-The loop variable `<var>` is available as an operand in expressions within
-the loop body, including `#if` expressions and name templates.
+| Mechanism | Controls | Use when |
+|-----------|----------|----------|
+| `#if`/`#endif` | Struct field allocation | Field should not exist if condition is false |
+| Trailing `if` | EMBLOCS pin visibility | Field should exist, but only some slots are exported |
 
-`for` loops may contain `pin`, `var`, `#if`/`#endif`, and nested `for`
-constructs. They may not contain `param` or `function` declarations.
-
-Example — generate pins for all set bits in a 16-bit bitmask:
-
-    for bit in 0..15 {
-        #if (INPUTS >> bit) & 1
-        pin bool  input  input_pins[]  pin_{bit:02d}_in  /// GPIO input value
-        #endif
-    }
-
-### 4.3 Expression Language
-
-Expressions appear in `#if` directives and in array dimension specifiers.
-The expression language is intentionally minimal:
-
-**Operands:**
-- Integer literals (decimal)
-- Parameter names (evaluate to the parameter's integer value)
-- Loop variables (evaluate to the current iteration value)
-
-**Operators** (C precedence and associativity):
-
-| Operator | Meaning |
-|----------|---------|
-| `>>`, `<<` | Bitwise shift |
-| `&` | Bitwise AND |
-| `\|` | Bitwise OR |
-| `~` | Bitwise NOT (unary) |
-| `==`, `!=` | Equality |
-| `&&` | Logical AND |
-| `\|\|` | Logical OR |
-| `!` | Logical NOT (unary) |
-| `( )` | Grouping |
-
-Arithmetic operators (`+`, `-`, `*`, `/`) are not included in the initial
-version. This restriction may be relaxed if a compelling use case arises.
-For now, checks requiring arithmetic (e.g., bounding the sum of multiple
-parameters) are the block author's responsibility and should be implemented
-as `_Static_assert` in the `.c` file.
+For most conditional scalar pins, `#if`/`#endif` is the right choice. For
+array pins with bitmask-driven sparse export, the trailing `if` on the `pin`
+statement is the right choice. The two may be combined: an outer `#if` gates
+whether the array is allocated at all, and a trailing `if` gates which slots
+within it are exported.
 
 ---
 
@@ -772,8 +821,24 @@ readability and to allow future changes to the underlying representation.
 
 The expression language currently omits arithmetic operators. If a use case
 arises requiring expressions like `RED_BITS + GREEN_BITS + BLUE_BITS <= 32`,
-the expression language will need to be extended.
+the expression language will need to be extended.  UPDATE: not implemented
+yet, but the intent is for the expression parser to handle basic math operations.
 
+### 6.7 NULL Handling for Unexported Array Slots
+
+When a `pin` declaration with a trailing `if` clause produces unexported
+slots, those slots are initialized to `NULL` in `system.c`. The block author
+is responsible for checking for `NULL` before dereferencing. Whether the
+framework should provide a helper macro or assertion for this check is
+deferred.
+
+### 6.8 Division by Zero in Expressions
+
+The expression evaluator does not explicitly detect division by zero. A zero
+divisor currently produces a Python `ZeroDivisionError` with a traceback
+rather than a clean compiler error message referencing the source line. A
+future improvement would catch this exception and report it as a named
+compiler error with the `.bloc` file name and physical line number.
 ---
 
 ## 7. Examples
@@ -961,9 +1026,9 @@ void BL_MANGLE(update)(void *instance_data, uint32_t periodns) {
 ### 7.3 mux — Integer Variant Parameters and Array Pins
 
 A multiplexor block with 2D array pins driven by integer parameters.
-Demonstrates `param` with `min`/`max`, array pin declarations, name templates
-with explicit parameter binding, and cache-friendly storage ordering that
-differs from name ordering.
+Demonstrates `param` with `min`/`max`, array pin declarations with index
+variables, name templates, and cache-friendly storage ordering that differs
+from name ordering.
 
 **`mux.bloc`:**
 
@@ -971,17 +1036,22 @@ differs from name ordering.
 block mux /// N-channel M-to-1 multiplexor.
           /// All channels share a single select input.
 
-param NUM_CHAN  u32  default=1  min=1  max=16  /// number of independent channels
-param NUM_INPUT u32  default=2  min=2  max=10  /// number of inputs per channel
+param NUM_CHAN   u32  default=1  min=1  max=16  /// number of independent channels
+param NUM_INPUT  u32  default=2  min=2  max=10  /// number of inputs per channel
 
 // storage order [NUM_INPUT][NUM_CHAN] for cache efficiency:
 // all channels for one select value are contiguous in memory
-pin raw  input   in[NUM_INPUT][NUM_CHAN]  ch{NUM_CHAN:2}_in{NUM_INPUT:1}  /// mux input
-pin raw  output  out[NUM_CHAN]          ch{NUM_CHAN:2}_out            /// mux output
-pin u32  input   select        /// selects active input (0-based)
+pin raw  input   in[i=NUM_INPUT][c=NUM_CHAN]  ch{c:2}_in{i:1}  /// mux input
+pin raw  output  out[c=NUM_CHAN]              ch{c:2}_out      /// mux output
+pin u32  input   select                                        /// selects active input (0-based)
 
 function update  /// copy in[select][ch] to out[ch] for all channels
 ```
+
+The name template uses index variable `c` (channel) for the leading part of
+the pin name and `i` (input number) for the trailing part, regardless of
+their order in the storage layout. `ch01_in2` refers to channel 1, input 2,
+stored at `self->in[2][1]`.
 
 **Generated `mux.h`:**
 
@@ -1038,48 +1108,94 @@ void BL_MANGLE(update)(void *instance_data, uint32_t periodns) {
 
 ### 7.4 gpio — Bitmask Parameters and Append Arrays
 
-A GPIO port driver with pins conditionally exported based on bitmask
-parameters. Demonstrates `for` loops, `#if` inside loops, append array
-syntax, `var` declarations, and multiple functions.
+A GPIO port driver that exports EMBLOCS pins only for hardware pins specified
+in bitmask parameters. Demonstrates `#if`/`#endif` for conditional array
+allocation, the trailing `if` clause for sparse slot export, index variables
+in name templates, `var` declarations, and multiple functions.
 
-**`gpio.bloc`:**
+The struct always contains fixed-size arrays (one slot per possible hardware
+pin). Slots corresponding to hardware pins not included in a bitmask are
+initialized to `NULL` in `system.c` and skipped at runtime. The block
+author chooses whether to use a bitmask-walking loop or a NULL-check loop
+in the C implementation; both are correct.
+
+**`stm32_gpio.bloc`:**
 
 ```
 block stm32_gpio /// STM32 GPIO port driver with per-pin EMBLOCS interface.
-                 /// Each bit in the bitmask parameters exports one pin.
+                 /// Each bit set in a bitmask parameter exports one EMBLOCS pin.
+                 /// Array slots for unselected pins are NULL and must not be
+                 /// dereferenced.
 
-param INPUTS   u32  default=0x0000  /// bitmask: bits to export as input pins
-param OUTPUTS  u32  default=0x0000  /// bitmask: bits to export as output pins
-param ENABLES  u32  default=0x0000  /// bitmask: bits to export as output-enable pins
+param INPUTS   u32  default=0x0000  /// bitmask: bits selecting pins to export as inputs
+param OUTPUTS  u32  default=0x0000  /// bitmask: bits selecting pins to export as outputs
+param ENABLES  u32  default=0x0000  /// bitmask: bits selecting pins to export as output-enables
 
 var GPIO_TypeDef *base_addr;    // hardware register base address
-var uint16_t input_bitmask;     // runtime copy of INPUTS param
-var uint16_t output_bitmask;    // runtime copy of OUTPUTS param
-var uint16_t enable_bitmask;    // runtime copy of ENABLES param
 
-// input pins grouped together in struct
-for bit in 0..15 {
-    #if (INPUTS >> bit) & 1
-    pin bool  input   input_pins[]   pin_{bit:02d}_in   /// GPIO bit input value
-    #endif
-}
+// Each array is conditionally allocated; if no pins of a given direction are
+// needed, the array is omitted from the struct entirely.
+// Within an allocated array, only selected slots are exported as EMBLOCS pins.
 
-// output pins grouped together in struct
-for bit in 0..15 {
-    #if (OUTPUTS >> bit) & 1
-    pin bool  output  output_pins[]  pin_{bit:02d}_out  /// GPIO bit output value
-    #endif
-}
+#if INPUTS!=0
+pin bool  output  idr_pins[i=16]  pin_{i:02d}_in   if (INPUTS>>i)&1   /// GPIO input value
+#endif
 
-// output enable pins grouped together in struct
-for bit in 0..15 {
-    #if (ENABLES >> bit) & 1
-    pin bool  output  enable_pins[]  pin_{bit:02d}_oe   /// GPIO bit output enable
-    #endif
-}
+#if OUTPUTS!=0
+pin bool  input   odr_pins[i=16]  pin_{i:02d}_out  if (OUTPUTS>>i)&1  /// GPIO output value
+#endif
 
-function read   /// read IDR and update input pins; call early in thread
+#if ENABLES!=0
+pin bool  input   oe_pins[i=16]   pin_{i:02d}_oe   if (ENABLES>>i)&1  /// GPIO output enable
+#endif
+
+function read   /// sample IDR and update input pins; call early in thread
 function write  /// read output and enable pins, drive ODR/BSRR; call late in thread
+```
+
+**Generated `stm32_gpio.h` (excerpt):**
+
+```c
+#ifndef BL_INPUTS
+#define BL_INPUTS (0)
+#endif
+#ifndef BL_OUTPUTS
+#define BL_OUTPUTS (0)
+#endif
+#ifndef BL_ENABLES
+#define BL_ENABLES (0)
+#endif
+
+typedef struct {
+    GPIO_TypeDef *base_addr;
+#if BL_INPUTS != 0
+    pin_bool_t *idr_pins[16];
+#endif
+#if BL_OUTPUTS != 0
+    pin_bool_t *odr_pins[16];
+#endif
+#if BL_ENABLES != 0
+    pin_bool_t *oe_pins[16];
+#endif
+} BL_MANGLE(t);
+```
+
+**`stm32_gpio.c` implementation (read function):**
+
+```c
+void BL_MANGLE(read)(void *instance_data, uint32_t periodns) {
+    self_t *self = (self_t *)instance_data;
+    (void)periodns;
+
+#if BL_INPUTS != 0
+    uint32_t idr = self->base_addr->IDR;
+    for (int i = 0; i < 16; i++) {
+        if (self->idr_pins[i] != NULL) {
+            *self->idr_pins[i] = (idr >> i) & 1;
+        }
+    }
+#endif
+}
 ```
 
 ---
