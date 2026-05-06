@@ -11,9 +11,10 @@
 #   - multi-token name templates are not yet supported
 
 import sys
-from emblocs import BlockSpec, PinSpec, VarDef, FunctDef, PinType, PinDir
+from emblocs import BlockSpec, Statement, PinSpec, VarDef, FunctDef, PinType, PinDir
 import re
 from collections import namedtuple
+from dataclasses import dataclass, field
 from enum import Enum, auto
 
 Token = namedtuple("Token", ["text", "line", "column"])
@@ -126,6 +127,35 @@ def tokenize_line(line: str, line_no: int) -> list[Token]:
         for m in _TOKEN_RE.finditer(line)
     ]
 
+# ---------------------------------------------------------------------------
+# Parser state
+# ---------------------------------------------------------------------------
+
+class Section(Enum):
+    BLOCK  = auto()
+    PARAMS = auto()
+    BODY   = auto()
+
+_ALLOWED = {
+    Section.BLOCK:  {"block"},
+    Section.PARAMS: {"param"},
+    Section.BODY:   {"pin", "var", "function", "#if", "#endif"},
+}
+
+@dataclass
+class ParseState:
+    """
+    Mutable state threaded through parse_statement and its children.
+
+    Fields:
+        section  -- current section of .bloc file; controls which statements
+                    are legal at any given point in the file
+        if_stack -- stack of #if condition expression strings currently
+                    active; innermost condition is last in the list.
+                    Empty outside any #if block.
+    """
+    section:  Section   = Section.BLOCK
+    if_stack: list[str] = field(default_factory=list)
 
 # ---------------------------------------------------------------------------
 # Per-keyword parse functions
@@ -145,11 +175,11 @@ def parse_block(spec: BlockSpec,
     spec.name        = name_tok.text
     spec.description = description
 
-
-def parse_pin(spec: BlockSpec,
-              tokens: list[Token], description: str) -> None:
+def parse_pin(tokens: list[Token], description: str) -> PinSpec | None:
     """Handle the 'pin' declaration."""
-    return
+    report(Severity.INFO, "parse_pin not yet implemented", token=tokens[0])
+    return None
+
     keyword   = tokens[0]
     if len(tokens) < 4:
         parse_error_tok(path, keyword,
@@ -184,10 +214,11 @@ def parse_pin(spec: BlockSpec,
     ))
 
 
-def parse_var(spec: BlockSpec,
-              tokens: list[Token], description: str) -> None:
+def parse_var(tokens: list[Token], description: str) -> VarDef | None:
     """Handle the 'var' declaration."""
-    return
+    report(Severity.INFO, "parse_var not yet implemented", token=tokens[0])
+    return None
+
     keyword          = tokens[0]
     c_decl_with_semi = " ".join(t.text for t in tokens[1:])
     if not c_decl_with_semi.endswith(";"):
@@ -214,10 +245,11 @@ def parse_var(spec: BlockSpec,
     ))
 
 
-def parse_function(spec: BlockSpec,
-                   tokens: list[Token], description: str) -> None:
+def parse_function(tokens: list[Token], description: str) -> FunctDef | None:
     """Handle the 'function' declaration."""
-    return
+    report(Severity.INFO, "parse_function not yet implemented", token=tokens[0])
+    return None
+
     keyword = tokens[0]
     if len(tokens) < 2:
         parse_error_tok(path, keyword,
@@ -236,31 +268,75 @@ def parse_function(spec: BlockSpec,
 # Statement dispatcher
 # ---------------------------------------------------------------------------
 
+def _wrap(spec: BlockSpec, state: ParseState, obj) -> None:
+    """Wrap a parsed object in a Statement and append to spec."""
+    if obj is not None:
+        spec.statements.append(
+            Statement(conditions=list(state.if_stack), statement=obj))
+        
 def parse_statement_debug(spec, tokens, description):
+    """ Temporary testing replacement for parse_statement();
+        simply prints the tokens and description, then returns."""
     print(f"STATEMENT: {[t.text for t in tokens]}")
     if description:
         print(f"  DESCRIPTION: {description!r}")
 
-def parse_statement(spec: BlockSpec,
+def parse_statement(spec: BlockSpec, state: ParseState,
                     tokens: list[Token], description: str) -> None:
     """
     Dispatch a complete statement to the appropriate per-keyword handler.
 
     tokens is guaranteed non-empty.  description may be "".
+
+    Section transitions:
+        BLOCK  -> PARAMS  on any _ALLOWED[Section.PARAMS] keyword
+        BLOCK  -> BODY    on any _ALLOWED[Section.BODY] keyword (no params in file)
+        PARAMS -> BODY    on any _ALLOWED[Section.BODY] keyword
     """
     keyword = tokens[0]
 
+    # Step 1: section transitions
+    if keyword.text in _ALLOWED[Section.PARAMS]:
+        if state.section == Section.BLOCK:
+            state.section = Section.PARAMS
+
+    if keyword.text in _ALLOWED[Section.BODY]:
+        if state.section in ( Section.BLOCK, Section.PARAMS ):
+            state.section = Section.BODY
+
+    # Step 2: validate keyword is allowed in current section
+    if keyword.text not in _ALLOWED[state.section]:
+        report(Severity.ERROR,
+               f"unexpected keyword {keyword.text!r} in current section",
+               token=keyword)
+        return
+
+    # Step 3: dispatch
     if keyword.text == "block":
         parse_block(spec, tokens, description)
     elif keyword.text == "pin":
-        parse_pin(spec, tokens, description)
+        _wrap(spec, state, parse_pin(tokens, description))
     elif keyword.text == "var":
-        parse_var(spec, tokens, description)
+        _wrap(spec, state, parse_var(tokens, description))
     elif keyword.text == "function":
-        parse_function(spec, tokens, description)
+        _wrap(spec, state, parse_function(tokens, description))
+
+    elif keyword.text == "#if":
+        if len(tokens) < 2:
+            report(Severity.ERROR, "'#if' requires an expression", token=keyword)
+        else:
+            state.if_stack.append(tokens[1].text)
+
+    elif keyword.text == "#endif":
+        if len(tokens) > 1:
+            report(Severity.WARNING, "'#endif' takes no arguments", token=tokens[1])
+        if not state.if_stack:
+            report(Severity.ERROR, "'#endif' without matching '#if'", token=keyword)
+        else:
+            state.if_stack.pop()
 
     # Unsupported but recognized keywords
-    elif keyword.text in ("param", "init", "#if", "#endif"):
+    elif keyword.text in ("param", "#if", "#endif"):
         report(Severity.WARNING, f"'{keyword.text}' not yet supported", token=keyword)
 
     else:
@@ -290,7 +366,7 @@ def parse_bloc(path: str) -> BlockSpec:
     spec = BlockSpec(source_path=path)
     pending_tokens: list[Token] = []
     pending_description: str = ""
-
+    state = ParseState()
     def flush():
         """
         If there are pending tokens, call parse_statement(),
@@ -298,7 +374,7 @@ def parse_bloc(path: str) -> BlockSpec:
         """
         nonlocal pending_tokens, pending_description
         if pending_tokens:
-            parse_statement(spec, pending_tokens, pending_description)
+            parse_statement(spec, state, pending_tokens, pending_description)
         pending_tokens      = []
         pending_description = ""
 
@@ -335,6 +411,10 @@ def parse_bloc(path: str) -> BlockSpec:
                         pass
             # end of file, process pending if any
             flush()
+            if state.if_stack:
+                report(Severity.ERROR,
+                       f"end-of-file with {len(state.if_stack)} "
+                       f"unterminated '#if' statements")
 
     except UnicodeDecodeError:
         report(Severity.FATAL, "Unicode decode error")
