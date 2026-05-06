@@ -14,22 +14,72 @@ import sys
 from emblocs import BlockSpec, PinSpec, VarDef, FunctDef, PinType, PinDir
 import re
 from collections import namedtuple
+from enum import Enum, auto
 
 Token = namedtuple("Token", ["text", "line", "column"])
 
 # ---------------------------------------------------------------------------
-# Error reporting
+# Diagnostic reporting
 # ---------------------------------------------------------------------------
 
-def parse_error(path: str, lineno: int, column: int, message: str) -> None:
-    """Print an error message with file and line context, then exit."""
-    print(f"{path}:{lineno}:{column} error: {message}", file=sys.stderr)
-    sys.exit(1)
+class Severity(Enum):
+    FATAL   = auto()
+    ERROR   = auto()
+    WARNING = auto()
+    INFO    = auto()
 
+_SEVERITY_LABEL = {
+    Severity.FATAL:   "fatal error",
+    Severity.ERROR:   "error",
+    Severity.WARNING: "warning",
+    Severity.INFO:    "info",
+}
 
-def parse_error_tok(path: str, token: Token, message: str) -> None:
-    """Print an error message using Token location"""
-    parse_error(path, token.line, token.column, message)
+# Module-level state: current file path and diagnostic counters.
+# Reset at the start of each parse_bloc() call.
+_path:          str = ""
+_error_count:   int = 0
+_warning_count: int = 0
+_info_count:    int = 0
+
+def report(severity: Severity, message: str,
+           lineno: int = None, column: int = None,
+           token: Token = None) -> None:
+    """
+    Print a diagnostic message and update counters.
+
+    If token is supplied, lineno and column are taken from it.
+    If neither token nor lineno/column are supplied, the location
+    fields are omitted from the output.
+
+    FATAL raises SystemExit after printing.  All others return normally.
+    """
+    global _error_count, _warning_count, _info_count
+
+    if token is not None:
+        lineno = token.line
+        column = token.column
+
+    label = _SEVERITY_LABEL[severity]
+
+    if lineno is not None and column is not None:
+        location = f"{_path}:{lineno}:{column}: "
+    elif lineno is not None:
+        location = f"{_path}:{lineno}: "
+    else:
+        location = f"{_path}: "
+
+    print(f"{location}{label}: {message}", file=sys.stderr)
+
+    if severity == Severity.ERROR:
+        _error_count += 1
+    elif severity == Severity.WARNING:
+        _warning_count += 1
+    elif severity == Severity.INFO:
+        _info_count += 1
+
+    if severity == Severity.FATAL:
+        sys.exit(1)
 
 # ---------------------------------------------------------------------------
 # Keyword tables
@@ -81,25 +131,25 @@ def tokenize_line(line: str, line_no: int) -> list[Token]:
 # Per-keyword parse functions
 # ---------------------------------------------------------------------------
 
-def parse_block(path: str, spec: BlockSpec,
+def parse_block(spec: BlockSpec,
                 tokens: list[Token], description: str) -> None:
     """Handle the 'block' declaration."""
     keyword = tokens[0]
     if spec.name:
-        parse_error_tok(path, keyword, "'block' declared more than once")
+        report(Severity.ERROR, "'block' declared more than once", token=keyword)
     if len(tokens) < 2:
-        parse_error_tok(path, keyword, "'block' declaration requires a name")
+        report(Severity.FATAL, "'block' declaration requires a name", token=keyword)
     name_tok = tokens[1]
     if not name_tok.text.isidentifier():
-        parse_error_tok(path, name_tok,
-                        f"invalid block name: {name_tok.text!r}")
+        report(Severity.ERROR, f"invalid block name: {name_tok.text!r}", token=name_tok)
     spec.name        = name_tok.text
     spec.description = description
 
 
-def parse_pin(path: str, spec: BlockSpec,
+def parse_pin(spec: BlockSpec,
               tokens: list[Token], description: str) -> None:
     """Handle the 'pin' declaration."""
+    return
     keyword   = tokens[0]
     if len(tokens) < 4:
         parse_error_tok(path, keyword,
@@ -134,9 +184,10 @@ def parse_pin(path: str, spec: BlockSpec,
     ))
 
 
-def parse_var(path: str, spec: BlockSpec,
+def parse_var(spec: BlockSpec,
               tokens: list[Token], description: str) -> None:
     """Handle the 'var' declaration."""
+    return
     keyword          = tokens[0]
     c_decl_with_semi = " ".join(t.text for t in tokens[1:])
     if not c_decl_with_semi.endswith(";"):
@@ -163,9 +214,10 @@ def parse_var(path: str, spec: BlockSpec,
     ))
 
 
-def parse_function(path: str, spec: BlockSpec,
+def parse_function(spec: BlockSpec,
                    tokens: list[Token], description: str) -> None:
     """Handle the 'function' declaration."""
+    return
     keyword = tokens[0]
     if len(tokens) < 2:
         parse_error_tok(path, keyword,
@@ -184,12 +236,12 @@ def parse_function(path: str, spec: BlockSpec,
 # Statement dispatcher
 # ---------------------------------------------------------------------------
 
-def parse_statement_debug(path, spec, tokens, description):
+def parse_statement_debug(spec, tokens, description):
     print(f"STATEMENT: {[t.text for t in tokens]}")
     if description:
         print(f"  DESCRIPTION: {description!r}")
 
-def parse_statement(path: str, spec: BlockSpec,
+def parse_statement(spec: BlockSpec,
                     tokens: list[Token], description: str) -> None:
     """
     Dispatch a complete statement to the appropriate per-keyword handler.
@@ -199,31 +251,20 @@ def parse_statement(path: str, spec: BlockSpec,
     keyword = tokens[0]
 
     if keyword.text == "block":
-        parse_block(path, spec, tokens, description)
+        parse_block(spec, tokens, description)
     elif keyword.text == "pin":
-        parse_pin(path, spec, tokens, description)
+        parse_pin(spec, tokens, description)
     elif keyword.text == "var":
-        parse_var(path, spec, tokens, description)
+        parse_var(spec, tokens, description)
     elif keyword.text == "function":
-        parse_function(path, spec, tokens, description)
+        parse_function(spec, tokens, description)
 
     # Unsupported but recognized keywords
-    elif keyword.text == "param":
-        parse_error_tok(path, keyword,
-                        "'param' declarations are not yet supported")
-    elif keyword.text == "init":
-        parse_error_tok(path, keyword,
-                        "'init' declarations are not yet supported")
-    elif keyword.text in ("#if", "#endif"):
-        parse_error_tok(path, keyword,
-                        f"'{keyword.text}' is not yet supported")
-    elif keyword.text == "for":
-        parse_error_tok(path, keyword,
-                        "'for' loops are not yet supported")
+    elif keyword.text in ("param", "init", "#if", "#endif"):
+        report(Severity.WARNING, f"'{keyword.text}' not yet supported", token=keyword)
 
     else:
-        parse_error_tok(path, keyword,
-                        f"unrecognized declaration: {keyword.text!r}")
+        report(Severity.ERROR, f"unrecognized token: {keyword.text!r}", token=keyword)
 
 
 # ---------------------------------------------------------------------------
@@ -240,6 +281,12 @@ def parse_bloc(path: str) -> BlockSpec:
 
     Raises SystemExit (via parse_error) on any syntax or semantic error.
     """
+    global _path, _error_count, _warning_count, _info_count
+    _path = path
+    _error_count = 0
+    _warning_count = 0
+    _info_count = 0
+
     spec = BlockSpec(source_path=path)
     pending_tokens: list[Token] = []
     pending_description: str = ""
@@ -251,7 +298,7 @@ def parse_bloc(path: str) -> BlockSpec:
         """
         nonlocal pending_tokens, pending_description
         if pending_tokens:
-            parse_statement(path, spec, pending_tokens, pending_description)
+            parse_statement(spec, pending_tokens, pending_description)
         pending_tokens      = []
         pending_description = ""
 
@@ -259,9 +306,7 @@ def parse_bloc(path: str) -> BlockSpec:
         with open(path, "r", encoding="utf-8") as f:
             for lineno, line in enumerate(f, start=1):
                 if not line.isascii():
-                    parse_error(path, lineno, 1,
-                                "Non-ASCII character found")
-
+                    report(Severity.ERROR, "Non-ASCII character found", lineno=lineno)
                 # split token section from comment/description
                 first_part, sep, last_part = line.partition("//")
                 new_tokens = tokenize_line(first_part, lineno)
@@ -280,8 +325,7 @@ def parse_bloc(path: str) -> BlockSpec:
                     flush()
                     if new_description and not new_tokens :
                         # misplaced description
-                        parse_error(path, lineno, len(first_part) + 1,
-                                    "Misplaced description")
+                        report(Severity.ERROR, "Misplaced description", lineno=lineno, column=len(first_part))
                     elif new_tokens :
                         # new statement
                         pending_tokens = new_tokens
@@ -293,12 +337,12 @@ def parse_bloc(path: str) -> BlockSpec:
             flush()
 
     except UnicodeDecodeError:
-        print(f"{path}: error: Unicode decode error", file=sys.stderr)
-        sys.exit(1)
+        report(Severity.FATAL, "Unicode decode error")
     except FileNotFoundError:
-        print(f"{path}: error: File not found", file=sys.stderr)
-        sys.exit(1)
+        report(Severity.FATAL,"File not found")
 
+    print(f"{_path}: {_error_count} error(s), "
+          f"{_warning_count} warning(s), {_info_count} info(s)", file=sys.stderr)
     return spec
 
 

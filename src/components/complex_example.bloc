@@ -1,4 +1,4 @@
-complex_example /// test case for a variety of .bloc constructs
+block complex_example /// test case for a variety of .bloc constructs
 /// not a real component
 
 param HAS_ENABLE  bool  default=0  /// if true, export the enable pin
