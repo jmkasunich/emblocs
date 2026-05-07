@@ -146,3 +146,34 @@ clear
 1+1.5       float  2.5
 2*1.5       float  3.0
 
+# ---------------------------------------------------------------------------
+# Error cases - these should raise ExpressionError
+# ---------------------------------------------------------------------------
+clear
+
+# syntax error - malformed expression
+1+           int    error:syntax error
+
+# float constant in int mode
+1.5          int    error:not valid in int
+
+# unknown variable
+unknown_var  int    error:unknown variable
+
+# unsupported operator: floor division
+1//2         int    error:not supported
+
+# bitwise operator not supported in float mode
+1&2          float  error:not supported
+
+# division by zero
+1/0          int    error:division by zero
+
+# chained comparison
+1<2<3        int    error:chained
+
+# unsupported construct: function call
+len(x)       int    error:unsupported
+
+# unsupported construct: list literal
+[1,2,3]      int    error:unsupported

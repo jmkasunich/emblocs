@@ -298,29 +298,57 @@ if __name__ == "__main__":
                     error_count += 1
                     continue
 
-                # parse expected result
-                try:
-                    expected = (int(expected_str, 0) if mode_str == "int"
-                                else float(expected_str))
-                except ValueError:
-                    print(f"{test_path}:{lineno}: error: "
-                          f"invalid expected value {expected_str!r}")
-                    error_count += 1
-                    continue
+                expect_error   = (expected_str == "error" or
+                                  expected_str.startswith("error:"))
+                expect_fragment = (expected_str[6:].strip()
+                                   if expected_str.startswith("error:")
+                                   else "")
+
+                # parse expected result (skip for error cases)
+                expected = None
+                if not expect_error:
+                    try:
+                        expected = (int(expected_str, 0) if mode_str == "int"
+                                    else float(expected_str))
+                    except ValueError:
+                        print(f"{test_path}:{lineno}: error: "
+                              f"invalid expected value {expected_str!r}")
+                        error_count += 1
+                        continue
 
                 # evaluate and compare
                 try:
                     result = evaluate(expr_str, variables, mode_str)
-                    if result == expected:
+                    if expect_error:
+                        print(f"{test_path}:{lineno}: FAIL: "
+                              f"{expr_str!r} returned {result!r}, "
+                              f"expected ExpressionError")
+                        fail_count += 1
+                    elif result == expected:
+                        print(f"{test_path}:{lineno}: PASS: "
+                              f"{expr_str!r} = {result!r}")
                         pass_count += 1
                     else:
                         print(f"{test_path}:{lineno}: FAIL: "
-                              f"{expr_str!r} = {result!r}, expected {expected!r}")
+                              f"{expr_str!r} = {result!r}, "
+                              f"expected {expected!r}")
                         fail_count += 1
                 except ExpressionError as e:
-                    print(f"{test_path}:{lineno}: FAIL: "
-                          f"{expr_str!r} raised ExpressionError: {e}")
-                    fail_count += 1
+                    if expect_error:
+                        if expect_fragment and expect_fragment not in str(e):
+                            print(f"{test_path}:{lineno}: FAIL: "
+                                  f"{expr_str!r} raised ExpressionError "
+                                  f"but message {str(e)!r} does not contain "
+                                  f"{expect_fragment!r}")
+                            fail_count += 1
+                        else:
+                            print(f"{test_path}:{lineno}: PASS: "
+                                  f"{expr_str!r} raised '{e}'")
+                            pass_count += 1
+                    else:
+                        print(f"{test_path}:{lineno}: FAIL: "
+                              f"{expr_str!r} raised ExpressionError: {e}")
+                        fail_count += 1
 
         total = pass_count + fail_count
         print(f"\n{test_path}: {total} tests: "
