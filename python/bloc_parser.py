@@ -11,11 +11,12 @@
 #   - multi-token name templates are not yet supported
 
 import sys
-from emblocs import BlockSpec, Statement, PinSpec, VarDef, FunctDef, PinType, PinDir
+from emblocs import BlockSpec, ParamSpec, Statement, PinSpec, VarDef, FunctDef, PinType, PinDir
 import re
 from collections import namedtuple
 from dataclasses import dataclass, field
 from enum import Enum, auto
+from expressions import evaluate, ExpressionError
 
 Token = namedtuple("Token", ["text", "line", "column"])
 
@@ -99,6 +100,7 @@ PIN_DIRS = {
     "output": PinDir.OUTPUT,
 }
 
+U32_MAX = 0xFFFFFFFF
 
 # ---------------------------------------------------------------------------
 # Line-level helpers
@@ -174,6 +176,136 @@ def parse_block(spec: BlockSpec,
         report(Severity.ERROR, f"invalid block name: {name_tok.text!r}", token=name_tok)
     spec.name        = name_tok.text
     spec.description = description
+
+def parse_param(spec: BlockSpec, tokens: list[Token], description: str) -> None:
+    """
+    Handle the 'param' declaration.
+    Syntax: param <NAME> <type> default=<value> [min=<value>] [max=<value>]
+    Appends a ParamSpec to spec.params, or reports errors and returns.
+    """
+    keyword = tokens[0]
+
+    if len(tokens) < 4:
+        report(Severity.ERROR,
+               "'param' requires name, type, and default=value",
+               token=keyword)
+        return
+
+    name_tok = tokens[1]
+    type_tok = tokens[2]
+
+    if not name_tok.text.isidentifier():
+        report(Severity.ERROR,
+               f"invalid parameter name: {name_tok.text!r}",
+               token=name_tok)
+        return
+
+    if any(p.name == name_tok.text for p in spec.params):
+        report(Severity.ERROR,
+               f"duplicate parameter name: {name_tok.text!r}",
+               token=name_tok)
+        return
+
+    if type_tok.text not in ("bool", "u32"):
+        report(Severity.ERROR,
+               f"invalid parameter type {type_tok.text!r}; "
+               f"expected 'bool' or 'u32'",
+               token=type_tok)
+        return
+
+    param_type = type_tok.text
+
+    # parse key=value tokens for default, min, max
+    default = None
+    min_val = None
+    max_val = None
+
+    for tok in tokens[3:]:
+        key, sep, val_str = tok.text.partition("=")
+        if key not in ("default", "min", "max") or sep != "=":
+            report(Severity.ERROR,
+                   f"unexpected token {tok.text!r}; "
+                   f"expected 'default=', 'min=', or 'max='",
+                   token=tok)
+            return
+        if not val_str:
+            report(Severity.ERROR,
+                   f"missing value after '{key}='",
+                   token=tok)
+            return
+
+        try:
+            val = evaluate(val_str)
+        except ExpressionError as e:
+            report(Severity.ERROR, str(e), token=tok)
+            return
+
+        if param_type == "u32":
+            if val < 0 or val > U32_MAX:
+                report(Severity.ERROR,
+                       f"{key} value {val} is out of range for u32 "
+                       f"[0, {U32_MAX}]",
+                       token=tok)
+                return
+        elif param_type == "bool":
+            if val not in (0, 1):
+                report(Severity.WARNING,
+                       f"{key} value {val} is not 0 or 1 for bool parameter",
+                       token=tok)
+
+        if key == "default" and default is None:
+            default = val
+        elif key == "min" and min_val is None:
+            min_val = val
+        elif key == "max" and max_val is None:
+            max_val = val
+        else:
+            report(Severity.ERROR, f"duplicate '{key}=' token", token=tok)
+            return
+
+    if default is None:
+        report(Severity.ERROR,
+               f"'param' requires a 'default=' value",
+               lineno=keyword.line)
+        return
+
+    if min_val is not None and param_type == "bool":
+        report(Severity.WARNING,
+               "'min' is not meaningful for bool parameters",
+               lineno=keyword.line)
+    if max_val is not None and param_type == "bool":
+        report(Severity.WARNING,
+               "'max' is not meaningful for bool parameters",
+               lineno=keyword.line)
+
+    # cross-validate min, max, default
+    if min_val is not None and max_val is not None:
+        if min_val > max_val:
+            report(Severity.ERROR,
+                   f"min ({min_val}) is greater than max ({max_val})",
+                   lineno=keyword.line)
+            return
+
+    if min_val is not None and default < min_val:
+        report(Severity.ERROR,
+               f"default ({default}) is less than min ({min_val})",
+               lineno=keyword.line)
+        return
+
+    if max_val is not None and default > max_val:
+        report(Severity.ERROR,
+               f"default ({default}) is greater than max ({max_val})",
+               lineno=keyword.line)
+        return
+
+    spec.params.append(ParamSpec(
+        name        = name_tok.text,
+        param_type  = param_type,
+        default     = default,
+        min_val     = min_val,
+        max_val     = max_val,
+        description = description,
+    ))
 
 def parse_pin(tokens: list[Token], description: str) -> PinSpec | None:
     """Handle the 'pin' declaration."""
