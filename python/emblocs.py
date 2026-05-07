@@ -228,6 +228,7 @@ class BlockSpec:
     name:        str               = ""
     description: str               = ""
     params:      list[ParamSpec]   = field(default_factory=list)
+    defaults:    dict[str, int]    = field(default_factory=dict)
     statements:  list[Statement]   = field(default_factory=list)
 
     def describe(self) -> str:
@@ -239,9 +240,11 @@ class BlockSpec:
                 lines.append(f"  description: {dline}")
         for p in self.params:
             lines.append(f"  {p.describe()}")
+        for p, v in self.defaults.items():
+            lines.append(f"  {p}={v}")
         for s in self.statements:
             cond_str = ""
             if s.conditions:
-                cond_str = "  [if: " + " && ".join(s.conditions) + "]"
-            lines.append(f"  {s.statement.describe()}{cond_str}")
+                cond_str = "(if: " + " && ".join(s.conditions) + "): "
+            lines.append(f"  {cond_str}{s.statement.describe()}")
         return "\n".join(lines)

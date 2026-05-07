@@ -3,17 +3,17 @@ block complex_example /// test case for a variety of .bloc constructs
 
 param HAS_ENABLE  bool  default=0  /// if true, export the enable pin
 param HAS_HOLD    bool  default=0  /// if true, export the hold pin
-param STAGE_MASK  u32   default=0  min=0 max=3  /// enable multiple integration stages
+param STAGE_MASK  u32   default=0  min=0 max=7  /// enable multiple integration stages
 
-pin float  input   in      /// value to integrate
+pin float  input  in      /// value to integrate
 
-#if !MULTI_STAGE    // if just a simple integrator, we don't want a stage number
+#if !STAGE_MASK    // if just a simple integrator, we don't want a stage number
 pin float  output  out     /// integral of in over time
 var float accumulated;     // integration state
 #endif
 
-#if MULTI_STAGE     // multi-stage integrator does use a stage number
-pin float output[s=3] stage_{s:1}_out if (((STAGE_MASK>>s)&1)==1)
+#if STAGE_MASK     // multi-stage integrator does use a stage number
+pin float output out[s=3] stage_{s:1}_out if (((STAGE_MASK>>s)&1)==1)
 var float accumulated[3];     // integration states
 #endif
 

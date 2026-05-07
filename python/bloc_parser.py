@@ -11,7 +11,7 @@
 #   - multi-token name templates are not yet supported
 
 import sys
-from emblocs import BlockSpec, ParamSpec, Statement, PinSpec, VarDef, FunctDef, PinType, PinDir
+from emblocs import BlockSpec, ParamSpec, Statement, PinSpec, DimSpec, VarDef, FunctDef, PinType, PinDir
 import re
 from collections import namedtuple
 from dataclasses import dataclass, field
@@ -309,41 +309,117 @@ def parse_param(spec: BlockSpec, tokens: list[Token], description: str) -> None:
 
 def parse_pin(tokens: list[Token], description: str) -> PinSpec | None:
     """Handle the 'pin' declaration."""
-    report(Severity.INFO, "parse_pin not yet implemented", token=tokens[0])
-    return None
 
     keyword   = tokens[0]
+
+    # token assignment
     if len(tokens) < 4:
-        parse_error_tok(path, keyword,
-                        "'pin' declaration needs at least type, direction, "
-                        "and field name")
+        report(Severity.ERROR,
+                "'pin' declaration needs at least type, direction, "
+                "and field name", lineno=keyword.line)
+        return None
     type_tok  = tokens[1]
     dir_tok   = tokens[2]
     field_tok = tokens[3]
+    template_tok = None
+    if_tok = None
+    if_cond_tok = None
 
+    if len(tokens) == 5:
+        template_tok = tokens[4]
+    elif len(tokens) == 6:
+        if_tok = tokens[4]
+        if_cond_tok = tokens[5]
+    elif len(tokens) == 7:
+        template_tok = tokens[4]
+        if_tok = tokens[5]
+        if_cond_tok = tokens[6]
+
+    if len(tokens) > 7:
+        report(Severity.ERROR,
+                f"'pin' declaration has too many tokens {len(tokens)}", lineno=keyword.line)
+        return None
+
+    # token validation
     if type_tok.text not in PIN_TYPES:
-        parse_error_tok(path, type_tok,
-                        f"unknown pin type {type_tok.text!r}; "
-                        f"expected one of {list(PIN_TYPES)}")
+        report(Severity.ERROR,
+                f"unknown pin type {type_tok.text!r}; "
+                f"expected one of {list(PIN_TYPES)}", token=type_tok)
+        return None
     if dir_tok.text not in PIN_DIRS:
-        parse_error_tok(path, dir_tok,
-                        f"unknown pin direction {dir_tok.text!r}; "
-                        f"expected 'input' or 'output'")
-    if "[" in field_tok.text:
-        parse_error_tok(path, field_tok,
-                        "array pin dimensions are not yet supported")
+        report(Severity.ERROR,
+                f"unknown pin direction {dir_tok.text!r}; "
+                f"expected 'input' or 'output'", token=dir_tok)
+        return None
 
-    field_name   = field_tok.text
-    emblocs_name = tokens[4].text if len(tokens) >= 5 else field_name
+    # field name can be scalar or dimensioned
+    field_name, *dim_strings = field_tok.text.split('[')
 
-    spec.struct_members.append(PinSpec(
-        field_name   = field_name,
-        emblocs_name = emblocs_name,
-        pin_type     = PIN_TYPES[type_tok.text],
-        direction    = PIN_DIRS[dir_tok.text],
-        dims         = [],
-        description  = description,
-    ))
+    if not field_name.isidentifier():
+        report(Severity.ERROR,
+                f"field name {field_name!r} is not a valid identifier",
+                token=field_tok)
+        return None
+
+    # TODO - verify name is not a duplicate - need list/dict/set from BlockSpec
+
+    dims = []
+    for dim_string in dim_strings:
+        if not dim_string.endswith(']'):
+            report(Severity.ERROR,
+                    f"Missing closing ] in: {dim_string!r}", token=field_tok)
+            return None
+        dim_string = dim_string[:-1]  # strip closing ']'
+        index, sep, expr = dim_string.partition('=')
+        if sep != '=':
+            report(Severity.ERROR, f"Missing '=' in: {dim_string!r}", token=field_tok)
+            return None
+        if not index.isidentifier():
+            report(Severity.ERROR, f"Invalid index variable: {index!r}", token=field_tok)
+            return None
+
+        # TODO - verify that index is not used for another dimension of this pin
+
+        if not expr:
+            report(Severity.ERROR, f"Empty expression in: {dim_string!r}", token=field_tok)
+            return None
+
+        # TODO - validate expression; need dict of param:default pairs from BlockSpec
+
+        dim = DimSpec(size_expr = expr, index_var = index)
+        dims.append(dim)
+
+    export_cond = None
+    if if_tok:
+        if not if_tok.text == "if":
+            report(Severity.ERROR, f"expected 'if', not {if_tok.text!r}", token=if_tok)
+            return None
+        export_cond = if_cond_tok.text
+
+        # TODO - validate that export_cond is a legal expression
+        # need dict of param:default pairs from BlockSpec, plus index vars
+
+
+    if template_tok:
+        template = template_tok.text
+
+        # TODO - validate any expressions in template
+        # need dict of param:default pairs from BlockSpec, plus index vars
+
+        emblocs_name = template
+    else:
+        emblocs_name = field_name
+
+    spec = PinSpec(
+        field_name       = field_name,
+        emblocs_name     = emblocs_name,
+        pin_type         = PIN_TYPES[type_tok.text],
+        direction        = PIN_DIRS[dir_tok.text],
+        dims             = dims,
+        export_condition = export_cond,
+        description      = description,
+    )
+    return spec
 
 
 def parse_var(tokens: list[Token], description: str) -> VarDef | None:
@@ -434,6 +510,8 @@ def parse_statement(spec: BlockSpec, state: ParseState,
 
     if keyword.text in _ALLOWED[Section.BODY]:
         if state.section in ( Section.BLOCK, Section.PARAMS ):
+            # generate dict of params and default values
+            spec.defaults = { p.name : p.default for p in spec.params }
             state.section = Section.BODY
 
     # Step 2: validate keyword is allowed in current section
@@ -446,6 +524,8 @@ def parse_statement(spec: BlockSpec, state: ParseState,
     # Step 3: dispatch
     if keyword.text == "block":
         parse_block(spec, tokens, description)
+    elif keyword.text == "param":
+        parse_param(spec, tokens, description)
     elif keyword.text == "pin":
         _wrap(spec, state, parse_pin(tokens, description))
     elif keyword.text == "var":
@@ -457,7 +537,14 @@ def parse_statement(spec: BlockSpec, state: ParseState,
         if len(tokens) < 2:
             report(Severity.ERROR, "'#if' requires an expression", token=keyword)
         else:
-            state.if_stack.append(tokens[1].text)
+            ifexpr = tokens[1]
+            # validate #if expression - can contain only params, constants, operators
+            try:
+                val = evaluate(ifexpr.text, spec.defaults)
+            except ExpressionError as e:
+                report(Severity.ERROR, str(e), token=ifexpr)
+                return
+            state.if_stack.append(ifexpr.text)
 
     elif keyword.text == "#endif":
         if len(tokens) > 1:
@@ -466,10 +553,6 @@ def parse_statement(spec: BlockSpec, state: ParseState,
             report(Severity.ERROR, "'#endif' without matching '#if'", token=keyword)
         else:
             state.if_stack.pop()
-
-    # Unsupported but recognized keywords
-    elif keyword.text in ("param", "#if", "#endif"):
-        report(Severity.WARNING, f"'{keyword.text}' not yet supported", token=keyword)
 
     else:
         report(Severity.ERROR, f"unrecognized token: {keyword.text!r}", token=keyword)
