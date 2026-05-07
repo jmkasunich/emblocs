@@ -273,7 +273,7 @@ def _wrap(spec: BlockSpec, state: ParseState, obj) -> None:
     if obj is not None:
         spec.statements.append(
             Statement(conditions=list(state.if_stack), statement=obj))
-        
+
 def parse_statement_debug(spec, tokens, description):
     """ Temporary testing replacement for parse_statement();
         simply prints the tokens and description, then returns."""
