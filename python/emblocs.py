@@ -100,14 +100,22 @@ class PinSpec:
     Slots for which export_condition evaluates to false receive no PinDef
     and are initialized to NULL in system.c.
 
+    The emblocs_name is the template as written by the block author, with
+    {expr:width} format specifiers intact.  The field_name is derived from
+    the template by replacing each {expr:width} with 'width' zeros and
+    appending '_', giving the C struct member name.  The dedup_name is the
+    same as field_name and is used for namespace collision detection at
+    parse time.
+
     Fields:
-        field_name       -- C struct member name (e.g. "in", "idr_pins")
-        emblocs_name     -- EMBLOCS-visible name template (e.g. "in",
-                            "ch{c:2}_out", "pin_{i:2}_in").  For scalar pins
-                            with no template, this equals field_name.
-                            Format specifiers reference an expression which
-                            typically contains index variable(s) and must
-                            resolve to a unique integer for each slot.
+        emblocs_name     -- EMBLOCS-visible name template as written, e.g.
+                            "in", "ch{i:2}_out", "pin_{i:2}_in{j:1}".
+                            For scalar pins with no {..}, this is just the pin name.
+        field_name       -- C struct member name, derived from emblocs_name by
+                            replacing each {expr:width} with width zeros and
+                            appending '_'.  e.g. "in_", "ch00_out_", "pin_00_in0_"
+        dedup_name       -- same as field_name; used for namespace collision
+                            detection in BlockSpec.namespace
         pin_type         -- PinType enum value
         direction        -- PinDir enum value
         dims             -- ordered list of DimSpec objects.
@@ -120,8 +128,9 @@ class PinSpec:
                             in scope.
         description      -- /// annotation text, or empty string if none
     """
-    field_name:       str
     emblocs_name:     str
+    field_name:       str
+    dedup_name:       str
     pin_type:         PinType
     direction:        PinDir
     dims:             list[DimSpec]
@@ -137,7 +146,7 @@ class PinSpec:
         cond_str = f"  if {self.export_condition}" if self.export_condition else ""
         desc = f"  # {self.description}" if self.description else ""
         return (f"pin  {self.pin_type.name:<6} {self.direction.name:<7} "
-                f"{self.field_name} ({dims_str})  -> '{self.emblocs_name}'"
+                f"'{self.emblocs_name}' -> {self.field_name} ({dims_str})"
                 f"{cond_str}{desc}")
 
 
@@ -150,14 +159,22 @@ class VarDef:
     parse or validate it.  VarDef is fully defined at parse time; there
     is no unresolved content.
 
+    The field_name is extracted from the C declaration by the parser and
+    used as-is for both the C struct member name and namespace collision
+    detection.  Unlike pins, no trailing '_' is appended — var names are
+    private to the block implementation and the block author is responsible
+    for avoiding collisions with SDK macros or other predefined names.
+
     Fields:
-        field_name -- the first identifier in the C declaration, extracted
-                      by the parser for reference; the full declaration is
-                      in c_decl.
-        c_decl     -- the full C declaration string, e.g. "float error_integral"
+        field_name -- C struct member name extracted from the declaration,
+                      e.g. "accumulated" from "float accumulated"
+        dedup_name -- same as field_name; used for namespace collision
+                      detection in BlockSpec.namespace
+        c_decl     -- the full C declaration string, e.g. "float accumulated"
                       (semicolon not included; stored without it)
     """
     field_name: str
+    dedup_name: str
     c_decl:     str
 
     def describe(self) -> str:
@@ -170,12 +187,19 @@ class FunctDef:
     A function exported by the block.
 
     FunctDef is fully defined at parse time; there is no unresolved content.
+    Function names are always plain identifiers, never templates.
+
+    The dedup_name is the function name with '_' appended, consistent with
+    the derivation used for PinSpec and VarDef, ensuring functions, pins,
+    and vars all share one namespace.
 
     Fields:
         name        -- EMBLOCS-visible function name (e.g. "update", "read")
+        dedup_name  -- name + '_', used for namespace collision detection
         description -- /// annotation text, or empty string if none
     """
     name:        str
+    dedup_name:  str
     description: str = ""
 
     def describe(self) -> str:
@@ -220,9 +244,14 @@ class BlockSpec:
                         must be declared before any statements in the source
                         file and must be supplied with concrete values before
                         resolution can proceed
+        defaults     -- dict of {param_name: default_value} for all params;
+                        populated when the first body statement is encountered,
+                        used to validate expressions at parse time
         statements   -- ordered list of Statement objects preserving
                         declaration order from the .bloc file; contains
                         PinSpec, VarDef, and FunctDef objects intermixed
+        namespace    -- set of dedup_names for all statements added so far;
+                        used for O(1) collision detection at parse time
     """
     source_path: str
     name:        str               = ""
@@ -230,6 +259,7 @@ class BlockSpec:
     params:      list[ParamSpec]   = field(default_factory=list)
     defaults:    dict[str, int]    = field(default_factory=dict)
     statements:  list[Statement]   = field(default_factory=list)
+    namespace:   set[str]          = field(default_factory=set)
 
     def describe(self) -> str:
         """Return a human-readable multi-line description for debugging."""
@@ -240,8 +270,6 @@ class BlockSpec:
                 lines.append(f"  description: {dline}")
         for p in self.params:
             lines.append(f"  {p.describe()}")
-        for p, v in self.defaults.items():
-            lines.append(f"  {p}={v}")
         for s in self.statements:
             cond_str = ""
             if s.conditions:

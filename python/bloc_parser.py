@@ -3,10 +3,6 @@
 # Reads a .bloc file and returns a BlockSpec object.
 #
 # Current limitations (to be lifted as the language coverage grows):
-#   - param declarations are not yet supported
-#   - array pins (fixed and append) are not yet supported
-#   - #if/#endif conditionals are not yet supported
-#   - for loops are not yet supported
 #   - init declarations are not yet supported
 #   - multi-token name templates are not yet supported
 
@@ -169,11 +165,13 @@ def parse_block(spec: BlockSpec,
     keyword = tokens[0]
     if spec.name:
         report(Severity.ERROR, "'block' declared more than once", token=keyword)
+        return
     if len(tokens) < 2:
         report(Severity.FATAL, "'block' declaration requires a name", token=keyword)
     name_tok = tokens[1]
     if not name_tok.text.isidentifier():
         report(Severity.ERROR, f"invalid block name: {name_tok.text!r}", token=name_tok)
+        return
     spec.name        = name_tok.text
     spec.description = description
 
@@ -307,40 +305,47 @@ def parse_param(spec: BlockSpec, tokens: list[Token], description: str) -> None:
         description = description,
     ))
 
-def parse_pin(tokens: list[Token], description: str) -> PinSpec | None:
-    """Handle the 'pin' declaration."""
 
-    keyword   = tokens[0]
+_TEMPLATE_SPEC_RE = re.compile(r"""
+    \{              # opening brace
+    (?P<expr>       # start of 'expr' capture group
+        [^}:]+      #   one or more chars that are not } or :
+    )               # end of 'expr' capture group
+    :               # colon separator
+    (?P<width>      # start of 'width' capture group
+        [1-9]       #   exactly one digit, 1-9
+    )               # end of 'width' capture group
+    \}              # closing brace
+""", re.VERBOSE)
+
+def parse_pin(spec: BlockSpec, tokens: list[Token], description: str) -> PinSpec | None:
+    """
+    Handle the 'pin' declaration.
+    Syntax: pin <type> <direction> <name-or-template>[dims...] [if <expr>]
+
+    The name-or-template token contains the emblocs name template with
+    optional {expr:width} format specifiers and optional [index=size]
+    dimension specifiers appended directly (no spaces).
+
+    The C struct field name (field_name) is derived from the template by
+    replacing each {expr:width} with 'width' zeros and appending '_'.
+    """
+    keyword = tokens[0]
+
+    if len(tokens) not in (4, 6):
+        report(Severity.ERROR,
+                f"'pin' declaration must have 4 or 6 tokens, got {len(tokens)}",
+                lineno=keyword.line)
+        return None
 
     # token assignment
-    if len(tokens) < 4:
-        report(Severity.ERROR,
-                "'pin' declaration needs at least type, direction, "
-                "and field name", lineno=keyword.line)
-        return None
-    type_tok  = tokens[1]
-    dir_tok   = tokens[2]
-    field_tok = tokens[3]
-    template_tok = None
-    if_tok = None
-    if_cond_tok = None
+    type_tok    = tokens[1]
+    dir_tok     = tokens[2]
+    name_tok    = tokens[3]
+    if_tok      = tokens[4] if len(tokens) == 6 else None
+    if_cond_tok = tokens[5] if len(tokens) == 6 else None
 
-    if len(tokens) == 5:
-        template_tok = tokens[4]
-    elif len(tokens) == 6:
-        if_tok = tokens[4]
-        if_cond_tok = tokens[5]
-    elif len(tokens) == 7:
-        template_tok = tokens[4]
-        if_tok = tokens[5]
-        if_cond_tok = tokens[6]
-
-    if len(tokens) > 7:
-        report(Severity.ERROR,
-                f"'pin' declaration has too many tokens {len(tokens)}", lineno=keyword.line)
-        return None
-
-    # token validation
+    # validate type and direction
     if type_tok.text not in PIN_TYPES:
         report(Severity.ERROR,
                 f"unknown pin type {type_tok.text!r}; "
@@ -352,77 +357,130 @@ def parse_pin(tokens: list[Token], description: str) -> PinSpec | None:
                 f"expected 'input' or 'output'", token=dir_tok)
         return None
 
-    # field name can be scalar or dimensioned
-    field_name, *dim_strings = field_tok.text.split('[')
+    # split name/template from dimension specifiers
+    # e.g. "ch{i:2}_out[i=NCHAN]" -> template="ch{i:2}_out", dim_strings=["i=NCHAN]"]
+    template, *dim_strings = name_tok.text.split('[')
 
-    if not field_name.isidentifier():
+    if not template:
         report(Severity.ERROR,
-                f"field name {field_name!r} is not a valid identifier",
-                token=field_tok)
+                "pin name/template cannot be empty", token=name_tok)
         return None
 
-    # TODO - verify name is not a duplicate - need list/dict/set from BlockSpec
-
+    # parse dimension specifiers, collecting index variables
     dims = []
+    template_vars = dict(spec.defaults)   # copy, grows as index vars are added
+
     for dim_string in dim_strings:
         if not dim_string.endswith(']'):
             report(Severity.ERROR,
-                    f"Missing closing ] in: {dim_string!r}", token=field_tok)
+                    f"missing closing ']' in dimension {dim_string!r}",
+                    token=name_tok)
             return None
         dim_string = dim_string[:-1]  # strip closing ']'
         index, sep, expr = dim_string.partition('=')
         if sep != '=':
-            report(Severity.ERROR, f"Missing '=' in: {dim_string!r}", token=field_tok)
+            report(Severity.ERROR,
+                   f"missing '=' in dimension {dim_string!r}",
+                   token=name_tok)
             return None
         if not index.isidentifier():
-            report(Severity.ERROR, f"Invalid index variable: {index!r}", token=field_tok)
+            report(Severity.ERROR,
+                   f"invalid index variable {index!r}",
+                   token=name_tok)
             return None
-
-        # TODO - verify that index is not used for another dimension of this pin
-
+        if index in template_vars:
+            report(Severity.ERROR,
+                f"index variable name {index!r} already in use",
+                token=name_tok)
+            return None
         if not expr:
-            report(Severity.ERROR, f"Empty expression in: {dim_string!r}", token=field_tok)
+            report(Severity.ERROR,
+                   f"missing size in dimension {dim_string!r}",
+                   token=name_tok)
+            return None
+        # validate dimension size expression using params
+        try:
+            evaluate(expr, spec.defaults)
+        except ExpressionError as e:
+            report(Severity.ERROR,
+                   f"invalid dimension expression {expr!r}: {e}",
+                   token=name_tok)
+            return None
+        template_vars[index] = 0
+        dims.append(DimSpec(size_expr=expr, index_var=index))
+
+    # derive field_name from template by replacing {expr:width} with 'width' zeros
+    def replace_spec(m):
+        width = int(m.group('width'))
+        return '0' * width
+
+    field_name = _TEMPLATE_SPEC_RE.sub(replace_spec, template) + '_'
+
+    # any remaining { or } in field_name means a malformed specifier
+    if '{' in field_name or '}' in field_name:
+        report(Severity.ERROR,
+               f"malformed template specifier in {template!r}; "
+               f"expected {{expr:N}} where N is 1-9",
+               token=name_tok)
+        return None
+
+    # field_name (with trailing _) must be a valid C identifier
+    if not field_name.isidentifier():
+        report(Severity.ERROR,
+               f"template {template!r} produces invalid field name {field_name!r}",
+               token=name_tok)
+        return None
+
+    dedup_name = field_name
+
+    # check for duplicate in namespace
+    if dedup_name in spec.namespace:
+        report(Severity.ERROR,
+               f"duplicate name {dedup_name!r} in block namespace",
+               token=name_tok)
+        return None
+
+    # validate each specifier's expression
+    for m in _TEMPLATE_SPEC_RE.finditer(template):
+        expr_str = m.group('expr')
+        try:
+            evaluate(expr_str, template_vars)
+        except ExpressionError as e:
+            report(Severity.ERROR,
+                   f"invalid expression {expr_str!r} in template: {e}",
+                   token=name_tok)
             return None
 
-        # TODO - validate expression; need dict of param:default pairs from BlockSpec
-
-        dim = DimSpec(size_expr = expr, index_var = index)
-        dims.append(dim)
-
+    # parse optional trailing export condition
     export_cond = None
-    if if_tok:
-        if not if_tok.text == "if":
-            report(Severity.ERROR, f"expected 'if', not {if_tok.text!r}", token=if_tok)
+    if if_tok is not None:
+        if if_tok.text != "if":
+            report(Severity.ERROR,
+                   f"expected 'if', got {if_tok.text!r}",
+                   token=if_tok)
+            return None
+        # validate export condition using params + index vars
+        try:
+            evaluate(if_cond_tok.text, template_vars)
+        except ExpressionError as e:
+            report(Severity.ERROR,
+                   f"invalid export condition {if_cond_tok.text!r}: {e}",
+                   token=if_cond_tok)
             return None
         export_cond = if_cond_tok.text
 
-        # TODO - validate that export_cond is a legal expression
-        # need dict of param:default pairs from BlockSpec, plus index vars
-
-
-    if template_tok:
-        template = template_tok.text
-
-        # TODO - validate any expressions in template
-        # need dict of param:default pairs from BlockSpec, plus index vars
-
-        emblocs_name = template
-    else:
-        emblocs_name = field_name
-
-    spec = PinSpec(
+    return PinSpec(
+        emblocs_name     = template,
         field_name       = field_name,
-        emblocs_name     = emblocs_name,
+        dedup_name       = dedup_name,
         pin_type         = PIN_TYPES[type_tok.text],
         direction        = PIN_DIRS[dir_tok.text],
         dims             = dims,
         export_condition = export_cond,
         description      = description,
     )
-    return spec
 
-
-def parse_var(tokens: list[Token], description: str) -> VarDef | None:
+def parse_var(spec: BlockSpec, tokens: list[Token], description: str) -> VarDef | None:
     """Handle the 'var' declaration."""
     report(Severity.INFO, "parse_var not yet implemented", token=tokens[0])
     return None
@@ -453,7 +511,7 @@ def parse_var(tokens: list[Token], description: str) -> VarDef | None:
     ))
 
 
-def parse_function(tokens: list[Token], description: str) -> FunctDef | None:
+def parse_function(spec: BlockSpec, tokens: list[Token], description: str) -> FunctDef | None:
     """Handle the 'function' declaration."""
     report(Severity.INFO, "parse_function not yet implemented", token=tokens[0])
     return None
@@ -479,6 +537,7 @@ def parse_function(tokens: list[Token], description: str) -> FunctDef | None:
 def _wrap(spec: BlockSpec, state: ParseState, obj) -> None:
     """Wrap a parsed object in a Statement and append to spec."""
     if obj is not None:
+        spec.namespace.add(obj.dedup_name)
         spec.statements.append(
             Statement(conditions=list(state.if_stack), statement=obj))
 
@@ -527,11 +586,11 @@ def parse_statement(spec: BlockSpec, state: ParseState,
     elif keyword.text == "param":
         parse_param(spec, tokens, description)
     elif keyword.text == "pin":
-        _wrap(spec, state, parse_pin(tokens, description))
+        _wrap(spec, state, parse_pin(spec, tokens, description))
     elif keyword.text == "var":
-        _wrap(spec, state, parse_var(tokens, description))
+        _wrap(spec, state, parse_var(spec, tokens, description))
     elif keyword.text == "function":
-        _wrap(spec, state, parse_function(tokens, description))
+        _wrap(spec, state, parse_function(spec, tokens, description))
 
     elif keyword.text == "#if":
         if len(tokens) < 2:

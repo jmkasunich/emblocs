@@ -13,7 +13,7 @@ var float accumulated;     // integration state
 #endif
 
 #if STAGE_MASK     // multi-stage integrator does use a stage number
-pin float output out[s=3] stage_{s:1}_out if (((STAGE_MASK>>s)&1)==1)
+pin float output stage_{s:1}_out[s=3]  if (((STAGE_MASK>>s)&1)==1)
 var float accumulated[3];     // integration states
 #endif
 
