@@ -9,12 +9,12 @@ pin float  input  in      /// value to integrate
 
 #if !STAGE_MASK    // if just a simple integrator, we don't want a stage number
 pin float  output  out     /// integral of in over time
-var float accumulated;     // integration state
+var float accumulator;     // integration state
 #endif
 
 #if STAGE_MASK     // multi-stage integrator does use a stage number
 pin float output stage_{s:1}_out[s=3]  if (((STAGE_MASK>>s)&1)==1)
-var float accumulated[3];     // integration states
+var float accumulators[3];     // integration states
 #endif
 
 #if HAS_ENABLE

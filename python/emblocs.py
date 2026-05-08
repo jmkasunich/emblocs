@@ -13,6 +13,7 @@
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
+import textwrap
 
 
 # ---------------------------------------------------------------------------
@@ -68,7 +69,7 @@ class ParamSpec:
             range_str += f"  min={self.min_val}"
         if self.max_val is not None:
             range_str += f"  max={self.max_val}"
-        desc = f"  # {self.description}" if self.description else ""
+        desc = f"\n{textwrap.indent(self.description, "    # ")}" if self.description else ""
         return (f"param  {self.name}  {self.param_type}"
                 f"  default={self.default}{range_str}{desc}")
 
@@ -144,7 +145,7 @@ class PinSpec:
                         for d in self.dims
                     ) + "]")
         cond_str = f"  if {self.export_condition}" if self.export_condition else ""
-        desc = f"  # {self.description}" if self.description else ""
+        desc = f"\n{textwrap.indent(self.description, "    # ")}" if self.description else ""
         return (f"pin  {self.pin_type.name:<6} {self.direction.name:<7} "
                 f"'{self.emblocs_name}' -> {self.field_name} ({dims_str})"
                 f"{cond_str}{desc}")
@@ -170,15 +171,14 @@ class VarDef:
                       e.g. "accumulated" from "float accumulated"
         dedup_name -- same as field_name; used for namespace collision
                       detection in BlockSpec.namespace
-        c_decl     -- the full C declaration string, e.g. "float accumulated"
-                      (semicolon not included; stored without it)
+        c_decl     -- the full C declaration string, e.g. "float accumulated;"
     """
     field_name: str
     dedup_name: str
     c_decl:     str
 
     def describe(self) -> str:
-        return f"var  {self.c_decl};"
+        return f"var  {self.c_decl}"
 
 
 @dataclass(frozen=True)
@@ -203,7 +203,7 @@ class FunctDef:
     description: str = ""
 
     def describe(self) -> str:
-        desc = f"  # {self.description}" if self.description else ""
+        desc = f"\n{textwrap.indent(self.description, "    # ")}" if self.description else ""
         return f"function  {self.name}{desc}"
 
 
@@ -264,10 +264,8 @@ class BlockSpec:
     def describe(self) -> str:
         """Return a human-readable multi-line description for debugging."""
         lines = []
-        lines.append(f"BlockSpec: {self.name}  ({self.source_path})")
-        if self.description:
-            for dline in self.description.splitlines():
-                lines.append(f"  description: {dline}")
+        desc = f"\n{textwrap.indent(self.description, "  # ")}" if self.description else ""
+        lines.append(f"BlockSpec: {self.name}  ({self.source_path}){desc}")
         for p in self.params:
             lines.append(f"  {p.describe()}")
         for s in self.statements:

@@ -2,10 +2,6 @@
 # Parser for .bloc block template files.
 # Reads a .bloc file and returns a BlockSpec object.
 #
-# Current limitations (to be lifted as the language coverage grows):
-#   - init declarations are not yet supported
-#   - multi-token name templates are not yet supported
-
 import sys
 from emblocs import BlockSpec, ParamSpec, Statement, PinSpec, DimSpec, VarDef, FunctDef, PinType, PinDir
 import re
@@ -481,53 +477,100 @@ def parse_pin(spec: BlockSpec, tokens: list[Token], description: str) -> PinSpec
     )
 
 def parse_var(spec: BlockSpec, tokens: list[Token], description: str) -> VarDef | None:
-    """Handle the 'var' declaration."""
-    report(Severity.INFO, "parse_var not yet implemented", token=tokens[0])
-    return None
+    """
+    Handle the 'var' declaration.
+    Syntax: var <C-declaration>;
 
-    keyword          = tokens[0]
-    c_decl_with_semi = " ".join(t.text for t in tokens[1:])
-    if not c_decl_with_semi.endswith(";"):
-        parse_error_tok(path, keyword,
-                        "'var' declaration must end with a semicolon")
-    c_decl = c_decl_with_semi[:-1].rstrip()
-    if not c_decl:
-        parse_error_tok(path, keyword,
-                        "'var' declaration has no C declaration")
+    Everything after 'var' up to and including the semicolon is the C
+    declaration, stored verbatim.  The field name is extracted from the
+    last token before the semicolon by stripping leading '*' (pointer
+    declarations) and trailing '[' (array declarations).
 
-    # Extract the field name from the last token (before the semicolon).
-    # Strip leading '*' (pointer declarations) and trailing '[' (arrays).
-    # Deliberately simple; will need revisiting for complex C types.
+    The block author is responsible for avoiding collisions with SDK macros
+    and other external names.  Collision with pin field names is detected
+    via the shared namespace.
+    """
+    keyword = tokens[0]
+
+    if len(tokens) < 2:
+        report(Severity.ERROR,
+               "'var' statement requires a C declaration",
+               token=keyword)
+        return None
+
+    # reconstruct C declaration from tokens (whitespace not preserved)
+    c_decl = " ".join(t.text for t in tokens[1:])
+
+    if not c_decl.endswith(";"):
+        report(Severity.ERROR,
+               "'var' declaration must end with a semicolon",
+               token=tokens[-1])
+        return None
+
+    # extract field name from last token before semicolon
     last_tok = tokens[-1]
-    raw_name = last_tok.text.rstrip(";").lstrip("*").split("[")[0]
-    if not raw_name.isidentifier():
-        parse_error_tok(path, last_tok,
-                        f"could not parse field name from 'var' declaration: "
-                        f"{c_decl!r}")
+    # strip leading '*' (pointer declarations) and everything from '[' onward (arrays)
+    field_name = last_tok.text.rstrip(";").lstrip("*").split("[")[0]
 
-    spec.struct_members.append(VarDef(
-        field_name = raw_name,
+    if not field_name.isidentifier():
+        report(Severity.ERROR,
+               f"could not extract valid field name from 'var' declaration; "
+               f"got {field_name!r}",
+               token=last_tok)
+        return None
+
+    # check for duplicate in namespace
+    if field_name in spec.namespace:
+        report(Severity.ERROR,
+               f"duplicate name {field_name!r} in block namespace",
+               token=last_tok)
+        return None
+
+    return VarDef(
+        field_name = field_name,
+        dedup_name = field_name,
         c_decl     = c_decl,
-    ))
+    )
 
 
 def parse_function(spec: BlockSpec, tokens: list[Token], description: str) -> FunctDef | None:
-    """Handle the 'function' declaration."""
-    report(Severity.INFO, "parse_function not yet implemented", token=tokens[0])
-    return None
+    """
+    Handle the 'function' declaration.
+    Syntax: function <name>  /// description
 
+    Function names are always plain identifiers, never templates.
+    dedup_name is name + '_', consistent with pin field names, so that
+    a function and a pin with the same base name are detected as a collision.
+    """
     keyword = tokens[0]
-    if len(tokens) < 2:
-        parse_error_tok(path, keyword,
-                        "'function' declaration requires a name")
+
+    if len(tokens) != 2:
+        report(Severity.ERROR,
+               "'function' declaration should be 'function <name>'",
+               token=keyword)
+        return None
+
     name_tok = tokens[1]
+
     if not name_tok.text.isidentifier():
-        parse_error_tok(path, name_tok,
-                        f"invalid function name: {name_tok.text!r}")
-    spec.functions.append(FunctDef(
+        report(Severity.ERROR,
+               f"invalid function name: {name_tok.text!r}",
+               token=name_tok)
+        return None
+
+    dedup_name = name_tok.text + '_'
+
+    if dedup_name in spec.namespace:
+        report(Severity.ERROR,
+               f"duplicate name {name_tok.text!r} in block namespace",
+               token=name_tok)
+        return None
+
+    return FunctDef(
         name        = name_tok.text,
+        dedup_name  = dedup_name,
         description = description,
-    ))
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -648,7 +691,7 @@ def parse_bloc(path: str) -> BlockSpec:
         """
         nonlocal pending_tokens, pending_description
         if pending_tokens:
-            parse_statement(spec, state, pending_tokens, pending_description)
+            parse_statement(spec, state, pending_tokens, pending_description.rstrip())
         pending_tokens      = []
         pending_description = ""
 
@@ -697,6 +740,8 @@ def parse_bloc(path: str) -> BlockSpec:
 
     print(f"{_path}: {_error_count} error(s), "
           f"{_warning_count} warning(s), {_info_count} info(s)", file=sys.stderr)
+    if _error_count > 0:
+        return None
     return spec
 
 
@@ -710,4 +755,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     block_spec = parse_bloc(sys.argv[1])
-    print(block_spec.describe())
+    if block_spec is not None:
+        print(block_spec.describe())
+    else:
+        print("Parsing failed due to errors.", file=sys.stderr)
