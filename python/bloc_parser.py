@@ -3,7 +3,7 @@
 # Reads a .bloc file and returns a BlockSpec object.
 #
 import sys
-from emblocs import BlockSpec, ParamSpec, Statement, PinSpec, DimSpec, VarDef, FunctDef, PinType, PinDir
+from emblocs import BlockSpec, ParamSpec, Statement, PinSpec, DimSpec, VarDef, FunctSpec, PinType, PinDir
 import re
 from collections import namedtuple
 from dataclasses import dataclass, field
@@ -533,7 +533,7 @@ def parse_var(spec: BlockSpec, tokens: list[Token], description: str) -> VarDef 
     )
 
 
-def parse_function(spec: BlockSpec, tokens: list[Token], description: str) -> FunctDef | None:
+def parse_function(spec: BlockSpec, tokens: list[Token], description: str) -> FunctSpec | None:
     """
     Handle the 'function' declaration.
     Syntax: function <name>  /// description
@@ -566,7 +566,7 @@ def parse_function(spec: BlockSpec, tokens: list[Token], description: str) -> Fu
                token=name_tok)
         return None
 
-    return FunctDef(
+    return FunctSpec(
         name        = name_tok.text,
         dedup_name  = dedup_name,
         description = description,

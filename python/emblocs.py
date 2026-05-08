@@ -182,12 +182,13 @@ class VarDef:
 
 
 @dataclass(frozen=True)
-class FunctDef:
+class FunctSpec:
     """
-    A function exported by the block.
+    A function available in the block.
 
-    FunctDef is fully defined at parse time; there is no unresolved content.
-    Function names are always plain identifiers, never templates.
+    Function names are always plain identifiers, never templates.  However,
+    they may be contained in an #if block and thus have conditions that
+    govern whether they are exported.
 
     The dedup_name is the function name with '_' appended, consistent with
     the derivation used for PinSpec and VarDef, ensuring functions, pins,
@@ -222,10 +223,10 @@ class Statement:
         conditions -- list of #if expression strings, in the order they
                       appeared on the #if stack at the point of this
                       declaration.  Empty list means unconditionally active.
-        statement  -- the statement object: PinSpec, VarDef, or FunctDef
+        statement  -- the statement object: PinSpec, VarDef, or FunctSpec
     """
     conditions: list[str]
-    statement:  PinSpec | VarDef | FunctDef
+    statement:  PinSpec | VarDef | FunctSpec
 
 
 @dataclass
@@ -249,7 +250,7 @@ class BlockSpec:
                         used to validate expressions at parse time
         statements   -- ordered list of Statement objects preserving
                         declaration order from the .bloc file; contains
-                        PinSpec, VarDef, and FunctDef objects intermixed
+                        PinSpec, VarDef, and FunctSpec objects intermixed
         namespace    -- set of dedup_names for all statements added so far;
                         used for O(1) collision detection at parse time
     """
