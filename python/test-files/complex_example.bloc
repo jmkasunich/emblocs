@@ -1,0 +1,61 @@
+block complex_example /// Test case for a variety of .bloc constructs.
+/// Not a real component; exercises parser happy paths.
+/// Covers: bool and u32 params, scalar pins, array pins (1D and 2D),
+///   raw and s32 pin types, vars (simple, array, pointer), nested #if,
+///   pin templates referencing parameters, multiple functions with
+///   multi-line descriptions, and trailing if conditions.
+
+param HAS_ENABLE   bool  default=0              /// if true, export the enable pin
+param HAS_HOLD     bool  default=0              /// if true, export the hold pin
+param STAGE_MASK   u32   default=0  min=0 max=7 /// bitmask: enable integration stages
+param NCHANNELS    u32   default=1  min=1 max=4 /// number of input channels
+param NROWS        u32   default=2  min=1 max=8 /// number of rows in 2D array
+param NCOLS        u32   default=2  min=1 max=8 /// number of cols in 2D array
+param BASE_STAGE   u32   default=0  min=0 max=7 /// base stage number for naming
+
+// simple scalar pins
+pin float  input   in          /// primary float input
+pin s32    input   count       /// signed integer input
+pin u32    output  status      /// unsigned integer output
+pin raw    output  passthrough /// raw output, compatible with any signal type
+
+// scalar pin with parameter reference in template
+pin float  output  stage{BASE_STAGE:1}_main /// output named using BASE_STAGE parameter
+
+// 1D array pin, unconditional export
+pin float  input   ch{i:2}_in[i=NCHANNELS] /// per-channel float inputs
+
+// 1D array pin with trailing if (sparse export)
+#if STAGE_MASK
+pin float  output  stage_{s:1}_out[s=3]  if (((STAGE_MASK>>s)&1)==1) ///
+/// integration stage outputs; only active stages are exported
+#endif
+
+// 2D array pin
+pin raw    input   cell{i:1}x{j:1}[i=NROWS][j=NCOLS] /// 2D array of raw inputs
+
+// var declarations: simple, array, and pointer
+var float  accumulator;          // simple integration state
+var float  accumulators[3];      // array of integration states
+var GPIO_TypeDef *base_addr;     // pointer to hardware registers
+var uint32_t stage_bitmask;      // runtime copy of STAGE_MASK
+
+// conditional pins and nested #if
+#if HAS_ENABLE
+pin bool   input   enable /// when false, resets output and halts integration
+
+#if HAS_HOLD
+pin bool   input   hold   /// when true, holds output constant without resetting
+#endif
+#endif
+
+// multiple functions with multi-line descriptions
+function read /// read hardware inputs and update input pins
+              /// call early in thread, before update
+
+function update /// compute outputs from inputs
+                /// main periodic computation step;
+                ///   reads all input pins and writes all output pins
+
+function write /// write output pins to hardware
+               /// call late in thread, after update
