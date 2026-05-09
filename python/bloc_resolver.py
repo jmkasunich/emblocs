@@ -22,9 +22,9 @@ from expressions import evaluate, ExpressionError
 # Error reporting
 # ---------------------------------------------------------------------------
 
-# Module-level state: current block name for error context.
+# Module-level state: context string for error messages.
 # Reset at the start of each resolve() call.
-_block_name:    str = ""
+_error_context: str = ""
 _error_count:   int = 0
 _warning_count: int = 0
 
@@ -35,7 +35,7 @@ def report(message: str, is_error: bool = True) -> None:
     """
     global _error_count, _warning_count
     prefix = "error" if is_error else "warning"
-    print(f"block {_block_name!r}: {prefix}: {message}", file=sys.stderr)
+    print(f"{_error_context}: {prefix}: {message}", file=sys.stderr)
     if is_error:
         _error_count += 1
     else:
@@ -73,14 +73,10 @@ def _build_variables(spec: BlockSpec,
                 report(f"parameter {param.name!r} is bool; "
                        f"value {val} is not 0 or 1", is_error=False)
         elif param.param_type == "u32":
-            if val < 0 or val > 0xFFFFFFFF:
-                report(f"parameter {param.name!r} value {val} "
-                       f"is out of u32 range [0, {0xFFFFFFFF}]")
-                continue
-            if param.min_val is not None and val < param.min_val:
+            if val < param.min_val:
                 report(f"parameter {param.name!r} value {val} "
                        f"is less than min ({param.min_val})")
-            if param.max_val is not None and val > param.max_val:
+            if val > param.max_val:
                 report(f"parameter {param.name!r} value {val} "
                        f"is greater than max ({param.max_val})")
 
@@ -95,19 +91,19 @@ def _build_variables(spec: BlockSpec,
 # Statement expanders
 # ---------------------------------------------------------------------------
 
-def _expand_pin(pin_spec: PinSpec,
+def _recurse_pin(pin_spec: PinSpec, dims: list[DimSpec],
                 variables: dict[str, int]) -> list[PinDef]:
     """
-    Expand a PinSpec into one or more PinDef objects.
+    Recursively expand a PinSpec into PinDef objects.
+     dims is the list of remaining dimensions to expand; variables contains
+     the current values of all index variables for the dimensions already
+     expanded.
 
-    For scalar pins, returns a single PinDef.
-    For array pins, iterates all dimension index variables and returns
-    one PinDef per slot for which the export condition is true.
+     Returns a list of PinDef objects for all slots of the pin for which
+     the export condition is true.
     """
-    results = []
-
-    if not pin_spec.dims:
-        # scalar pin
+    if not dims:
+        # base case: no more dimensions, produce a PinDef
         emblocs_name = _evaluate_template(pin_spec.emblocs_name, variables)
         if emblocs_name is None:
             return []
@@ -120,90 +116,40 @@ def _expand_pin(pin_spec: PinSpec,
                 return []
             if not exported:
                 return []
-        results.append(PinDef(
+        return [PinDef(
             emblocs_name = emblocs_name,
             field_name   = pin_spec.field_name,
             pin_type     = pin_spec.pin_type,
             direction    = pin_spec.direction,
-            field_indices = (),
+            field_indices = tuple(variables[dim.index_var] for dim in pin_spec.dims),
             description  = pin_spec.description,
-        ))
-
-    elif len(pin_spec.dims) == 1:
-        # 1D array
-        dim = pin_spec.dims[0]
+        )]
+    else:
+        # recursive case: expand the next dimension
+        dim = dims[0]
         try:
             size = evaluate(dim.size_expr, variables)
         except ExpressionError as e:
             report(f"dimension size error in pin "
                    f"{pin_spec.emblocs_name!r}: {e}")
             return []
+        results = []
         for idx in range(size):
             slot_vars = {**variables, dim.index_var: idx}
-            if pin_spec.export_condition is not None:
-                try:
-                    exported = evaluate(pin_spec.export_condition, slot_vars)
-                except ExpressionError as e:
-                    report(f"export condition error in pin "
-                           f"{pin_spec.emblocs_name!r} slot {idx}: {e}")
-                    continue
-                if not exported:
-                    continue
-            emblocs_name = _evaluate_template(pin_spec.emblocs_name, slot_vars)
-            if emblocs_name is None:
-                continue
-            results.append(PinDef(
-                emblocs_name = emblocs_name,
-                field_name   = pin_spec.field_name,
-                pin_type     = pin_spec.pin_type,
-                direction    = pin_spec.direction,
-                field_indices = (idx,),
-                description  = pin_spec.description,
-            ))
+            results.extend(_recurse_pin(pin_spec, dims[1:], slot_vars))
+        return results
 
-    elif len(pin_spec.dims) == 2:
-        # 2D array
-        dim0 = pin_spec.dims[0]
-        dim1 = pin_spec.dims[1]
-        try:
-            size0 = evaluate(dim0.size_expr, variables)
-            size1 = evaluate(dim1.size_expr, variables)
-        except ExpressionError as e:
-            report(f"dimension size error in pin "
-                   f"{pin_spec.emblocs_name!r}: {e}")
-            return []
-        for idx0 in range(size0):
-            for idx1 in range(size1):
-                slot_vars = {**variables,
-                             dim0.index_var: idx0,
-                             dim1.index_var: idx1}
-                if pin_spec.export_condition is not None:
-                    try:
-                        exported = evaluate(pin_spec.export_condition,
-                                            slot_vars)
-                    except ExpressionError as e:
-                        report(f"export condition error in pin "
-                               f"{pin_spec.emblocs_name!r} "
-                               f"slot [{idx0}][{idx1}]: {e}")
-                        continue
-                    if not exported:
-                        continue
-                emblocs_name = _evaluate_template(pin_spec.emblocs_name,
-                                                  slot_vars)
-                if emblocs_name is None:
-                    continue
-                results.append(PinDef(
-                    emblocs_name = emblocs_name,
-                    field_name   = pin_spec.field_name,
-                    pin_type     = pin_spec.pin_type,
-                    direction    = pin_spec.direction,
-                    field_indices = (idx0, idx1),
-                    description  = pin_spec.description,
-                ))
-    else:
-        report(f"pin {pin_spec.emblocs_name!r} has more than 2 dimensions")
 
-    return results
+def _expand_pin(pin_spec: PinSpec,
+                variables: dict[str, int]) -> list[PinDef]:
+    """
+    Expand a PinSpec into one or more PinDef objects.
+
+    For scalar pins, returns a single PinDef.
+    For array pins, iterates all dimension index variables and returns
+    one PinDef per slot for which the export condition is true.
+    """
+    return _recurse_pin(pin_spec, pin_spec.dims, variables)
 
 
 def _expand_var(var_def: VarDef,
@@ -299,8 +245,9 @@ def _evaluate_template(template: str,
 # Top-level resolver
 # ---------------------------------------------------------------------------
 
-def resolve(spec: BlockSpec,
-            supplied_params: dict[str, int] | None = None) -> BlockDef | None:
+def resolve(spec: BlockSpec, variant_name: str,
+            supplied_params: dict[str, int] | None = None,
+            error_context: str | None = None) -> BlockDef | None:
     """
     Resolve a BlockSpec against concrete parameter values to produce a BlockDef.
 
@@ -310,10 +257,14 @@ def resolve(spec: BlockSpec,
 
     Returns a BlockDef, or None if any error was reported.
     """
-    global _block_name, _error_count, _warning_count
-    _block_name    = spec.name
+    global _error_context, _error_count, _warning_count
+    _error_context = error_context if error_context is not None else variant_name
     _error_count   = 0
     _warning_count = 0
+
+    if not variant_name.isidentifier():
+        report(f"invalid variant name {variant_name!r}")
+        return None
 
     if supplied_params is None:
         supplied_params = {}
@@ -343,7 +294,7 @@ def resolve(spec: BlockSpec,
                 else:
                     functions[obj.name] = obj
 
-    print(f"block {_block_name!r}: "
+    print(f"{_error_context}: "
           f"{_error_count} error(s), {_warning_count} warning(s)",
           file=sys.stderr)
 
@@ -351,7 +302,7 @@ def resolve(spec: BlockSpec,
         return None
 
     return BlockDef(
-        name                 = spec.name,
+        name                 = variant_name,
         source_path          = spec.source_path,
         description          = spec.description,
         params               = variables,
@@ -367,16 +318,27 @@ def resolve(spec: BlockSpec,
 
 if __name__ == "__main__":
     import sys
+    import os
     from bloc_parser import parse_bloc
 
     if len(sys.argv) < 2:
-        print(f"usage: {sys.argv[0]} <file.bloc> [PARAM=value ...]",
+        print(f"usage: {sys.argv[0]} <file.bloc> [variant_name] [PARAM=value ...]",
               file=sys.stderr)
         sys.exit(1)
 
     path = sys.argv[1]
+    remaining = sys.argv[2:]
+
+    # optional variant name (first non-param argument)
+    if remaining and "=" not in remaining[0]:
+        variant_name = remaining[0]
+        remaining = remaining[1:]
+    else:
+        variant_name = os.path.splitext(os.path.basename(path))[0]
+
+    # remaining arguments are PARAM=value pairs
     supplied = {}
-    for arg in sys.argv[2:]:
+    for arg in remaining:
         if "=" not in arg:
             print(f"error: expected PARAM=value, got {arg!r}",
                   file=sys.stderr)
@@ -393,7 +355,7 @@ if __name__ == "__main__":
     if spec is None:
         sys.exit(1)
 
-    block_def = resolve(spec, supplied)
+    block_def = resolve(spec, variant_name, supplied )
     if block_def is None:
         sys.exit(1)
 
