@@ -18,7 +18,7 @@ import textwrap
 
 
 # ---------------------------------------------------------------------------
-# Enumerations
+# Enumerations & Constants
 # ---------------------------------------------------------------------------
 
 class PinType(Enum):
@@ -32,6 +32,8 @@ class PinType(Enum):
 class PinDir(Enum):
     INPUT  = auto()
     OUTPUT = auto()
+
+U32_MAX = 0xFFFFFFFF
 
 # ---------------------------------------------------------------------------
 # Output formatting for describe() methods
@@ -79,16 +81,16 @@ class ParamSpec:
     name:        str
     param_type:  str
     default:     int
-    min_val:     int | None
-    max_val:     int | None
+    min_val:     int = 0
+    max_val:     int = U32_MAX
     description: str = ""
 
     def describe(self) -> str:
         desc = _format_descr(self.description)
         range_str = ""
-        if self.min_val is not None:
+        if self.min_val != 0:
             range_str += f"  min={self.min_val}"
-        if self.max_val is not None:
+        if self.max_val != U32_MAX:
             range_str += f"  max={self.max_val}"
         return(f"param  {self.name}  {self.param_type}"
                f"  default={self.default}{range_str}{desc}")

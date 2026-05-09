@@ -3,7 +3,7 @@
 # Reads a .bloc file and returns a BlockSpec object.
 #
 import sys
-from emblocs import BlockSpec, ParamSpec, Statement, PinSpec, DimSpec, VarDef, FunctSpec, PinType, PinDir
+from emblocs import BlockSpec, ParamSpec, Statement, PinSpec, DimSpec, VarDef, FunctSpec, PinType, PinDir, U32_MAX
 import re
 from collections import namedtuple
 from dataclasses import dataclass, field
@@ -91,8 +91,6 @@ PIN_DIRS = {
     "input":  PinDir.INPUT,
     "output": PinDir.OUTPUT,
 }
-
-U32_MAX = 0xFFFFFFFF
 
 # ---------------------------------------------------------------------------
 # Line-level helpers
@@ -211,8 +209,8 @@ def parse_param(spec: BlockSpec, tokens: list[Token], description: str) -> None:
 
     # parse key=value tokens for default, min, max
     default = None
-    min_val = None
-    max_val = None
+    min_val = 0
+    max_val = U32_MAX
 
     for tok in tokens[3:]:
         key, sep, val_str = tok.text.partition("=")
@@ -249,9 +247,9 @@ def parse_param(spec: BlockSpec, tokens: list[Token], description: str) -> None:
 
         if key == "default" and default is None:
             default = val
-        elif key == "min" and min_val is None:
+        elif key == "min" and min_val == 0:
             min_val = val
-        elif key == "max" and max_val is None:
+        elif key == "max" and max_val == U32_MAX:
             max_val = val
         else:
             report(Severity.ERROR, f"duplicate '{key}=' token", token=tok)
@@ -263,30 +261,29 @@ def parse_param(spec: BlockSpec, tokens: list[Token], description: str) -> None:
                lineno=keyword.line)
         return
 
-    if min_val is not None and param_type == "bool":
+    if min_val != 0 and param_type == "bool":
         report(Severity.WARNING,
                "'min' is not meaningful for bool parameters",
                lineno=keyword.line)
-    if max_val is not None and param_type == "bool":
+    if max_val != U32_MAX and param_type == "bool":
         report(Severity.WARNING,
                "'max' is not meaningful for bool parameters",
                lineno=keyword.line)
 
     # cross-validate min, max, default
-    if min_val is not None and max_val is not None:
-        if min_val > max_val:
-            report(Severity.ERROR,
-                   f"min ({min_val}) is greater than max ({max_val})",
-                   lineno=keyword.line)
-            return
+    if min_val > max_val:
+        report(Severity.ERROR,
+                f"min ({min_val}) is greater than max ({max_val})",
+                lineno=keyword.line)
+        return
 
-    if min_val is not None and default < min_val:
+    if default < min_val:
         report(Severity.ERROR,
                f"default ({default}) is less than min ({min_val})",
                lineno=keyword.line)
         return
 
-    if max_val is not None and default > max_val:
+    if default > max_val:
         report(Severity.ERROR,
                f"default ({default}) is greater than max ({max_val})",
                lineno=keyword.line)
