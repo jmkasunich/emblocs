@@ -691,7 +691,8 @@ def parse_bloc(path: str) -> BlockSpec:
         """
         nonlocal pending_tokens, pending_description
         if pending_tokens:
-            parse_statement(spec, state, pending_tokens, pending_description.rstrip())
+            parse_statement(spec, state, pending_tokens,
+                             pending_description.rstrip().strip("\n"))
         pending_tokens      = []
         pending_description = ""
 

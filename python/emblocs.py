@@ -33,6 +33,25 @@ class PinDir(Enum):
     INPUT  = auto()
     OUTPUT = auto()
 
+# ---------------------------------------------------------------------------
+# Output formatting for describe() methods
+# ---------------------------------------------------------------------------
+
+# set this True to have Design.describe() recurse into child objects,
+# or False to have it only print top-level summaries
+recurse = True
+
+# set this to '\n' to have descriptions start on a new line,
+# or ' ' to have them follow the declaration on the same line
+descr_prefix = '\n'
+
+def _format_descr(descr: str) -> str:
+    if not descr:
+        return ""
+    return descr_prefix + textwrap.indent(descr, "  # ")
+
+def _indent_child(child_descr: str) -> str:
+    return textwrap.indent(child_descr, "  ")
 
 # ---------------------------------------------------------------------------
 # BlockSpec-level classes
@@ -65,14 +84,14 @@ class ParamSpec:
     description: str = ""
 
     def describe(self) -> str:
+        desc = _format_descr(self.description)
         range_str = ""
         if self.min_val is not None:
             range_str += f"  min={self.min_val}"
         if self.max_val is not None:
             range_str += f"  max={self.max_val}"
-        desc = f"\n{textwrap.indent(self.description, "    # ")}" if self.description else ""
-        return (f"param  {self.name}  {self.param_type}"
-                f"  default={self.default}{range_str}{desc}")
+        return(f"param  {self.name}  {self.param_type}"
+               f"  default={self.default}{range_str}{desc}")
 
 
 @dataclass(frozen=True)
@@ -90,6 +109,10 @@ class DimSpec:
     """
     size_expr: str
     index_var: str
+
+    def describe(self) -> str:
+        dim_str = ("[" + f"{self.index_var}={self.size_expr}" + "]")
+        return f"dim  {dim_str}"
 
 
 @dataclass(frozen=True)
@@ -146,7 +169,7 @@ class PinSpec:
                         for d in self.dims
                     ) + "]")
         cond_str = f"  if {self.export_condition}" if self.export_condition else ""
-        desc = f"\n{textwrap.indent(self.description, "    # ")}" if self.description else ""
+        desc = _format_descr(self.description)
         return (f"pin  {self.pin_type.name:<6} {self.direction.name:<7} "
                 f"'{self.emblocs_name}' -> {self.field_name} ({dims_str})"
                 f"{cond_str}{desc}")
@@ -205,7 +228,7 @@ class FunctSpec:
     description: str = ""
 
     def describe(self) -> str:
-        desc = f"\n{textwrap.indent(self.description, "    # ")}" if self.description else ""
+        desc = _format_descr(self.description)
         return f"function  {self.name}{desc}"
 
 
@@ -228,6 +251,13 @@ class Statement:
     """
     conditions: list[str]
     statement:  PinSpec | VarDef | FunctSpec
+
+    def describe(self) -> str:
+        if self.conditions:
+            cond_str = "(if: " + " && ".join(self.conditions) + "): "
+        else:
+            cond_str = ""
+        return cond_str + self.statement.describe()
 
 
 @dataclass
@@ -266,15 +296,12 @@ class BlockSpec:
     def describe(self) -> str:
         """Return a human-readable multi-line description for debugging."""
         lines = []
-        desc = f"\n{textwrap.indent(self.description, "  # ")}" if self.description else ""
+        desc = _format_descr(self.description)
         lines.append(f"BlockSpec: {self.name}  ({self.source_path}){desc}")
         for p in self.params:
-            lines.append(f"  {p.describe()}")
+            lines.append(_indent_child(p.describe()))
         for s in self.statements:
-            cond_str = ""
-            if s.conditions:
-                cond_str = "(if: " + " && ".join(s.conditions) + "): "
-            lines.append(f"  {cond_str}{s.statement.describe()}")
+            lines.append(_indent_child(s.describe()))
         return "\n".join(lines)
 
 # ---------------------------------------------------------------------------
@@ -292,6 +319,7 @@ class PinDef:
     Fields:
         emblocs_name -- EMBLOCS-visible pin name (e.g. "ch00_out")
         field_name   -- C struct field name (e.g. "ch00_out_")
+        field_indices -- for array pins, the list of concrete indices for this slot
         pin_type     -- PinType enum value
         direction    -- PinDir enum value
         description  -- /// annotation text, or empty string if none
@@ -300,12 +328,18 @@ class PinDef:
     field_name:   str
     pin_type:     PinType
     direction:    PinDir
+    field_indices: tuple[int, ...] = ()
     description:  str = ""
 
     def describe(self) -> str:
-        desc = f"  # {self.description}" if self.description else ""
+        desc = _format_descr(self.description)
+        if self.field_indices:
+            indices = "".join(f"[{i}]" for i in self.field_indices)
+            field_str = f"{self.field_name}{indices}"
+        else:
+            field_str = self.field_name
         return (f"pin  {self.pin_type.name:<6} {self.direction.name:<7} "
-                f"{self.emblocs_name} -> {self.field_name}{desc}")
+                f"{self.emblocs_name} -> {field_str}{desc}")
 
 
 @dataclass(frozen=True)
@@ -321,7 +355,7 @@ class FunctDef:
     description: str = ""
 
     def describe(self) -> str:
-        desc = f"  # {self.description}" if self.description else ""
+        desc = _format_descr(self.description)
         return f"function  {self.name}{desc}"
 
 
@@ -330,8 +364,8 @@ class BlockDef:
     """
     A fully resolved block definition, produced by resolving a BlockSpec
     against concrete parameter values.  All conditional declarations have
-    been evaluated; only the pins and functions active for these parameter
-    values are present.
+    been evaluated; only the pins, vars, and functions active for these
+    parameter values are present.
 
     Fields:
         name        -- variant name (e.g. "pid_controller")
@@ -340,6 +374,11 @@ class BlockDef:
         pins        -- dict of PinDef keyed by emblocs pin name
         functions   -- dict of FunctDef keyed by function name
         params      -- dict of param name -> concrete integer value
+        ordered_declarations -- complete ordered list of PinDef, VarDef,
+                               and FunctDef objects, preserving declaration
+                               order from the .bloc file.  Used for C struct
+                               generation and for function/pin ordering
+                               analysis.
     """
     name:        str
     source_path: str
@@ -347,21 +386,17 @@ class BlockDef:
     pins:        dict[str, PinDef]
     functions:   dict[str, FunctDef]
     params:      dict[str, int]
+    ordered_declarations: list[PinDef | VarDef | FunctDef]
 
     def describe(self) -> str:
         lines = []
-        lines.append(f"BlockDef: {self.name}  ({self.source_path})")
-        if self.description:
-            for dline in self.description.splitlines():
-                lines.append(f"  description: {dline}")
+        desc = _format_descr(self.description)
+        lines.append(f"BlockDef: {self.name}  ({self.source_path}){desc}")
         for p, v in self.params.items():
-            lines.append(f"  param  {p} = {v}")
-        for pin in self.pins.values():
-            lines.append(f"  {pin.describe()}")
-        for func in self.functions.values():
-            lines.append(f"  {func.describe()}")
+            lines.append(_indent_child(f"param  {p} = {v}"))
+        for decl in self.ordered_declarations:
+            lines.append(_indent_child(decl.describe()))
         return "\n".join(lines)
-
 
 # ---------------------------------------------------------------------------
 # Design-level classes
@@ -452,9 +487,9 @@ class BlockInstance:
     def describe(self) -> str:
         lines = [f"block  {self.name} ({self.block_def.name})"]
         for pin in self.pins.values():
-            lines.append(f"  {pin.describe()}")
+            lines.append(_indent_child(pin.describe()))
         for func in self.functions.values():
-            lines.append(f"  {func.describe()}")
+            lines.append(_indent_child(func.describe()))
         return "\n".join(lines)
 
 
@@ -505,12 +540,22 @@ class Design:
 
     def describe(self) -> str:
         lines = [f"Design: {self.source_path}"]
-        for bd in self.block_defs.values():
-            lines.append(f"  blockdef  {bd.name}")
-        for bi in self.blocks.values():
-            lines.append(f"  block  {bi.name} ({bi.block_def.name})")
-        for sig in self.signals.values():
-            lines.append(f"  signal  {sig.name}  {sig.sig_type.name}")
-        for thr in self.threads.values():
-            lines.append(f"  thread  {thr.name}  {thr.period_ns} ns")
+        if recurse:
+            for bd in self.block_defs.values():
+                lines.append(_indent_child(bd.describe()))
+            for bi in self.blocks.values():
+                lines.append(_indent_child(bi.describe()))
+            for sig in self.signals.values():
+                lines.append(_indent_child(sig.describe()))
+            for thr in self.threads.values():
+                lines.append(_indent_child(thr.describe()))
+        else:
+            for bd in self.block_defs.values():
+                lines.append(_indent_child(f"blockdef  {bd.name}"))
+            for bi in self.blocks.values():
+                lines.append(_indent_child(f"block  {bi.name} ({bi.block_def.name})"))
+            for sig in self.signals.values():
+                lines.append(_indent_child(f"signal  {sig.name}  {sig.sig_type.name}"))
+            for thr in self.threads.values():
+                lines.append(_indent_child(f"thread  {thr.name}  {thr.period_ns} ns"))
         return "\n".join(lines)
