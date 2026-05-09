@@ -11,6 +11,7 @@
 # This file currently defines the BlockSpec-level classes only.
 # BlockDef and PinDef are deferred until the resolution step is implemented.
 
+from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum, auto
 import textwrap
@@ -274,4 +275,242 @@ class BlockSpec:
             if s.conditions:
                 cond_str = "(if: " + " && ".join(s.conditions) + "): "
             lines.append(f"  {cond_str}{s.statement.describe()}")
+        return "\n".join(lines)
+
+# ---------------------------------------------------------------------------
+# BlockDef-level classes
+# These are produced by resolving a BlockSpec against concrete parameter
+# values.  All expressions are evaluated, all conditionals resolved, and
+# all array dimensions are concrete integers.
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class PinDef:
+    """
+    A fully resolved pin definition, child of a BlockDef.
+
+    Fields:
+        emblocs_name -- EMBLOCS-visible pin name (e.g. "ch00_out")
+        field_name   -- C struct field name (e.g. "ch00_out_")
+        pin_type     -- PinType enum value
+        direction    -- PinDir enum value
+        description  -- /// annotation text, or empty string if none
+    """
+    emblocs_name: str
+    field_name:   str
+    pin_type:     PinType
+    direction:    PinDir
+    description:  str = ""
+
+    def describe(self) -> str:
+        desc = f"  # {self.description}" if self.description else ""
+        return (f"pin  {self.pin_type.name:<6} {self.direction.name:<7} "
+                f"{self.emblocs_name} -> {self.field_name}{desc}")
+
+
+@dataclass(frozen=True)
+class FunctDef:
+    """
+    A fully resolved function definition, child of a BlockDef.
+
+    Fields:
+        name        -- EMBLOCS-visible function name (e.g. "update")
+        description -- /// annotation text, or empty string if none
+    """
+    name:        str
+    description: str = ""
+
+    def describe(self) -> str:
+        desc = f"  # {self.description}" if self.description else ""
+        return f"function  {self.name}{desc}"
+
+
+@dataclass(frozen=True)
+class BlockDef:
+    """
+    A fully resolved block definition, produced by resolving a BlockSpec
+    against concrete parameter values.  All conditional declarations have
+    been evaluated; only the pins and functions active for these parameter
+    values are present.
+
+    Fields:
+        name        -- variant name (e.g. "pid_controller")
+        source_path -- path to the source .bloc file
+        description -- block description text
+        pins        -- dict of PinDef keyed by emblocs pin name
+        functions   -- dict of FunctDef keyed by function name
+        params      -- dict of param name -> concrete integer value
+    """
+    name:        str
+    source_path: str
+    description: str
+    pins:        dict[str, PinDef]
+    functions:   dict[str, FunctDef]
+    params:      dict[str, int]
+
+    def describe(self) -> str:
+        lines = []
+        lines.append(f"BlockDef: {self.name}  ({self.source_path})")
+        if self.description:
+            for dline in self.description.splitlines():
+                lines.append(f"  description: {dline}")
+        for p, v in self.params.items():
+            lines.append(f"  param  {p} = {v}")
+        for pin in self.pins.values():
+            lines.append(f"  {pin.describe()}")
+        for func in self.functions.values():
+            lines.append(f"  {func.describe()}")
+        return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Design-level classes
+# These are produced by parsing a .blocs file.  A Design is a complete,
+# concrete system: named block instances with resolved parameter values,
+# signals connecting pins, and threads scheduling functions.
+# ---------------------------------------------------------------------------
+
+@dataclass
+class Signal:
+    """
+    A named signal connecting pins in a Design.
+
+    Fields:
+        name     -- signal name, unique within the Design namespace
+        sig_type -- PinType enum value (bool, u32, s32, float)
+        value    -- current/initial value
+        driver   -- PinInstance driving this signal, or None
+        readers  -- list of PinInstances reading this signal
+    """
+    name:    str
+    sig_type: PinType
+    value:   int | float = 0
+    driver:  object      = None   # PinInstance | None; object avoids forward ref
+    readers: list        = field(default_factory=list)
+
+    def describe(self) -> str:
+        driver_str = self.driver.pin_def.emblocs_name if self.driver else "none"
+        lines = [f"signal  {self.name}  {self.sig_type.name}  "
+                 f"value={self.value}  driver={driver_str}"]
+        for r in self.readers:
+            lines.append(f"  reader  {r.pin_def.emblocs_name}")
+        return "\n".join(lines)
+
+
+@dataclass
+class PinInstance:
+    """
+    A pin on a specific block instance.
+    Exists only as a member of BlockInstance.pins.
+
+    Fields:
+        pin_def -- PinDef metadata (type, direction, names)
+        signal  -- connected Signal, or None if unconnected (dummy signal)
+    """
+    pin_def: PinDef
+    signal:  Signal | None = None
+
+    def describe(self) -> str:
+        sig = self.signal.name if self.signal else "dummy"
+        return f"pin  {self.pin_def.emblocs_name} -> {sig}"
+
+
+@dataclass
+class FunctInstance:
+    """
+    A function on a specific block instance.
+    Exists only as a member of BlockInstance.functions.
+
+    Fields:
+        funct_def -- FunctDef metadata (name, description)
+        thread    -- Thread this function is assigned to, or None
+    """
+    funct_def: FunctDef
+    thread:    object | None = None   # Thread | None; object avoids forward ref
+
+    def describe(self) -> str:
+        thr = self.thread.name if self.thread else "unassigned"
+        return f"function  {self.funct_def.name} -> {thr}"
+
+
+@dataclass
+class BlockInstance:
+    """
+    A named instance of a BlockDef in a Design.
+
+    Fields:
+        name      -- instance name, unique within the Design namespace
+        block_def -- the BlockDef this instance is based on
+        pins      -- dict of PinInstance keyed by emblocs pin name
+        functions -- dict of FunctInstance keyed by function name
+    """
+    name:      str
+    block_def: BlockDef
+    pins:      dict[str, PinInstance]   = field(default_factory=dict)
+    functions: dict[str, FunctInstance] = field(default_factory=dict)
+
+    def describe(self) -> str:
+        lines = [f"block  {self.name} ({self.block_def.name})"]
+        for pin in self.pins.values():
+            lines.append(f"  {pin.describe()}")
+        for func in self.functions.values():
+            lines.append(f"  {func.describe()}")
+        return "\n".join(lines)
+
+
+@dataclass
+class Thread:
+    """
+    A named periodic execution context in a Design.
+
+    Fields:
+        name      -- thread name, unique within the Design namespace
+        period_ns -- execution period in nanoseconds
+        functions -- ordered list of FunctInstance objects
+    """
+    name:      str
+    period_ns: int
+    functions: list[FunctInstance] = field(default_factory=list)
+
+    def describe(self) -> str:
+        lines = [f"thread  {self.name}  ({self.period_ns} ns)"]
+        for func in self.functions:
+            lines.append(f"  {func.funct_def.name}")
+        return "\n".join(lines)
+
+
+@dataclass
+class Design:
+    """
+    A complete, concrete system design produced by parsing a .blocs file.
+
+    All four top-level dicts share one flat namespace enforced by the
+    namespace set -- a block definition, block instance, signal, and thread
+    cannot share a name.
+
+    Fields:
+        source_path -- path to the .blocs file this was parsed from
+        block_defs  -- dict of BlockDef keyed by variant name
+        blocks      -- dict of BlockInstance keyed by instance name
+        signals     -- dict of Signal keyed by signal name
+        threads     -- dict of Thread keyed by thread name
+        namespace   -- set of all names for O(1) uniqueness enforcement
+    """
+    source_path: str
+    block_defs:  dict[str, BlockDef]      = field(default_factory=dict)
+    blocks:      dict[str, BlockInstance] = field(default_factory=dict)
+    signals:     dict[str, Signal]        = field(default_factory=dict)
+    threads:     dict[str, Thread]        = field(default_factory=dict)
+    namespace:   set[str]                 = field(default_factory=set)
+
+    def describe(self) -> str:
+        lines = [f"Design: {self.source_path}"]
+        for bd in self.block_defs.values():
+            lines.append(f"  blockdef  {bd.name}")
+        for bi in self.blocks.values():
+            lines.append(f"  block  {bi.name} ({bi.block_def.name})")
+        for sig in self.signals.values():
+            lines.append(f"  signal  {sig.name}  {sig.sig_type.name}")
+        for thr in self.threads.values():
+            lines.append(f"  thread  {thr.name}  {thr.period_ns} ns")
         return "\n".join(lines)
