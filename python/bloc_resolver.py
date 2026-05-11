@@ -16,31 +16,7 @@ from emblocs import (
     PinType, PinDir,
 )
 from expressions import evaluate, ExpressionError
-
-
-# ---------------------------------------------------------------------------
-# Error reporting
-# ---------------------------------------------------------------------------
-
-# Module-level state: context string for error messages.
-# Reset at the start of each resolve() call.
-_error_context: str = ""
-_error_count:   int = 0
-_warning_count: int = 0
-
-def report(message: str, is_error: bool = True) -> None:
-    """
-    Report a resolver error or warning with block name context.
-    Errors increment _error_count; warnings increment _warning_count.
-    """
-    global _error_count, _warning_count
-    prefix = "error" if is_error else "warning"
-    print(f"{_error_context}: {prefix}: {message}", file=sys.stderr)
-    if is_error:
-        _error_count += 1
-    else:
-        _warning_count += 1
-
+from parse_common import ( Severity, OMIT, current_context, report)
 
 # ---------------------------------------------------------------------------
 # Parameter validation and variable dict construction
@@ -59,31 +35,28 @@ def _build_variables(spec: BlockSpec,
     known = {p.name for p in spec.params}
     for name in supplied:
         if name not in known:
-            report(f"unknown parameter {name!r}")
+            report(Severity.ERROR, f"unknown parameter {name!r}")
 
     for param in spec.params:
-        if param.name in supplied:
-            val = supplied[param.name]
-        else:
-            val = param.default
+        val = supplied.get(param.name, param.default)
 
         # validate type
         if param.param_type == "bool":
             if val not in (0, 1):
-                report(f"parameter {param.name!r} is bool; "
-                       f"value {val} is not 0 or 1", is_error=False)
+                report(Severity.WARNING,
+                       f"parameter {param.name!r} is bool; "
+                       f"value {val} is not 0 or 1")
         elif param.param_type == "u32":
             if val < param.min_val:
-                report(f"parameter {param.name!r} value {val} "
+                report(Severity.ERROR,
+                       f"parameter {param.name!r} value {val} "
                        f"is less than min ({param.min_val})")
             if val > param.max_val:
-                report(f"parameter {param.name!r} value {val} "
+                report(Severity.ERROR,
+                       f"parameter {param.name!r} value {val} "
                        f"is greater than max ({param.max_val})")
-
+        # save value
         variables[param.name] = val
-
-    if _error_count > 0:
-        return None
     return variables
 
 
@@ -111,7 +84,8 @@ def _recurse_pin(pin_spec: PinSpec, dims: list[DimSpec],
             try:
                 exported = evaluate(pin_spec.export_condition, variables)
             except ExpressionError as e:
-                report(f"export condition error in pin "
+                report(Severity.ERROR,
+                       f"export condition error in pin "
                        f"{pin_spec.emblocs_name!r}: {e}")
                 return []
             if not exported:
@@ -130,7 +104,8 @@ def _recurse_pin(pin_spec: PinSpec, dims: list[DimSpec],
         try:
             size = evaluate(dim.size_expr, variables)
         except ExpressionError as e:
-            report(f"dimension size error in pin "
+            report(Severity.ERROR,
+                   f"dimension size error in pin "
                    f"{pin_spec.emblocs_name!r}: {e}")
             return []
         results = []
@@ -185,7 +160,8 @@ def _expand_statement(statement: Statement,
         try:
             result = evaluate(cond, variables)
         except ExpressionError as e:
-            report(f"condition expression error {cond!r}: {e}")
+            report(Severity.ERROR,
+                   f"condition expression error {cond!r}: {e}")
             return []
         if not result:
             return []
@@ -198,7 +174,8 @@ def _expand_statement(statement: Statement,
     elif isinstance(obj, FunctSpec):
         return _expand_funct(obj, variables)
     else:
-        report(f"unknown statement type: {type(obj).__name__}")
+        report(Severity.ERROR,
+               f"unknown statement type: {type(obj).__name__}")
         return []
 
 
@@ -235,7 +212,8 @@ def _evaluate_template(template: str,
         try:
             val = evaluate(expr_str, variables)
         except ExpressionError as e:
-            report(f"template expression error {expr_str!r}: {e}")
+            report(Severity.ERROR,
+                   f"template expression error {expr_str!r}: {e}")
             return None
         result = result.replace(m.group(0), str(int(val)).zfill(width), 1)
     return result
@@ -246,8 +224,7 @@ def _evaluate_template(template: str,
 # ---------------------------------------------------------------------------
 
 def resolve(spec: BlockSpec, variant_name: str,
-            supplied_params: dict[str, int] | None = None,
-            error_context: str | None = None) -> BlockDef | None:
+            supplied_params: dict[str, int] | None = None) -> BlockDef | None:
     """
     Resolve a BlockSpec against concrete parameter values to produce a BlockDef.
 
@@ -255,22 +232,27 @@ def resolve(spec: BlockSpec, variant_name: str,
                        use their default values from spec.params.
                        Pass None or {} to use all defaults.
 
-    Returns a BlockDef, or None if any error was reported.
+    Requires an active ErrorContext (push_context() must be called before
+    resolve() and pop_context() after). Reports errors into the current context.
+    Returns a BlockDef if successful, None if any errors were reported.
     """
-    global _error_context, _error_count, _warning_count
-    _error_context = error_context if error_context is not None else variant_name
-    _error_count   = 0
-    _warning_count = 0
+    # ensure we have a clean context to work with
+    ctx = current_context()
+    if not ctx.no_errors():
+        report(Severity.ERROR,
+               "resolve() called with pre-existing errors in context")
+        return None
 
     if not variant_name.isidentifier():
-        report(f"invalid variant name {variant_name!r}")
+        report(Severity.ERROR,
+               f"invalid variant name {variant_name!r}")
         return None
 
     if supplied_params is None:
         supplied_params = {}
 
     variables = _build_variables(spec, supplied_params)
-    if variables is None:
+    if not ctx.no_errors():
         return None
 
     ordered_declarations = []
@@ -283,22 +265,20 @@ def resolve(spec: BlockSpec, variant_name: str,
             ordered_declarations.append(obj)
             if isinstance(obj, PinDef):
                 if obj.emblocs_name in pins:
-                    report(f"duplicate pin name {obj.emblocs_name!r} "
+                    report(Severity.ERROR,
+                           f"duplicate pin name {obj.emblocs_name!r} "
                            f"after resolution")
                 else:
                     pins[obj.emblocs_name] = obj
             elif isinstance(obj, FunctDef):
                 if obj.name in functions:
-                    report(f"duplicate function name {obj.name!r} "
+                    report(Severity.ERROR,
+                           f"duplicate function name {obj.name!r} "
                            f"after resolution")
                 else:
                     functions[obj.name] = obj
 
-    print(f"{_error_context}: "
-          f"{_error_count} error(s), {_warning_count} warning(s)",
-          file=sys.stderr)
-
-    if _error_count > 0:
+    if not current_context().no_errors():
         return None
 
     return BlockDef(
@@ -320,6 +300,7 @@ if __name__ == "__main__":
     import sys
     import os
     from bloc_parser import parse_bloc
+    from parse_common import push_context, pop_context
 
     if len(sys.argv) < 2:
         print(f"usage: {sys.argv[0]} <file.bloc> [variant_name] [PARAM=value ...]",
@@ -355,7 +336,10 @@ if __name__ == "__main__":
     if spec is None:
         sys.exit(1)
 
-    block_def = resolve(spec, variant_name, supplied )
+    push_context(source=variant_name)
+    block_def = resolve(spec, variant_name, supplied)
+    ctx = pop_context()
+    ctx.summarize()
     if block_def is None:
         sys.exit(1)
 

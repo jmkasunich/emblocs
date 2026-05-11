@@ -3,77 +3,17 @@
 # Reads a .bloc file and returns a BlockSpec object.
 #
 import sys
-from emblocs import BlockSpec, ParamSpec, Statement, PinSpec, DimSpec, VarDef, FunctSpec, PinType, PinDir, U32_MAX
+from emblocs import ( BlockSpec, ParamSpec, Statement, PinSpec,
+                      DimSpec, VarDef, FunctSpec, PinType, PinDir, U32_MAX)
 import re
 from collections import namedtuple
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from expressions import evaluate, ExpressionError
+from parse_common import ( Token, tokenize_line,
+                           Severity, report, OMIT,
+                           push_context, pop_context )
 
-Token = namedtuple("Token", ["text", "line", "column"])
-
-# ---------------------------------------------------------------------------
-# Diagnostic reporting
-# ---------------------------------------------------------------------------
-
-class Severity(Enum):
-    FATAL   = auto()
-    ERROR   = auto()
-    WARNING = auto()
-    INFO    = auto()
-
-_SEVERITY_LABEL = {
-    Severity.FATAL:   "fatal error",
-    Severity.ERROR:   "error",
-    Severity.WARNING: "warning",
-    Severity.INFO:    "info",
-}
-
-# Module-level state: current file path and diagnostic counters.
-# Reset at the start of each parse_bloc() call.
-_path:          str = ""
-_error_count:   int = 0
-_warning_count: int = 0
-_info_count:    int = 0
-
-def report(severity: Severity, message: str,
-           lineno: int = None, column: int = None,
-           token: Token = None) -> None:
-    """
-    Print a diagnostic message and update counters.
-
-    If token is supplied, lineno and column are taken from it.
-    If neither token nor lineno/column are supplied, the location
-    fields are omitted from the output.
-
-    FATAL raises SystemExit after printing.  All others return normally.
-    """
-    global _error_count, _warning_count, _info_count
-
-    if token is not None:
-        lineno = token.line
-        column = token.column
-
-    label = _SEVERITY_LABEL[severity]
-
-    if lineno is not None and column is not None:
-        location = f"{_path}:{lineno}:{column}: "
-    elif lineno is not None:
-        location = f"{_path}:{lineno}: "
-    else:
-        location = f"{_path}: "
-
-    print(f"{location}{label}: {message}", file=sys.stderr)
-
-    if severity == Severity.ERROR:
-        _error_count += 1
-    elif severity == Severity.WARNING:
-        _warning_count += 1
-    elif severity == Severity.INFO:
-        _info_count += 1
-
-    if severity == Severity.FATAL:
-        sys.exit(1)
 
 # ---------------------------------------------------------------------------
 # Keyword tables
@@ -91,33 +31,6 @@ PIN_DIRS = {
     "input":  PinDir.INPUT,
     "output": PinDir.OUTPUT,
 }
-
-# ---------------------------------------------------------------------------
-# Line-level helpers
-# ---------------------------------------------------------------------------
-
-_TOKEN_RE = re.compile(r"\S+")
-
-def tokenize_line(line: str, line_no: int) -> list[Token]:
-    """
-    Tokenize a single line into whitespace-separated tokens.
-
-    Parameters:
-        line (str): The source line to tokenize
-        line_no (int): 1-based line number
-
-    Returns:
-        list[Token]: Tokens with text, line, and column (1-based)
-        if line is all whitespace, returns an empty list
-    """
-    return [
-        Token(
-            text=m.group(),
-            line=line_no,
-            column=m.start() + 1
-        )
-        for m in _TOKEN_RE.finditer(line)
-    ]
 
 # ---------------------------------------------------------------------------
 # Parser state
@@ -258,35 +171,35 @@ def parse_param(spec: BlockSpec, tokens: list[Token], description: str) -> None:
     if default is None:
         report(Severity.ERROR,
                f"'param' requires a 'default=' value",
-               lineno=keyword.line)
+               lineno=keyword.line, column=OMIT)
         return
 
     if min_val != 0 and param_type == "bool":
         report(Severity.WARNING,
                "'min' is not meaningful for bool parameters",
-               lineno=keyword.line)
+               lineno=keyword.line, column=OMIT)
     if max_val != U32_MAX and param_type == "bool":
         report(Severity.WARNING,
                "'max' is not meaningful for bool parameters",
-               lineno=keyword.line)
+               lineno=keyword.line, column=OMIT)
 
     # cross-validate min, max, default
     if min_val > max_val:
         report(Severity.ERROR,
                 f"min ({min_val}) is greater than max ({max_val})",
-                lineno=keyword.line)
+                lineno=keyword.line, column=OMIT)
         return
 
     if default < min_val:
         report(Severity.ERROR,
                f"default ({default}) is less than min ({min_val})",
-               lineno=keyword.line)
+               lineno=keyword.line, column=OMIT)
         return
 
     if default > max_val:
         report(Severity.ERROR,
                f"default ({default}) is greater than max ({max_val})",
-               lineno=keyword.line)
+               lineno=keyword.line, column=OMIT)
         return
 
     spec.params.append(ParamSpec(
@@ -328,7 +241,7 @@ def parse_pin(spec: BlockSpec, tokens: list[Token], description: str) -> PinSpec
     if len(tokens) not in (4, 6):
         report(Severity.ERROR,
                 f"'pin' declaration must have 4 or 6 tokens, got {len(tokens)}",
-                lineno=keyword.line)
+                lineno=keyword.line, column=OMIT)
         return None
 
     # token assignment
@@ -581,13 +494,6 @@ def _wrap(spec: BlockSpec, state: ParseState, obj) -> None:
         spec.statements.append(
             Statement(conditions=list(state.if_stack), statement=obj))
 
-def parse_statement_debug(spec, tokens, description):
-    """ Temporary testing replacement for parse_statement();
-        simply prints the tokens and description, then returns."""
-    print(f"STATEMENT: {[t.text for t in tokens]}")
-    if description:
-        print(f"  DESCRIPTION: {description!r}")
-
 def parse_statement(spec: BlockSpec, state: ParseState,
                     tokens: list[Token], description: str) -> None:
     """
@@ -671,16 +577,12 @@ def parse_bloc(path: str) -> BlockSpec:
 
     Raises SystemExit (via parse_error) on any syntax or semantic error.
     """
-    global _path, _error_count, _warning_count, _info_count
-    _path = path
-    _error_count = 0
-    _warning_count = 0
-    _info_count = 0
-
+    push_context(source=path)
     spec = BlockSpec(source_path=path)
     pending_tokens: list[Token] = []
     pending_description: str = ""
     state = ParseState()
+
     def flush():
         """
         If there are pending tokens, call parse_statement(),
@@ -735,13 +637,9 @@ def parse_bloc(path: str) -> BlockSpec:
         report(Severity.FATAL, "Unicode decode error")
     except FileNotFoundError:
         report(Severity.FATAL,"File not found")
-
-    print(f"{_path}: {_error_count} error(s), "
-          f"{_warning_count} warning(s), {_info_count} info(s)", file=sys.stderr)
-    if _error_count > 0:
-        return None
-    return spec
-
+    ctx = pop_context()
+    ctx.summarize()
+    return spec if ctx.no_errors() else None
 
 # ---------------------------------------------------------------------------
 # Test driver

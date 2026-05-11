@@ -1,0 +1,6 @@
+# a comment
+blockdef mux_2ch_3in    ../src/components/mux.bloc NUM_CHAN=2 NUM_INPUT=2
+blockdef mux_default    ../src/components/mux.bloc
+block my_default_mux    mux_default
+block my_3in_mux        mux_2ch_3in
+signal sel u32 =0 +my_3in_mux.sel +my_default_mux.sel

@@ -16,69 +16,9 @@ from emblocs import (
 )
 from bloc_parser import parse_bloc
 from bloc_resolver import resolve
-
-
-# ---------------------------------------------------------------------------
-# Token
-# ---------------------------------------------------------------------------
-
-Token = namedtuple("Token", ["text", "line", "column"])
-
-
-# ---------------------------------------------------------------------------
-# Error reporting
-# ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
-# Diagnostic reporting
-# ---------------------------------------------------------------------------
-
-class Severity(Enum):
-    FATAL   = auto()
-    ERROR   = auto()
-    WARNING = auto()
-    INFO    = auto()
-
-_SEVERITY_LABEL = {
-    Severity.FATAL:   "fatal error",
-    Severity.ERROR:   "error",
-    Severity.WARNING: "warning",
-    Severity.INFO:    "info",
-}
-_path:          str = ""
-_error_count:   int = 0
-_warning_count: int = 0
-_info_count:    int = 0
-
-def report(severity, message: str,
-           lineno: int = None, column: int = None,
-           token: Token = None) -> None:
-    """
-    Print a diagnostic message and update counters.
-    Mirrors the report() function in bloc_parser.py.
-    """
-    global _error_count, _warning_count, _info_count
-
-    if token is not None:
-        lineno = token.line
-        column = token.column
-
-    if lineno is not None and column is not None:
-        location = f"{_path}:{lineno}:{column}: "
-    elif lineno is not None:
-        location = f"{_path}:{lineno}: "
-    else:
-        location = f"{_path}: "
-
-    print(f"{location}{_SEVERITY_LABEL[severity]}: {message}", file=sys.stderr)
-
-    if severity == Severity.ERROR:
-        _error_count += 1
-    elif severity == Severity.WARNING:
-        _warning_count += 1
-    elif severity == Severity.INFO:
-        _info_count += 1
-    elif severity == Severity.FATAL:
-        sys.exit(1)
+from parse_common import ( Token, tokenize_line,
+                           Severity, report, OMIT,
+                           push_context, pop_context )
 
 
 # ---------------------------------------------------------------------------
@@ -92,32 +32,13 @@ SIGNAL_TYPES = {
     "float": PinType.FLOAT,
 }
 
-# ---------------------------------------------------------------------------
-# Lexer helpers
-# ---------------------------------------------------------------------------
 
-_TOKEN_RE = re.compile(r"\S+")
-
-
-def tokenize_line(line: str, line_num: int) -> list[Token]:
+def parse_command(tokens: list[Token], design: Design) -> None:
     """
-    Tokenize a single line into whitespace-separated Token objects.
-
-    Parameters:
-        line     -- the source line to tokenize (comments already stripped)
-        line_num -- 1-based line number
-
-    Returns a list of Token objects with 1-based column numbers.
+    Temporary debug stub: print tokens for each logical line.
+    Will be replaced with actual command parsing.
     """
-    return [
-        Token(
-            text   = m.group(),
-            line   = line_num,
-            column = m.start() + 1,
-        )
-        for m in _TOKEN_RE.finditer(line)
-    ]
-
+    print(f"COMMAND: {[t.text for t in tokens]}")
 
 # ---------------------------------------------------------------------------
 # Top-level entry point
@@ -128,12 +49,7 @@ def parse_blocs(path: str) -> Design | None:
     Parse a .blocs file and return a populated Design object.
     Returns None if any errors were reported.
     """
-    global _path, _error_count, _warning_count, _info_count
-    _path          = path
-    _error_count   = 0
-    _warning_count = 0
-    _info_count    = 0
-
+    push_context(source=path)
     design = Design(source_path=path)
 
     def on_command(tokens: list[Token]) -> None:
@@ -188,13 +104,9 @@ def parse_blocs(path: str) -> Design | None:
         # file ended without final newline; flush remaining tokens
         on_command(logical_tokens)
 
-    print(f"{_path}: {_error_count} error(s), "
-          f"{_warning_count} warning(s), {_info_count} info(s)",
-          file=sys.stderr)
-
-    if _error_count > 0:
-        return None
-    return design
+    ctx = pop_context()
+    ctx.summarize()
+    return design if ctx.no_errors() else None
 
 # ---------------------------------------------------------------------------
 # Test driver
