@@ -1,4 +1,4 @@
-# expressions.py
+# expressions_old.py
 # Safe expression evaluator for EMBLOCS tools.
 #
 # Evaluates C-like expressions using Python's ast module for parsing,
@@ -18,18 +18,17 @@ import operator
 # ---------------------------------------------------------------------------
 
 class ExpressionError(Exception):
-    def __init__(self, expression, message=None):
-        super().__init__(message)
-        self.expression = expression
-        self.message = message
+    """Raised when an expression cannot be parsed or evaluated."""
+    pass
 
-    def __str__(self):
-            base = f"expression '{self.expression}'"
-            if self.message:
-                base += f": {self.message}"
-            if self.__cause__:
-                base += f": {self.__cause__}"
-            return base
+# ---------------------------------------------------------------------------
+# Private helper for exception
+# ---------------------------------------------------------------------------
+
+def raiseExprError(msg:str):
+    """ Raises ExpressionError, prepending msg with the expression """
+    raise ExpressionError(f"Error in expression {_expr!r}: {msg}")
+
 
 # ---------------------------------------------------------------------------
 # Operator tables
@@ -86,8 +85,9 @@ CMP_OPS = {
 def _int_div(a: int, b: int) -> int:
     """Integer division truncating toward zero, C-style."""
     if b == 0:
-        raise ZeroDivisionError("division by zero")
+        raiseExprError("division by zero")
     return int(a / b)
+
 
 def _translate(expr: str) -> str:
     """
@@ -112,8 +112,8 @@ class _Evaluator:
     AST-walking expression evaluator.  Do not instantiate directly;
     use the module-level evaluate() function.
     """
-    def __init__(self, expr: str, variables: dict, mode: str):
-        self.expr_str = expr
+
+    def __init__(self, variables: dict, mode: str):
         self.variables = variables
         self.mode      = mode
         if mode == 'int' :
@@ -123,26 +123,12 @@ class _Evaluator:
             self.bin_ops   = FLOAT_BIN_OPS
             self.unary_ops = FLOAT_UNARY_OPS
         else :
-            self.error(f"Bad mode: {mode!r}; expected 'int' or 'float'")
-
-    def error(self, message=None, *, cause=None):
-        if cause is not None:
-            raise ExpressionError(self.expr_str, message) from cause
-        else:
-            raise ExpressionError(self.expr_str, message)
-
-    def evaluate(self):
-        translated = _translate(self.expr_str)
-        try:
-            tree = ast.parse(translated.strip(), mode='eval')
-        except (SyntaxError, ValueError, TypeError) as e:
-            self.error(cause=e)
-        return self.visit(tree)
+            raise ExpressionError(f"Invalid expression mode: {mode!r}; expected 'int' or 'float'")
 
     def visit(self, node):
         method = getattr(self, f"_visit_{type(node).__name__}", None)
         if method is None:
-            self.error(f"unsupported construct: {type(node).__name__}")
+            raiseExprError(f"unsupported construct: {type(node).__name__}")
         return method(node)
 
     def _visit_Expression(self, node):
@@ -153,37 +139,44 @@ class _Evaluator:
             return node.value
         if self.mode == 'float' and isinstance(node.value, (int, float)):
             return float(node.value)
-        self.error(f"constant {node.value!r} not valid for {self.mode}")
+        raiseExprError(
+            f"constant {node.value!r} not valid for {self.mode}")
 
     def _visit_Name(self, node):
         if node.id not in self.variables:
-            self.error(f"unknown variable: {node.id!r}")
+            raiseExprError(f"unknown variable: {node.id!r}")
         val = self.variables[node.id]
         if self.mode == 'int' and not isinstance(val, int):
-            self.error(f"variable {node.id!r} must be integer")
+            raiseExprError(f"variable {node.id!r} must be integer")
         elif self.mode == 'float' and not isinstance(val, (int, float)):
-            self.error(f"variable {node.id!r} must be number")
+            raiseExprError(f"variable {node.id!r} must be number")
         return val
 
     def _visit_BinOp(self, node):
         op_type = type(node.op)
         if op_type not in self.bin_ops:
-            self.error(f"operator {op_type.__name__!r} not supported for {self.mode}")
+            raiseExprError(
+                f"operator {op_type.__name__!r} not supported for {self.mode}")
         left  = self.visit(node.left)
         right = self.visit(node.right)
         try:
             return self.bin_ops[op_type](left, right)
-        except (ArithmeticError, ValueError, TypeError) as e:
-            self.error(f"operator {op_type.__name__!r}", cause=e)
+        except ValueError as e:
+            raiseExprError(
+                f"operator {op_type.__name__!r}: {e}"
+            )
 
     def _visit_UnaryOp(self, node):
         op_type = type(node.op)
         if op_type not in self.unary_ops:
-            self.error(f"unary {op_type.__name__!r} not supported for {self.mode}")
+            raiseExprError(
+                f"unary {op_type.__name__!r} not supported for {self.mode}")
         try:
             return self.unary_ops[op_type](self.visit(node.operand))
-        except (ArithmeticError, ValueError, TypeError) as e:
-            self.error(f"operator {op_type.__name__!r}", cause=e)
+        except ValueError as e:
+            raiseExprError(
+                f"operator {op_type.__name__!r}: {e}"
+            )
 
     def _visit_BoolOp(self, node):
         if isinstance(node.op, ast.And):
@@ -191,26 +184,31 @@ class _Evaluator:
                 if not self.visit(v):
                     return 0
             return 1
-        elif isinstance(node.op, ast.Or):
+        if isinstance(node.op, ast.Or):
             for v in node.values:
                 if self.visit(v):
                     return 1
             return 0
-        raise RuntimeError(f"Unexpected BoolOp: {type(node.op).__name__}")
+        # FIXME - I believe this cannot be reached, it currently has no test case
+        raiseExprError(f"unsupported boolean operator {type(node.op).__name__!r}")
 
     def _visit_Compare(self, node):
         if len(node.ops) > 1:
-            self.error("chained compare not supported; "
+            raiseExprError(
+                "chained compare not supported; "
                 "use '&&' to combine multiple comparisons")
         op_type = type(node.ops[0])
         if op_type not in CMP_OPS:
-            self.error(f"unsupported comparison operator: {op_type.__name__!r}")
+            raiseExprError(
+                f"unsupported comparison operator: {op_type.__name__!r}")
         left  = self.visit(node.left)
         right = self.visit(node.comparators[0])
         try:
             return int(CMP_OPS[op_type](left, right))
-        except (ArithmeticError, ValueError, TypeError) as e:
-            self.error(f"operator {op_type.__name__!r}", cause=e)
+        except ValueError as e:
+            raiseExprError(
+                f"operator {op_type.__name__!r}: {e}"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -231,15 +229,25 @@ def evaluate(expr: str, variables: dict = None, mode: str = 'int') -> int | floa
     Returns an int in INT mode, a float in FLOAT mode.
     Raises ExpressionError on any syntax or semantic problem.
     """
+    # save expression in module-level var for error messages
+    global _expr
+    _expr = expr
     if variables is None:
         variables = {}
-    evaluator = _Evaluator(expr, variables, mode)
-    return evaluator.evaluate()
+    try:
+        translated = _translate(expr)
+        tree       = ast.parse(translated.strip(), mode='eval')
+    except SyntaxError as e:
+        raise ExpressionError(f"Error in expression {_expr!r}: {e.msg}") from e
+
+    return _Evaluator(variables, mode).visit(tree)
 
 
 # ---------------------------------------------------------------------------
 # Test driver
 # ---------------------------------------------------------------------------
+
+
 
 
 if __name__ == "__main__":

@@ -190,47 +190,47 @@ def test_boolean_variables(expr, variables, mode, expected):
 # test patterns that should cause errors
 @pytest.mark.parametrize("expr, variables, mode, expected_message", [
     # --- empty expression ---
-    ("", {}, "int", "Error in expression '': invalid syntax"),
+    ("", {}, "int", "expression '': invalid syntax"),
     # --- whitespace only expression ---
-    ("  ", {}, "float", "Error in expression '  ': invalid syntax"),
+    ("  ", {}, "float", "expression '  ': invalid syntax"),
     # --- whitespace only expression ---
-    (":", {}, "int", "Error in expression ':': invalid syntax"),
+    (":", {}, "int", "expression ':': invalid syntax"),
     # --- whitespace only expression ---
-    ("_", {}, "int", "Error in expression '_': unknown variable: '_'"),
+    ("_", {}, "int", "expression '_': unknown variable: '_'"),
     # --- whitespace only expression ---
-    ("None", {}, "float", "Error in expression 'None': constant None not valid for float"),
+    ("None", {}, "float", "expression 'None': constant None not valid for float"),
     # --- invalid expression type ---
     ("1", {}, "bool", "Invalid expression mode: 'bool'; expected 'int' or 'float'"),
     # --- syntax error ---
-    ("1+", {}, "int", "Error in expression '1+': invalid syntax"),
+    ("1+", {}, "int", "expression '1+': invalid syntax"),
     # --- float constant in int mode ---
-    ("1.5", {}, "int", "Error in expression '1.5': constant 1.5 not valid for int"),
+    ("1.5", {}, "int", "expression '1.5': constant 1.5 not valid for int"),
     # --- hex constant in float mode ---
-    ("...", {}, "float", "Error in expression '...': constant Ellipsis not valid for float"),
+    ("...", {}, "float", "expression '...': constant Ellipsis not valid for float"),
     # --- unknown variable ---
-    ("foo", {"bar":1}, "int", "Error in expression 'foo': unknown variable: 'foo'"),
+    ("foo", {"bar":1}, "int", "expression 'foo': unknown variable: 'foo'"),
     # --- mistyped variable ---
-    ("foo", {"foo":1.5}, "int", "Error in expression 'foo': variable 'foo' must be integer"),
+    ("foo", {"foo":1.5}, "int", "expression 'foo': variable 'foo' must be integer"),
     # --- mistyped variable ---
-    ("foo", {"foo":...}, "float", "Error in expression 'foo': variable 'foo' must be number"),
+    ("foo", {"foo":...}, "float", "expression 'foo': variable 'foo' must be number"),
     # --- unsupported operator ---
-    ("1//2", {}, "int", "Error in expression '1//2': operator 'FloorDiv' not supported for int"),
+    ("1//2", {}, "int", "expression '1//2': operator 'FloorDiv' not supported for int"),
     # --- bitwise and not allowed in float mode ---
-    ("1&2", {}, "float", "Error in expression '1&2': operator 'BitAnd' not supported for float"),
+    ("1&2", {}, "float", "expression '1&2': operator 'BitAnd' not supported for float"),
     # --- bitwise invert not allowed in float mode ---
-    ("~1.2", {}, "float", "Error in expression '~1.2': unary 'Invert' not supported for float"),
+    ("~1.2", {}, "float", "expression '~1.2': unary 'Invert' not supported for float"),
     # --- division by zero ---
-    ("1/0", {}, "int", "Error in expression '1/0': division by zero"),
+    ("1/0", {}, "int", "expression '1/0': operator 'Div': division by zero"),
     # --- chained comparison ---
-    ("1<2<3", {}, "int", "Error in expression '1<2<3': chained compare not supported; use '&&' to combine multiple comparisons"),
+    ("1<2<3", {}, "int", "expression '1<2<3': chained compare not supported; use '&&' to combine multiple comparisons"),
     # --- unsupported comparison operator ---
-    ("1 is 3", {}, "int", "Error in expression '1 is 3': unsupported comparison operator: 'Is'"),
+    ("1 is 3", {}, "int", "expression '1 is 3': unsupported comparison operator: 'Is'"),
     # --- unsupported constructs ---
-    ("len(x)", {}, "int", "Error in expression 'len(x)': unsupported construct: Call"),
-    ("[1,2,3]", {}, "int", "Error in expression '[1,2,3]': unsupported construct: List"),
+    ("len(x)", {}, "int", "expression 'len(x)': unsupported construct: Call"),
+    ("[1,2,3]", {}, "int", "expression '[1,2,3]': unsupported construct: List"),
 
     # --- negative shift ---
-    ("1<<-1", {}, "int", "Error in expression '1<<-1': operator 'LShift': negative shift count"),
+    ("1<<-1", {}, "int", "expression '1<<-1': operator 'LShift': negative shift count"),
 ])
 def test_error_cases(expr, variables, mode, expected_message):
     import pytest
