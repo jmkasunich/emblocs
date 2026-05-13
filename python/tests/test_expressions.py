@@ -22,9 +22,15 @@ from expressions import evaluate, ExpressionError
     # modulo edge cases
     ("1%1", "int", 0),
     ("0%1", "int", 0),
-    # division edge
-    ("-3/2", "int", -1),  # confirm truncation toward zero
-    ("3/2", "int", 1),
+    ("7%3", "int", 1),
+    ("-7%3", "int", -1),
+    ("7%-3", "int", 1),
+    ("-7%-3", "int", -1),
+    # division edge cases
+    ("7/3", "int", 2),
+    ("-7/3", "int", -2),  # confirm truncation toward zero
+    ("7/-3", "int", -2),
+    ("-7/-3", "int", 2),
 
     # --- Integer bitwise operations ---
     ("0xFF&0x0F", "int", 15),
@@ -64,9 +70,6 @@ from expressions import evaluate, ExpressionError
     ("-1.5", "float", -1.5),
     ("+2.5", "float", 2.5),
     # --- Float arithmetic ---
-    ("1.0", "float", 1.0),
-    ("0.5", "float", 0.5),
-    ("3.5", "float", 3.5),
     ("1.5+2.0", "float", 3.5),
     ("3.5-1.0", "float", 2.5),
     ("2.0*1.5", "float", 3.0),
@@ -101,6 +104,10 @@ def test_constant_expressions(expr, mode, expected):
     ("1&&1", 1),
     ("1||0", 1),
     ("!0", 1),
+
+    # --- logical early out - should exit on first term ---
+    ("0&&(1/0)", 0),
+    ("1||(1/0)", 1),
 
     # --- NOT vs != (critical edge case) ---
     ("1!=2", 1),
@@ -140,7 +147,7 @@ def test_logical_translation(expr, expected):
     ("A", {"A": 10, "B": 3}, "int", 10),
     ("B", {"A": 10, "B": 3}, "int", 3),
 
-    # --- simple variables ---
+    # --- arithmetic with variables ---
     ("A+B", {"A": 10, "B": 3}, "int", 13),
     ("A-B", {"A": 10, "B": 3}, "int", 7),
     ("A*B", {"A": 10, "B": 3}, "int", 30),
@@ -199,8 +206,6 @@ def test_boolean_variables(expr, variables, mode, expected):
     ("_", {}, "int", "expression '_': unknown variable: '_'"),
     # --- whitespace only expression ---
     ("None", {}, "float", "expression 'None': constant None not valid for float"),
-    # --- invalid expression type ---
-    ("1", {}, "bool", "Invalid expression mode: 'bool'; expected 'int' or 'float'"),
     # --- syntax error ---
     ("1+", {}, "int", "expression '1+': invalid syntax"),
     # --- float constant in int mode ---
@@ -221,6 +226,8 @@ def test_boolean_variables(expr, variables, mode, expected):
     ("~1.2", {}, "float", "expression '~1.2': unary 'Invert' not supported for float"),
     # --- division by zero ---
     ("1/0", {}, "int", "expression '1/0': operator 'Div': division by zero"),
+    # --- modulo by zero ---
+    ("1%0", {}, "int", "expression '1%0': operator 'Mod': integer modulo by zero"),
     # --- chained comparison ---
     ("1<2<3", {}, "int", "expression '1<2<3': chained compare not supported; use '&&' to combine multiple comparisons"),
     # --- unsupported comparison operator ---
@@ -233,7 +240,6 @@ def test_boolean_variables(expr, variables, mode, expected):
     ("1<<-1", {}, "int", "expression '1<<-1': operator 'LShift': negative shift count"),
 ])
 def test_error_cases(expr, variables, mode, expected_message):
-    import pytest
 
     with pytest.raises(ExpressionError) as e:
         evaluate(expr, variables, mode)
@@ -245,3 +251,7 @@ def test_error_cases(expr, variables, mode, expected_message):
         f"EXPECTED:{expected_message}\n"
         f"ACTUAL:{actual}\n"
     )
+
+def test_invalid_mode():
+    with pytest.raises(ValueError, match="invalid mode"):
+        evaluate("1", mode="bool")

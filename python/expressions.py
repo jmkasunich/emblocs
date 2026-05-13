@@ -12,24 +12,27 @@
 
 import ast
 import operator
+import re
 
 # ---------------------------------------------------------------------------
 # Public exception
 # ---------------------------------------------------------------------------
 
 class ExpressionError(Exception):
-    def __init__(self, expression, message=None):
+    def __init__(self, message : str, expression : str):
         super().__init__(message)
         self.expression = expression
         self.message = message
 
     def __str__(self):
-            base = f"expression '{self.expression}'"
-            if self.message:
-                base += f": {self.message}"
-            if self.__cause__:
-                base += f": {self.__cause__}"
-            return base
+        base = "expression"
+        if self.expression is not None:
+            base += f" '{self.expression}'"
+        if self.message:
+            base += f": {self.message}"
+        if self.__cause__:
+            base += f": {getattr(self.__cause__, 'msg', str(self.__cause__))}"
+        return base
 
 # ---------------------------------------------------------------------------
 # Operator tables
@@ -40,7 +43,7 @@ INT_BIN_OPS = {
     ast.Sub:    operator.sub,
     ast.Mult:   operator.mul,
     ast.Div:    lambda a, b: _int_div(a, b),
-    ast.Mod:    operator.mod,
+    ast.Mod:    lambda a, b: _int_mod(a, b),
     ast.BitAnd: operator.and_,
     ast.BitOr:  operator.or_,
     ast.BitXor: operator.xor,
@@ -89,15 +92,21 @@ def _int_div(a: int, b: int) -> int:
         raise ZeroDivisionError("division by zero")
     return int(a / b)
 
+def _int_mod(a: int, b: int) -> int:
+    """Integer modulo truncating toward zero, C-style."""
+    if b == 0:
+        raise ZeroDivisionError("integer modulo by zero")
+    return (a - (_int_div(a, b) * b))
+
+_NOT_RE = re.compile(r'!(?!=)')
+
 def _translate(expr: str) -> str:
     """
     Translate C-style logical operators to Python equivalents.
     Converts '&&' to ' and ', '||' to ' or ',
-          and '!' to ' not ' (while protecting '!=').
+          and '!' to ' not ' (but not '!=').
     """
-    expr = expr.replace("!=", "\x00")   # protect "!="
-    expr = expr.replace("!",  " not ")
-    expr = expr.replace("\x00", "!=")   # restore "!="
+    expr = _NOT_RE.sub(' not ', expr)
     expr = expr.replace("&&", " and ")
     expr = expr.replace("||", " or ")
     return expr
@@ -123,13 +132,13 @@ class _Evaluator:
             self.bin_ops   = FLOAT_BIN_OPS
             self.unary_ops = FLOAT_UNARY_OPS
         else :
-            self.error(f"Bad mode: {mode!r}; expected 'int' or 'float'")
+            assert False, f"unexpected mode: {mode!r}"
 
     def error(self, message=None, *, cause=None):
         if cause is not None:
-            raise ExpressionError(self.expr_str, message) from cause
+            raise ExpressionError(message, self.expr_str) from cause
         else:
-            raise ExpressionError(self.expr_str, message)
+            raise ExpressionError(message, self.expr_str)
 
     def evaluate(self):
         translated = _translate(self.expr_str)
@@ -196,7 +205,8 @@ class _Evaluator:
                 if self.visit(v):
                     return 1
             return 0
-        raise RuntimeError(f"Unexpected BoolOp: {type(node.op).__name__}")
+        else:
+            assert False, f"unexpected BoolOp: {type(node.op).__name__}"
 
     def _visit_Compare(self, node):
         if len(node.ops) > 1:
@@ -231,6 +241,8 @@ def evaluate(expr: str, variables: dict = None, mode: str = 'int') -> int | floa
     Returns an int in INT mode, a float in FLOAT mode.
     Raises ExpressionError on any syntax or semantic problem.
     """
+    if mode not in ('int', 'float'):
+        raise ValueError(f"invalid mode {mode!r}; expected 'int' or 'float'")
     if variables is None:
         variables = {}
     evaluator = _Evaluator(expr, variables, mode)
