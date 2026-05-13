@@ -142,7 +142,7 @@ def parse_param(spec: BlockSpec, tokens: list[Token], description: str) -> None:
         try:
             val = evaluate(val_str)
         except ExpressionError as e:
-            report(Severity.ERROR, str(e), token=tok)
+            report(Severity.ERROR, f"bad {key}: {str(e)}", token=tok)
             return
 
         if param_type == "u32":
@@ -306,10 +306,15 @@ def parse_pin(spec: BlockSpec, tokens: list[Token], description: str) -> PinSpec
             return None
         # validate dimension size expression using params
         try:
-            evaluate(expr, spec.defaults)
+            val=evaluate(expr, spec.defaults)
         except ExpressionError as e:
             report(Severity.ERROR,
-                   f"invalid dimension expression {expr!r}: {e}",
+                   f"invalid dimension: {str(e)}",
+                   token=name_tok)
+            return None
+        if val < 1:
+            report(Severity.ERROR,
+                   f"invalid dimension: {val}; must be at least 1",
                    token=name_tok)
             return None
         template_vars[index] = 0
@@ -353,7 +358,7 @@ def parse_pin(spec: BlockSpec, tokens: list[Token], description: str) -> PinSpec
             evaluate(expr_str, template_vars)
         except ExpressionError as e:
             report(Severity.ERROR,
-                   f"invalid expression {expr_str!r} in template: {e}",
+                   f"invalid template: {str(e)}",
                    token=name_tok)
             return None
 
@@ -370,7 +375,7 @@ def parse_pin(spec: BlockSpec, tokens: list[Token], description: str) -> PinSpec
             evaluate(if_cond_tok.text, template_vars)
         except ExpressionError as e:
             report(Severity.ERROR,
-                   f"invalid export condition {if_cond_tok.text!r}: {e}",
+                   f"invalid 'if' condition: {str(e)}",
                    token=if_cond_tok)
             return None
         export_cond = if_cond_tok.text
@@ -547,7 +552,7 @@ def parse_statement(spec: BlockSpec, state: ParseState,
             try:
                 val = evaluate(ifexpr.text, spec.defaults)
             except ExpressionError as e:
-                report(Severity.ERROR, str(e), token=ifexpr)
+                report(Severity.ERROR, f"bad #if condition: {str(e)}", token=ifexpr)
                 return
             state.if_stack.append(ifexpr.text)
 
