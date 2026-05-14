@@ -13,7 +13,7 @@ from collections import namedtuple
 from dataclasses import dataclass, field
 from enum import Enum, auto
 import re
-
+from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Sentinel for explicitly omitting a field from error output
@@ -117,6 +117,10 @@ def current_context() -> ErrorContext:
                            "call push_context() first")
     return _context_stack[-1]
 
+def clear_contexts() -> None:
+    """Clear the context stack. For use in tests only."""
+    _context_stack.clear()
+
 
 # ---------------------------------------------------------------------------
 # Error reporting
@@ -202,6 +206,77 @@ def report(severity: Severity,
     if severity == Severity.FATAL:
         sys.exit(1)
 
+
+# ---------------------------------------------------------------------------
+# Parser input processing
+# ---------------------------------------------------------------------------
+
+MAX_ENCODING_ERRORS = 20
+
+def _check_ascii(lines: list[str]) -> bool:
+    """
+    Check all lines for non-ASCII characters.
+    Reports errors into the current context.
+    Returns True if all lines are ASCII clean, False otherwise.
+    If more than MAX_ENCODING_ERRORS errors are found, stops
+    checking and reports False to avoid message flooding.
+    """
+    encoding_errors = 0
+    for lineno, line in enumerate(lines, start=1):
+        if not line.isascii():
+            report(Severity.ERROR, "non-ASCII character",
+                   lineno=lineno, column=OMIT)
+            encoding_errors += 1
+            if encoding_errors >= MAX_ENCODING_ERRORS:
+                report(Severity.ERROR,
+                       f"too many encoding errors ({MAX_ENCODING_ERRORS}); "
+                       f"file may be in the wrong encoding")
+                return False
+    return encoding_errors == 0
+
+
+def read_source_file(path: str) -> list[str] | None:
+    """
+    Open and read a source file into a list of lines.
+    Pushes an ErrorContext for path onto the context stack.
+    Caller is responsible for calling pop_context() when done.
+
+    Returns the list of lines, or None if the file could
+    not be read or contains encoding errors.
+    """
+    posix_path = Path(path).as_posix()
+    push_context(source=posix_path)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+    except UnicodeDecodeError:
+        report(Severity.ERROR,
+               "file is not valid UTF-8; re-save as UTF-8 and try again",
+               lineno=OMIT, column=OMIT)
+        return None
+    except FileNotFoundError:
+        report(Severity.ERROR, "file not found",
+               lineno=OMIT, column=OMIT)
+        return None
+
+    return lines if _check_ascii(lines) else None
+
+
+def read_source_string(text: str,
+                       source: str = "<string>") -> list[str] | None:
+    """
+    Split a string into lines and validate for ASCII content.
+    Pushes an ErrorContext with source label onto the context stack.
+    Caller is responsible for calling pop_context() when done.
+
+    The source parameter allows a more descriptive label than the
+    default "<string>" when the origin of the text is known.
+
+    Returns the list of lines, or None if encoding errors were found.
+    """
+    push_context(source=source)
+    lines = text.splitlines(keepends=True)
+    return lines if _check_ascii(lines) else None
 
 # ---------------------------------------------------------------------------
 # Tokenizer
