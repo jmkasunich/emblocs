@@ -55,6 +55,18 @@ def _format_descr(descr: str) -> str:
 def _indent_child(child_descr: str) -> str:
     return textwrap.indent(child_descr, "  ")
 
+
+# ---------------------------------------------------------------------------
+# Exception for error handling
+# Simple for now; sub-classes of errors or more complex
+# message formatting can be added later if needed
+# ---------------------------------------------------------------------------
+
+class EmblocsError(Exception):
+    """Base exception for all EMBLOCS object model errors."""
+    pass
+
+
 # ---------------------------------------------------------------------------
 # BlockSpec-level classes
 # These are produced by parsing a .bloc file.
@@ -419,11 +431,12 @@ class Signal:
         driver   -- PinInstance driving this signal, or None
         readers  -- list of PinInstances reading this signal
     """
-    name:    str
+    name:     str
     sig_type: PinType
-    value:   int | float = 0
-    driver:  object      = None   # PinInstance | None; object avoids forward ref
-    readers: list        = field(default_factory=list)
+    value:    int | float = 0
+    driver:   PinInstance | None = None
+    readers:  list[PinInstance]  = field(default_factory=list)
+    is_dummy: bool = False
 
     def describe(self) -> str:
         driver_str = self.driver.pin_def.emblocs_name if self.driver else "none"
@@ -431,6 +444,27 @@ class Signal:
                  f"value={self.value}  driver={driver_str}"]
         for r in self.readers:
             lines.append(f"  reader  {r.pin_def.emblocs_name}")
+        return "\n".join(lines)
+
+
+@dataclass
+class Thread:
+    """
+    A named periodic execution context in a Design.
+
+    Fields:
+        name      -- thread name, unique within the Design namespace
+        period_ns -- execution period in nanoseconds
+        functions -- ordered list of FunctInstance objects
+    """
+    name:      str
+    period_ns: int
+    functions: list[FunctInstance] = field(default_factory=list)
+
+    def describe(self) -> str:
+        lines = [f"thread  {self.name}  ({self.period_ns} ns)"]
+        for func in self.functions:
+            lines.append(f"  {func.funct_def.name}")
         return "\n".join(lines)
 
 
@@ -446,10 +480,11 @@ class PinInstance:
     """
     pin_def: PinDef
     signal:  Signal | None = None
+    block:   BlockInstance | None = None
 
     def describe(self) -> str:
         sig = self.signal.name if self.signal else "dummy"
-        return f"pin  {self.pin_def.emblocs_name} -> {sig}"
+        return f"pin  {self.block.name!r}.{self.pin_def.emblocs_name} -> {sig}"
 
 
 @dataclass
@@ -463,11 +498,12 @@ class FunctInstance:
         thread    -- Thread this function is assigned to, or None
     """
     funct_def: FunctDef
-    thread:    object | None = None   # Thread | None; object avoids forward ref
+    thread:    Thread | None = None
+    block:     BlockInstance | None = None
 
     def describe(self) -> str:
         thr = self.thread.name if self.thread else "unassigned"
-        return f"function  {self.funct_def.name} -> {thr}"
+        return f"function  {self.block.name!r}.{self.funct_def.name} -> {thr}"
 
 
 @dataclass
@@ -496,27 +532,6 @@ class BlockInstance:
 
 
 @dataclass
-class Thread:
-    """
-    A named periodic execution context in a Design.
-
-    Fields:
-        name      -- thread name, unique within the Design namespace
-        period_ns -- execution period in nanoseconds
-        functions -- ordered list of FunctInstance objects
-    """
-    name:      str
-    period_ns: int
-    functions: list[FunctInstance] = field(default_factory=list)
-
-    def describe(self) -> str:
-        lines = [f"thread  {self.name}  ({self.period_ns} ns)"]
-        for func in self.functions:
-            lines.append(f"  {func.funct_def.name}")
-        return "\n".join(lines)
-
-
-@dataclass
 class Design:
     """
     A complete, concrete system design produced by parsing a .blocs file.
@@ -533,12 +548,13 @@ class Design:
         threads     -- dict of Thread keyed by thread name
         namespace   -- set of all names for O(1) uniqueness enforcement
     """
-    source_path: str
-    block_defs:  dict[str, BlockDef]      = field(default_factory=dict)
-    blocks:      dict[str, BlockInstance] = field(default_factory=dict)
-    signals:     dict[str, Signal]        = field(default_factory=dict)
-    threads:     dict[str, Thread]        = field(default_factory=dict)
-    namespace:   set[str]                 = field(default_factory=set)
+    source_path:   str
+    block_defs:    dict[str, BlockDef]      = field(default_factory=dict)
+    blocks:        dict[str, BlockInstance] = field(default_factory=dict)
+    signals:       dict[str, Signal]        = field(default_factory=dict)
+    dummy_signals: dict[str, Signal]        = field(default_factory=dict)
+    threads:       dict[str, Thread]        = field(default_factory=dict)
+    namespace:     set[str]                 = field(default_factory=set)
 
     def describe(self) -> str:
         lines = [f"Design: {self.source_path}"]
@@ -561,3 +577,274 @@ class Design:
             for thr in self.threads.values():
                 lines.append(_indent_child(f"thread  {thr.name}  {thr.period_ns} ns"))
         return "\n".join(lines)
+
+    def add_block_def(self, block_def: BlockDef) -> None:
+        """
+        Add a fully resolved BlockDef to the Design.
+        Raises EmblocsError if the name is already in use.
+        """
+        # validate
+        if block_def.name in self.namespace:
+            raise EmblocsError(f"name {block_def.name!r} is already in use")
+        # add to design
+        self.block_defs[block_def.name] = block_def
+        self.namespace.add(block_def.name)
+
+    def add_block_instance(self, instance_name: str, block_def_name: str) -> None:
+        """
+        Create a named instance of a previously defined BlockDef.
+        Raises EmblocsError if instance_name is already in use,
+        or if block_def_name is not a known BlockDef.
+        """
+        #validate
+        if instance_name in self.namespace:
+            raise EmblocsError(f"name {instance_name!r} is already in use")
+        if block_def_name not in self.block_defs:
+            raise EmblocsError(f"unknown block definition {block_def_name!r}")
+        # generate component parts
+        block_def = self.block_defs[block_def_name]
+        pins = {
+            name: PinInstance(pin_def=pd)
+            for name, pd in block_def.pins.items()
+        }
+        functions = {
+            name: FunctInstance(funct_def=fd)
+            for name, fd in block_def.functions.items()
+        }
+        # generate instance       
+        instance = BlockInstance(
+            name      = instance_name,
+            block_def = block_def,
+            pins      = pins,
+            functions = functions,
+        )
+        # set back-references and create dummy signals for each pin
+        for pin_name, pin in instance.pins.items():
+            pin.block = instance
+            dummy_name = f"__{instance_name}__{pin_name}"
+            dummy = Signal(
+                name     = dummy_name,
+                sig_type = pin.pin_def.pin_type if pin.pin_def.pin_type != PinType.RAW
+                        else PinType.U32,
+                is_dummy = True,
+            )
+            self.dummy_signals[dummy_name] = dummy
+            pin.signal = dummy
+        # set back references for functions
+        for func in instance.functions.values():
+            func.block = instance
+        # add to design
+        self.blocks[instance_name] = instance
+        self.namespace.add(instance_name)
+
+    def add_signal(self, name: str, sig_type: PinType) -> Signal:
+        """
+        Create a named signal of the given type and add it to the Design.
+        Raises EmblocsError if the name is already in use or type is invalid.
+        """
+        # validate
+        if name in self.namespace:
+            raise EmblocsError(f"name {name!r} is already in use")
+        if sig_type not in (PinType.BOOL, PinType.U32, PinType.S32, PinType.FLOAT):
+            raise EmblocsError(f"invalid signal type {sig_type.name!r}")
+        # generate signal and add to design
+        signal = Signal(name=name, sig_type=sig_type)
+        self.signals[name] = signal
+        self.namespace.add(name)
+        return signal
+
+    def add_thread(self, name: str, period_ns: int) -> Thread:
+        """
+        Create a named thread with the given period and add it to the Design.
+        Raises EmblocsError if the name is already in use or period is invalid.
+        """
+        # validate
+        if name in self.namespace:
+            raise EmblocsError(f"name {name!r} is already in use")
+        if period_ns <= 0:
+            raise EmblocsError(f"thread period must be positive, got {period_ns}")
+        # generate thread and add to design
+        thread = Thread(name=name, period_ns=period_ns)
+        self.threads[name] = thread
+        self.namespace.add(name)
+        return thread
+
+    def _validate_and_set_value(self, signal: Signal, value: int | float) -> None:
+        """
+        Validate value against signal type and set it.
+        Raises EmblocsError if value is incompatible with signal type.
+        """
+        # validate value against signal type
+        if signal.sig_type == PinType.BOOL:
+            if value not in (0, 1, True, False):
+                raise EmblocsError(
+                    f"value {value!r} is not valid for bool signal {signal.name!r}")
+            value = int(value)
+        elif signal.sig_type == PinType.U32:
+            if not isinstance(value, int) or value < 0 or value > 0xFFFFFFFF:
+                raise EmblocsError(
+                    f"value {value!r} is out of range for u32 signal {signal.name!r}")
+        elif signal.sig_type == PinType.S32:
+            if not isinstance(value, int) or value < -0x80000000 or value > 0x7FFFFFFF:
+                raise EmblocsError(
+                    f"value {value!r} is out of range for s32 signal {signal.name!r}")
+        elif signal.sig_type == PinType.FLOAT:
+            if not isinstance(value, (int, float)):
+                raise EmblocsError(
+                    f"value {value!r} is not valid for float signal {signal.name!r}")
+            value = float(value)
+        # set value
+        signal.value = value
+
+
+    def set_signal_value(self, name: str, value: int | float) -> None:
+        """
+        Set the stored value of a signal.
+        Raises EmblocsError if the signal does not exist, if the signal
+        has an output pin driver (value is driven, not stored), or if
+        the value is incompatible with the signal type.
+        """
+        # validate existance and settability
+        if name not in self.signals:
+            raise EmblocsError(f"unknown signal {name!r}")
+        signal = self.signals[name]
+        if signal.driver is not None:
+            raise EmblocsError(f"signal {name!r} is driven by "
+                            f"'{signal.driver.block.name}.{signal.driver.pin_def.emblocs_name}'; "
+                            f"cannot set value directly")
+        # call shared helper to finish the job
+        self._validate_and_set_value(signal, value)
+
+    def set_pin_value(self, block_name: str, pin_name: str, value) -> None:
+        """
+        Set the value of an unconnected pin's dummy signal.
+        Raises EmblocsError if the pin is connected to a named signal,
+        or if block or pin name is unknown.
+        """
+        # validate existance and settability
+        if block_name not in self.blocks:
+            raise EmblocsError(f"unknown block {block_name!r}")
+        instance = self.blocks[block_name]
+        if pin_name not in instance.pins:
+            raise EmblocsError(f"unknown pin '{block_name}.{pin_name}'")
+        pin = instance.pins[pin_name]
+        if not pin.signal.is_dummy:
+            raise EmblocsError(f"pin '{block_name}.{pin_name}' is connected to "
+                            f"signal {pin.signal.name!r}; cannot set value directly")
+        # call shared helper to finish the job
+        self._validate_and_set_value(pin.signal, value)
+
+    def link_pin(self, block_name: str, pin_name: str, sig_name: str) -> None:
+        """
+        Connect a pin to a signal.
+        Raises EmblocsError if:
+        - block, pin, or signal name is unknown
+        - pin is already connected
+        - signal type is incompatible with pin type
+        - pin is an output and signal already has a driver
+        """
+        # validate names and existence
+        if block_name not in self.blocks:
+            raise EmblocsError(f"unknown block {block_name!r}")
+        instance = self.blocks[block_name]
+        if pin_name not in instance.pins:
+            raise EmblocsError(f"unknown pin '{block_name}.{pin_name}'")
+        if sig_name not in self.signals:
+            raise EmblocsError(f"unknown signal {sig_name!r}")
+        # validate pin not already linked
+        pin = instance.pins[pin_name]
+        signal = self.signals[sig_name]
+        if not pin.signal.is_dummy:
+            raise EmblocsError(f"pin '{block_name}.{pin_name}' is already connected"
+                               f" to signal {pin.signal.name!r}")
+        # validate type: raw pins connect to any signal type
+        if pin.pin_def.pin_type != PinType.RAW:
+            if pin.pin_def.pin_type != signal.sig_type:
+                raise EmblocsError(
+                    f"type mismatch: pin '{block_name}.{pin_name}' is "
+                    f"{pin.pin_def.pin_type.name} but signal {sig_name!r} is "
+                    f"{signal.sig_type.name}")
+        # check for driver conflicts, then connect
+        if pin.pin_def.direction == PinDir.OUTPUT:
+            if signal.driver is not None:
+                raise EmblocsError(
+                    f"signal {sig_name!r} already has a driver: "
+                    f"'{signal.driver.block.name}.{signal.driver.pin_def.emblocs_name}'")
+            signal.driver = pin
+        else:
+            signal.readers.append(pin)
+        pin.signal = signal
+
+    def unlink_pin(self, block_name: str, pin_name: str) -> None:
+        """
+        Disconnect a pin from its signal.
+        If the pin is not connected, this is a no-op.
+        Raises EmblocsError if block or pin name is unknown.
+        """
+        # validate names and existence
+        if block_name not in self.blocks:
+            raise EmblocsError(f"unknown block {block_name!r}")
+        instance = self.blocks[block_name]
+        if pin_name not in instance.pins:
+            raise EmblocsError(f"unknown pin '{block_name}.{pin_name}'")
+        pin = instance.pins[pin_name]
+        # if not linked, no-op
+        if pin.signal.is_dummy:
+            return
+        # disconnect pin from signal
+        signal = pin.signal
+        dummy = self.dummy_signals[f"__{block_name}__{pin_name}"]
+        dummy.value = signal.value
+        if pin.pin_def.direction == PinDir.OUTPUT:
+            signal.driver = None
+        else:
+            signal.readers.remove(pin)
+        pin.signal = dummy
+
+    def link_function(self, block_name: str, func_name: str, thread_name: str) -> None:
+        """
+        Assign a block function to a thread, appending it to the thread's
+        execution list.
+        Raises EmblocsError if:
+        - block, function, or thread name is unknown
+        - function is already assigned to a thread
+        """
+        # validate names and existence
+        if block_name not in self.blocks:
+            raise EmblocsError(f"unknown block {block_name!r}")
+        instance = self.blocks[block_name]
+        if func_name not in instance.functions:
+            raise EmblocsError(f"unknown function '{block_name}.{func_name}'")
+        if thread_name not in self.threads:
+            raise EmblocsError(f"unknown thread {thread_name!r}")
+        # validate not already linked
+        func = instance.functions[func_name]
+        if func.thread is not None:
+            raise EmblocsError(
+                f"function '{block_name}.{func_name}' is already assigned to "
+                f"thread {func.thread.name!r}")
+        # link function to thread
+        thread = self.threads[thread_name]
+        func.thread = thread
+        thread.functions.append(func)
+
+
+    def unlink_function(self, block_name: str, func_name: str) -> None:
+        """
+        Remove a block function from its thread.
+        If the function is not assigned to any thread, this is a no-op.
+        Raises EmblocsError if block or function name is unknown.
+        """
+        # validate names and existence
+        if block_name not in self.blocks:
+            raise EmblocsError(f"unknown block {block_name!r}")
+        instance = self.blocks[block_name]
+        if func_name not in instance.functions:
+            raise EmblocsError(f"unknown function '{block_name}.{func_name}'")
+        func = instance.functions[func_name]
+        # if not linked, no-op
+        if func.thread is None:
+            return
+        # disconnect function from thread
+        func.thread.functions.remove(func)
+        func.thread = None
