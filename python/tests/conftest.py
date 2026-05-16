@@ -8,6 +8,7 @@ PYTHON_DIR = TESTS_DIR.parent               # python/
 DATA_DIR   = TESTS_DIR / "data"
 GOOD_DIR   = DATA_DIR / "good"
 BAD_DIR    = DATA_DIR / "bad"
+TMP_DIR = DATA_DIR / "tmp"
 
 @pytest.fixture(autouse=True)
 def set_working_dir():
@@ -23,3 +24,9 @@ def good_dir():
 @pytest.fixture
 def bad_dir():
     return Path("tests/data/bad")
+
+@pytest.fixture
+def tmp_dir():
+    """Predictable temp directory for test files; excluded from git."""
+    TMP_DIR.mkdir(exist_ok=True)
+    return TMP_DIR

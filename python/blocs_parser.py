@@ -7,18 +7,21 @@ import re
 import sys
 from enum import Enum, auto
 from collections import namedtuple
+from pathlib import Path
 
 from emblocs import (
+    EmblocsError,
+    BlockSpec,
     Design,
     BlockDef, BlockInstance, PinInstance, FunctInstance,
     Signal, Thread,
     PinType,
 )
-from bloc_parser import parse_bloc
+from bloc_parser import parse_bloc_file
 from bloc_resolver import resolve
 from parse_common import ( Token, tokenize_line,
                            Severity, report, OMIT,
-                           current_context, pop_context,
+                           current_context, push_context, pop_context,
                            read_source_file, read_source_string
                             )
 
@@ -34,13 +37,147 @@ SIGNAL_TYPES = {
     "float": PinType.FLOAT,
 }
 
+# ---------------------------------------------------------------------------
+# Path resolution
+# ---------------------------------------------------------------------------
+
+def resolve_bloc_path(path: str) -> str | None:
+    """
+    Resolve a .bloc file path as written in a blockdef command.
+
+    Relative paths are interpreted relative to the directory containing
+    the .blocs file currently being parsed (from current_context().source).
+    Absolute paths are used as-is.
+
+    Returns the resolved path as a POSIX string, or None if the file
+    does not exist.
+
+    Future enhancement: search path support could be added here by
+    checking additional directories if the relative resolution fails.
+    """
+    blocs_dir = Path(current_context().source).parent
+    resolved = (blocs_dir / path).resolve()
+    if not resolved.exists():
+        return None
+    return resolved.as_posix()
+
+
+# ---------------------------------------------------------------------------
+# Bloc spec cache
+# ---------------------------------------------------------------------------
+
+_bloc_spec_cache: dict[str, BlockSpec] = {}
+
+
+# ---------------------------------------------------------------------------
+# Command handlers
+# ---------------------------------------------------------------------------
+
+def cmd_blockdef(tokens: list[Token], design: Design) -> None:
+    """
+    Handle the 'blockdef' command.
+    Syntax: blockdef <name> <path> [PARAM=value...]
+    """
+    keyword = tokens[0]
+    if len(tokens) < 3:
+        report(Severity.ERROR,
+               "'blockdef' requires a name and a path",
+               column=OMIT)
+        return
+    name_tok = tokens[1]
+    path_tok = tokens[2]
+    if not name_tok.text.isidentifier():
+        report(Severity.ERROR,
+               f"invalid blockdef name {name_tok.text!r}",
+               token=name_tok)
+        return
+    # resolve path to .bloc file
+    resolved_path = resolve_bloc_path(path_tok.text)
+    if resolved_path is None:
+        report(Severity.ERROR,
+               f"bloc file not found: {path_tok.text!r}",
+               token=path_tok)
+        return
+    # get BlockSpec from cache or create it by parsing the .bloc file
+    if resolved_path not in _bloc_spec_cache:
+        spec = parse_bloc_file(resolved_path)
+        if spec is None:
+            report(Severity.ERROR,
+                   f"failed to parse {path_tok.text!r}",
+                   token=path_tok)
+            return
+        _bloc_spec_cache[resolved_path] = spec
+    spec = _bloc_spec_cache[resolved_path]
+    # parse PARAM=value tokens
+    supplied_params = {}
+    spec_param_names = {p.name for p in spec.params}
+    for tok in tokens[3:]:
+        param_name, sep, value_str = tok.text.partition("=")
+        if sep == "":
+            report(Severity.ERROR,
+                   f"expected PARAM=value, got {tok.text!r}",
+                   token=tok)
+            return
+        if not param_name.isidentifier():
+            report(Severity.ERROR,
+                   f"invalid parameter name {param_name!r}",
+                   token=tok)
+            return
+        if param_name not in spec_param_names:
+            report(Severity.WARNING,
+                   f"unmatched parameter {param_name!r} will be ignored",
+                   token=tok)
+        try:
+            supplied_params[param_name] = int(value_str, 0)
+        except ValueError:
+            report(Severity.ERROR,
+                   f"invalid value {value_str!r} "
+                   f"for {param_name!r}; expected an integer",
+                   token=tok)
+            return
+    # warn about params not supplied
+    for param in spec.params:
+        if param.name not in supplied_params:
+            report(Severity.INFO,
+                   f"parameter {param.name!r} not supplied, "
+                   f"using default value {param.default}",
+                   column=OMIT)
+    # resolve BlockSpec to BlockDef
+    push_context(source=current_context().source,
+                 line=keyword.line,
+                 column=keyword.column)
+    block_def = resolve(spec, name_tok.text, supplied_params)
+    pop_context()
+    if block_def is None:
+        report(Severity.ERROR,
+               f"failed to resolve {path_tok.text!r} as {name_tok.text!r}",
+               column=OMIT)
+        return
+    # add to design
+    try:
+        design.add_block_def(block_def)
+    except EmblocsError as e:
+        report(Severity.ERROR, str(e), token=name_tok)
+
+
+# ---------------------------------------------------------------------------
+# dispatcher
+# ---------------------------------------------------------------------------
 
 def parse_command(tokens: list[Token], design: Design) -> None:
     """
-    Temporary debug stub: print tokens for each logical line.
-    Will be replaced with actual command parsing.
+    Dispatch a complete command to the appropriate handler.
+    The first token determines the command type.
     """
-    print(f"LINE: {[t.text for t in tokens]}")
+    current_context().line = tokens[0].line
+    keyword = tokens[0]
+    if keyword.text == "blockdef":
+        cmd_blockdef(tokens, design)
+    else:
+        report(Severity.ERROR,
+               f"unrecognized command: {keyword.text!r}",
+               token=keyword)
+
 
 # ---------------------------------------------------------------------------
 # Lexer

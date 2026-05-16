@@ -3,17 +3,16 @@
 # Reads a .bloc file and returns a BlockSpec object.
 #
 import sys
-from emblocs import ( BlockSpec, ParamSpec, Statement, PinSpec,
-                      DimSpec, VarDef, FunctSpec, PinType, PinDir, U32_MAX)
 import re
-from collections import namedtuple
 from dataclasses import dataclass, field
 from enum import Enum, auto
+from emblocs import (BlockSpec, ParamSpec, Statement, PinSpec,
+                     DimSpec, VarDef, FunctSpec, PinType, PinDir, U32_MAX)
 from expressions import evaluate, ExpressionError
-from parse_common import ( Token, tokenize_line,
-                           Severity, report, OMIT,
-                           push_context, pop_context )
-
+from parse_common import (Token, tokenize_line,
+                          Severity, report, OMIT,
+                          push_context, pop_context, current_context,
+                          read_source_file, read_source_string)
 
 # ---------------------------------------------------------------------------
 # Keyword tables
@@ -74,7 +73,8 @@ def parse_block(spec: BlockSpec,
         report(Severity.ERROR, "'block' declared more than once", token=keyword)
         return
     if len(tokens) < 2:
-        report(Severity.FATAL, "'block' declaration requires a name", token=keyword)
+        report(Severity.ERROR, "'block' declaration requires a name", token=keyword)
+        return
     name_tok = tokens[1]
     if not name_tok.text.isidentifier():
         report(Severity.ERROR, f"invalid block name: {name_tok.text!r}", token=name_tok)
@@ -572,79 +572,94 @@ def parse_statement(spec: BlockSpec, state: ParseState,
 # Main parser
 # ---------------------------------------------------------------------------
 
-def parse_bloc(path: str) -> BlockSpec:
+def parse_bloc(lines: list[str]) -> BlockSpec | None:
     """
-    Parse a .bloc file and return a populated BlockSpec.
-
-    This function directly handles line-by-line parsing, tokenization, 
-    and description accumulation, then calls parse_statement() for
-    each complete statement.
-
-    Raises SystemExit (via parse_error) on any syntax or semantic error.
+    Parse a list of source lines and return a populated BlockSpec.
+    Expects an active ErrorContext (pushed by parse_bloc_file or
+    parse_bloc_string).
     """
-    push_context(source=path)
-    spec = BlockSpec(source_path=path)
-    pending_tokens: list[Token] = []
-    pending_description: str = ""
+    spec  = BlockSpec(source_path=current_context().source)
     state = ParseState()
+    pending_tokens:      list[Token] = []
+    pending_description: str         = ""
 
     def flush():
-        """
-        If there are pending tokens, call parse_statement(),
-        then reset to process next statement.
-        """
         nonlocal pending_tokens, pending_description
         if pending_tokens:
             parse_statement(spec, state, pending_tokens,
-                             pending_description.rstrip().strip("\n"))
+                            pending_description.rstrip().strip("\n"))
         pending_tokens      = []
         pending_description = ""
 
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            for lineno, line in enumerate(f, start=1):
-                if not line.isascii():
-                    report(Severity.ERROR, "Non-ASCII character found", lineno=lineno)
-                # split token section from comment/description
-                first_part, sep, last_part = line.partition("//")
-                new_tokens = tokenize_line(first_part, lineno)
-                # determine if last part is description or comment/nothing
-                if last_part.startswith("/") :
-                    new_description = last_part[1:]
-                else:
-                    new_description = ""
-
-                # apply language rules
-                if pending_description and new_description and not new_tokens :
-                    # description continuation line
-                    pending_description += new_description
-                else :
-                    # any previous statement is now complete
-                    flush()
-                    if new_description and not new_tokens :
-                        # misplaced description
-                        report(Severity.ERROR, "Misplaced description", lineno=lineno, column=len(first_part))
-                    elif new_tokens :
-                        # new statement
-                        pending_tokens = new_tokens
-                        pending_description = new_description
-                    else :
-                        # empty line or comment-only line
-                        pass
-            # end of file, process pending if any
+    for lineno, line in enumerate(lines, start=1):
+        # split token section from comment/description
+        first_part, sep, last_part = line.partition("//")
+        new_tokens = tokenize_line(first_part, lineno)
+        # determine if last part is description or comment/nothing
+        if last_part.startswith("/"):
+            new_description = last_part[1:]
+        else:
+            new_description = ""
+        # apply language rules
+        if pending_description and new_description and not new_tokens:
+            # description continuation line
+            pending_description += new_description
+        else:
+            # any previous statement is now complete
             flush()
-            if state.if_stack:
-                report(Severity.ERROR,
-                       f"end-of-file with {len(state.if_stack)} "
-                       f"unterminated '#if' statements")
+            if new_description and not new_tokens:
+                # misplaced description
+                report(Severity.ERROR, "Misplaced description",
+                       lineno=lineno, column=len(first_part))
+            elif new_tokens:
+                # new statement
+                pending_tokens      = new_tokens
+                pending_description = new_description
+            # else: empty line or comment-only line, do nothing
+    # end of input
+    flush()
+    if spec.name == "" and current_context().error_count == 0:
+        report(Severity.ERROR,
+               "no 'block' declaration found")
+    if state.if_stack:
+        report(Severity.ERROR,
+               f"end-of-file with {len(state.if_stack)} "
+               f"unterminated '#if' statements")
+    return spec if current_context().no_errors() else None
 
-    except UnicodeDecodeError:
-        report(Severity.FATAL, "Unicode decode error")
-    except FileNotFoundError:
-        report(Severity.FATAL,"File not found")
+
+def parse_bloc_file(path: str) -> BlockSpec | None:
+    """
+    Parse a .bloc file and return a populated BlockSpec.
+    Convenience wrapper around read_source_file() and parse_bloc().
+    Returns None if the file could not be read or parsing failed.
+    """
+    lines = read_source_file(path)
+    if lines is None:
+        ctx = pop_context()
+        ctx.summarize()
+        return None
+    result = parse_bloc(lines)
     ctx = pop_context()
-    ctx.summarize()
-    return spec if ctx.no_errors() else None
+    if not ctx.clean():
+        ctx.summarize()
+    return result
+
+
+def parse_bloc_string(text: str, source: str = "<string>") -> BlockSpec | None:
+    """
+    Parse a .bloc string and return a populated BlockSpec.
+    Convenience wrapper around read_source_string() and parse_bloc().
+    Returns None if the string contains encoding errors or parsing failed.
+    """
+    lines = read_source_string(text, source=source)
+    if lines is None:
+        ctx = pop_context()
+        return None
+    result = parse_bloc(lines)
+    ctx = pop_context()
+    return result
+
 
 # ---------------------------------------------------------------------------
 # Test driver
@@ -655,7 +670,7 @@ if __name__ == "__main__":
         print(f"usage: {sys.argv[0]} <file.bloc>", file=sys.stderr)
         sys.exit(1)
 
-    block_spec = parse_bloc(sys.argv[1])
+    block_spec = parse_bloc_file(sys.argv[1])
     if block_spec is not None:
         print(block_spec.describe())
     else:

@@ -60,3 +60,5 @@ build/
 # editor settings
 .vscode
 
+# temporary files used for testing
+python/tests/data/tmp/

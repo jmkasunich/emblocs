@@ -31,30 +31,27 @@ def _build_variables(spec: BlockSpec,
     """
     variables = {}
 
-    # check for unknown supplied parameters
-    known = {p.name for p in spec.params}
-    for name in supplied:
-        if name not in known:
-            report(Severity.ERROR, f"unknown parameter {name!r}")
-
     for param in spec.params:
+        # get supplied value or default
         val = supplied.get(param.name, param.default)
-
-        # validate type
+        # validate type and range
         if param.param_type == "bool":
             if val not in (0, 1):
                 report(Severity.WARNING,
                        f"parameter {param.name!r} is bool; "
-                       f"value {val} is not 0 or 1")
+                       f"value {val} is not 0 or 1",
+                       column=OMIT)
         elif param.param_type == "u32":
             if val < param.min_val:
                 report(Severity.ERROR,
                        f"parameter {param.name!r} value {val} "
-                       f"is less than min ({param.min_val})")
+                       f"is less than min ({param.min_val})",
+                       column=OMIT)
             if val > param.max_val:
                 report(Severity.ERROR,
                        f"parameter {param.name!r} value {val} "
-                       f"is greater than max ({param.max_val})")
+                       f"is greater than max ({param.max_val})",
+                       column=OMIT)
         # save value
         variables[param.name] = val
     return variables

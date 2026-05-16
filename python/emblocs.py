@@ -8,8 +8,6 @@
 # parameter names.  At the BlockDef level (a fully resolved variant),
 # declarations are represented as "Def" objects with concrete values.
 #
-# This file currently defines the BlockSpec-level classes only.
-# BlockDef and PinDef are deferred until the resolution step is implemented.
 
 from __future__ import annotations
 from dataclasses import dataclass, field
@@ -33,7 +31,9 @@ class PinDir(Enum):
     INPUT  = auto()
     OUTPUT = auto()
 
-U32_MAX = 0xFFFFFFFF
+U32_MAX =  0xFFFFFFFF
+S32_MAX =  0x7FFFFFFF
+S32_MIN = -0x80000000
 
 # ---------------------------------------------------------------------------
 # Output formatting for describe() methods
@@ -611,7 +611,7 @@ class Design:
             name: FunctInstance(funct_def=fd)
             for name, fd in block_def.functions.items()
         }
-        # generate instance       
+        # generate instance
         instance = BlockInstance(
             name      = instance_name,
             block_def = block_def,
@@ -681,11 +681,11 @@ class Design:
                     f"value {value!r} is not valid for bool signal {signal.name!r}")
             value = int(value)
         elif signal.sig_type == PinType.U32:
-            if not isinstance(value, int) or value < 0 or value > 0xFFFFFFFF:
+            if not isinstance(value, int) or value < 0 or value > U32_MAX:
                 raise EmblocsError(
                     f"value {value!r} is out of range for u32 signal {signal.name!r}")
         elif signal.sig_type == PinType.S32:
-            if not isinstance(value, int) or value < -0x80000000 or value > 0x7FFFFFFF:
+            if not isinstance(value, int) or value < S32_MIN or value > S32_MAX:
                 raise EmblocsError(
                     f"value {value!r} is out of range for s32 signal {signal.name!r}")
         elif signal.sig_type == PinType.FLOAT:
