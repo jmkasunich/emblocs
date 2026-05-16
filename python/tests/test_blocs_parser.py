@@ -47,6 +47,11 @@ class TestLexLines:
         assert result[0][0] == Token("blockdef", 1, 1)
         assert result[0][1] == Token("foo",      1, 10)
 
+    def test_empty_string(self):
+        lines = [""]
+        result = lex_lines(lines)
+        assert len(result) == 0
+
     def test_nothing_but_comment(self):
         lines = ["     # two-word comment\n", "# another comment\n"]
         result = lex_lines(lines)
@@ -105,6 +110,17 @@ class TestLexLines:
         assert result[0][1] == Token("foo",      1, 10)
         assert result[0][2] == Token("bar.bloc", 3, 1)
 
+    def test_eof_after_continuation(self, capsys):
+        lines = ["blockdef foo \\\n"]
+        result = lex_lines(lines)
+        actual = capsys.readouterr().err.strip()
+        expected = "<test>:1: error: unexpected end of file after line continuation"
+        assert actual == expected, (
+            f"\nEXPECTED: {expected!r}\n"
+            f"ACTUAL:   {actual!r}\n"
+        )
+        # result should be empty since the command was never completed
+        assert len(result) == 0
 
 class TestParseBlocs:
     pass  # tests to be added

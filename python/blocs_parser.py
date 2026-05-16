@@ -83,7 +83,8 @@ def lex_lines(lines: list[str]) -> list[list[Token]]:
     # end of input
     if in_continuation:
         report(Severity.ERROR,
-               "unexpected end of file after line continuation")
+               "unexpected end of file after line continuation",
+               lineno=lineno, column=OMIT)
     elif logical_tokens:
         # file ended without final newline
         logical_lines.append(logical_tokens)
