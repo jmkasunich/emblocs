@@ -96,13 +96,15 @@ def lex_lines(lines: list[str]) -> list[list[Token]]:
 # Top-level entry points
 # ---------------------------------------------------------------------------
 
-def parse_blocs(lines: list[str]) -> Design | None:
+def parse_blocs(lines: list[str],
+                design: Design | None = None) -> Design | None:
     """
     Parse a list of source lines and return a populated Design object.
     Expects an active ErrorContext (pushed by read_source_xxx()).
     Returns None if any errors were reported.
     """
-    design = Design(source_path=current_context().source)
+    if design is None:
+        design = Design(source_path=current_context().source)
 
     for tokens in lex_lines(lines):
         parse_command(tokens, design)
@@ -110,7 +112,8 @@ def parse_blocs(lines: list[str]) -> Design | None:
     return design if current_context().no_errors() else None
 
 
-def parse_blocs_file(path: str) -> Design | None:
+def parse_blocs_file(path: str,
+                     design: Design | None = None) -> Design | None:
     """
     Parse a .blocs file and return a populated Design object.
     Convenience wrapper around read_source_file() and parse_blocs().
@@ -121,13 +124,14 @@ def parse_blocs_file(path: str) -> Design | None:
         ctx = pop_context()
         ctx.summarize()
         return None
-    design = parse_blocs(lines)
+    design = parse_blocs(lines, design)
     ctx = pop_context()
     ctx.summarize()
     return design
 
 
-def parse_blocs_string(text: str, source: str = "<string>") -> Design | None:
+def parse_blocs_string(text: str, source: str = "<string>",
+                       design: Design | None = None) -> Design | None:
     """
     Parse a .blocs string and return a populated Design object.
     Convenience wrapper around read_source_string() and parse_blocs().
@@ -138,7 +142,7 @@ def parse_blocs_string(text: str, source: str = "<string>") -> Design | None:
         ctx = pop_context()
         ctx.summarize()
         return None
-    design = parse_blocs(lines)
+    design = parse_blocs(lines, design)
     ctx = pop_context()
     ctx.summarize()
     return design
