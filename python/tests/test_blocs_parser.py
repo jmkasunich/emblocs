@@ -1,4 +1,5 @@
 # tests/test_blocs_parser.py
+import os
 import pytest
 from pathlib import Path
 from parse_common import (
@@ -12,12 +13,75 @@ from blocs_parser import (
     _bloc_spec_cache,
 )
 
+from conftest import TMP_DIR, PYTHON_DIR
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
 @pytest.fixture(autouse=True)
 def clean_context():
     clear_contexts()
     push_context(source="<test>")
     yield
     clear_contexts()
+
+
+@pytest.fixture(autouse=True)
+def clear_cache():
+    """Clear the bloc spec cache before each test."""
+    _bloc_spec_cache.clear()
+    yield
+    _bloc_spec_cache.clear()
+
+
+@pytest.fixture
+def simple_bloc(good_dir) -> Path:
+    """return path to standard test file"""
+    return good_dir / "simple.bloc"
+
+@pytest.fixture
+def param_bloc(good_dir) -> Path:
+    """return path to standard test file"""
+    return good_dir / "parameterized.bloc"
+
+@pytest.fixture
+def test_blocs(tmp_dir) -> Path:
+    """return path to standard test file"""
+    return tmp_dir / "test.blocs"
+
+
+def rtmp(p: Path) -> str:
+    """ return path relative to tmp_dir, as a posix string. """
+    return Path(os.path.relpath(p, TMP_DIR)).as_posix()
+
+def rcwd(p: Path) -> str:
+    """ return path relative to current working directory, as a posix string. """
+    return Path(os.path.relpath(p, PYTHON_DIR)).as_posix()
+
+BLOCS_SRC = Path(os.path.relpath(TMP_DIR / "test.blocs", PYTHON_DIR)).as_posix()
+
+@pytest.fixture
+def blockdefs_x3(simple_bloc, param_bloc, test_blocs):
+    """ provides a design with three blockdefs for testing block commands.
+        note that the command produces output to stderr, so clear the
+        capture using capsys.readouterr() before starting the actual test."""
+    blocs_str = (
+        f"blockdef simple     {rtmp(simple_bloc)}\n"
+        f"blockdef param_v1   {rtmp(param_bloc)} NCHAN=2 MASK=3 HAS_ENABLE=0\n"
+        f"blockdef param_v2   {rtmp(param_bloc)} NCHAN=4 MASK=0xA HAS_ENABLE=1\n"
+    )
+    design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
+    assert design is not None
+    assert len(design.block_defs) == 3
+    return design
+
+
+
+# ---------------------------------------------------------------------------
+# Lexer tests
+# ---------------------------------------------------------------------------
 
 class TestLexLines:
 
@@ -133,246 +197,292 @@ class TestLexLines:
 
 
 
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-@pytest.fixture(autouse=True)
-def clean_context():
-    clear_contexts()
-    push_context(source="<test>")
-    yield
-    clear_contexts()
-
-
-@pytest.fixture(autouse=True)
-def clear_cache():
-    """Clear the bloc spec cache before each test."""
-    _bloc_spec_cache.clear()
-    yield
-    _bloc_spec_cache.clear()
-
-
-@pytest.fixture
-def minimal_bloc(tmp_dir) -> Path:
-    """Write a minimal valid .bloc file and return its path."""
-    bloc = tmp_dir / "minimal.bloc"
-    bloc.write_text(
-        "block minimal /// minimal test block\n"
-        "pin float input in /// input\n"
-        "pin float output out /// output\n"
-        "function update /// update\n"
-    )
-    return bloc
-
-
-@pytest.fixture
-def param_bloc(tmp_dir) -> Path:
-    """Write a .bloc file with parameters and return its path."""
-    bloc = tmp_dir / "param_bloc.bloc"
-    bloc.write_text(
-        "block param_bloc /// block with parameters\n"
-        "param NCHAN u32 default=1 min=1 max=8 /// number of channels\n"
-        "param HAS_ENABLE bool default=0 /// enable flag\n"
-        "pin float input in /// input\n"
-        "function update /// update\n"
-    )
-    return bloc
-
-
-def make_blocs(tmp_dir: Path, bloc_path: Path, extra: str = "") -> tuple[str, str]:
-    """
-    Return a tuple of (.blocs string, source path) for use with parse_blocs_string().
-    Uses relative paths based on tests/data/tmp/ location.
-    """
-    rel = bloc_path.relative_to(tmp_dir).as_posix()
-    blocs_str = f"blockdef myblock {rel}{extra}\n"
-    source = "tests/data/tmp/test.blocs"
-    return blocs_str, source
-
 # ---------------------------------------------------------------------------
 # cmd_blockdef tests
 # ---------------------------------------------------------------------------
 
 class TestCmdBlockdef:
 
-    def test_basic_blockdef(self, tmp_dir, minimal_bloc):
-        blocs_str, source = make_blocs(tmp_dir, minimal_bloc)
-        design = parse_blocs_string(blocs_str, source=source)
+#    def test_basic_blockdef(self, tmp_dir, minimal_bloc):
+#        blocs_str, source = make_blocs(tmp_dir, minimal_bloc)
+#        design = parse_blocs_string(blocs_str, source=source)
+#        assert design is not None
+#        assert "myblock" in design.block_defs
+
+    def test_basic_blockdef(self, simple_bloc, capsys):
+        blocs_str = f"blockdef myblock {rtmp(simple_bloc)}\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        expect = "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
         assert design is not None
         assert "myblock" in design.block_defs
-
-    def test_blockdef_pins_resolved(self, tmp_dir, minimal_bloc):
-        blocs_str, source = make_blocs(tmp_dir, minimal_bloc)
-        design = parse_blocs_string(blocs_str, source=source)
-        assert design is not None
         assert "in" in design.block_defs["myblock"].pins
         assert "out" in design.block_defs["myblock"].pins
-
-    def test_blockdef_functions_resolved(self, tmp_dir, minimal_bloc):
-        blocs_str, source = make_blocs(tmp_dir, minimal_bloc)
-        design = parse_blocs_string(blocs_str, source=source)
-        assert design is not None
         assert "update" in design.block_defs["myblock"].functions
 
-    def test_blockdef_cached(self, tmp_dir, minimal_bloc):
-        blocs_str, source = make_blocs(tmp_dir, minimal_bloc)
-        parse_blocs_string(blocs_str, source=source)
-        assert len(_bloc_spec_cache) == 1
-
-    def test_blockdef_cache_reused(self, tmp_dir, minimal_bloc):
-        """Two blockdefs from same .bloc file share one cache entry."""
-        rel = minimal_bloc.relative_to(tmp_dir).as_posix()
-        blocs_str = (f"blockdef block1 {rel}\n"
-                     f"blockdef block2 {rel}\n")
-        source = (tmp_dir / "test.blocs").as_posix()
-        design = parse_blocs_string(blocs_str, source=source)
+    def test_blockdef_cached(self, simple_bloc, capsys):
+        blocs_str = (f"blockdef block1  {rtmp(simple_bloc)}\n"
+                     f"blockdef block2 {rtmp(simple_bloc)}\n")
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        expect = "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
         assert design is not None
         assert len(_bloc_spec_cache) == 1
         assert "block1" in design.block_defs
         assert "block2" in design.block_defs
 
-    def test_blockdef_with_params(self, tmp_dir, param_bloc, capsys):
-        rel = param_bloc.relative_to(tmp_dir).as_posix()
-        blocs_str = f"blockdef myblock {rel} NCHAN=4\n"
-        source = (tmp_dir / "test.blocs").as_posix()
-        design = parse_blocs_string(blocs_str, source=source)
-        assert design is not None
-        assert design.block_defs["myblock"].params["NCHAN"] == 4
-
-    def test_blockdef_unknown_param_warns_message(self, tmp_dir, minimal_bloc, capsys):
-        blocs_str, source = make_blocs(tmp_dir, minimal_bloc, extra=" UNKNOWN=1")
-        design = parse_blocs_string(blocs_str, source=source)
+    def test_blockdef_with_params(self, param_bloc, capsys):
+        blocs_str = f"blockdef myblock {rtmp(param_bloc)} NCHAN=3 MASK=7 HAS_ENABLE=1\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        expected = (
-            "tests/data/tmp/test.blocs:1:31: warning: unmatched parameter 'UNKNOWN' will be ignored\n"
+        expect = "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
+        assert design is not None
+        assert design.block_defs["myblock"].params["NCHAN"] == 3
+        assert design.block_defs["myblock"].params["MASK"] == 7
+        assert design.block_defs["myblock"].params["HAS_ENABLE"] == 1
+
+    def test_blockdef_two_variants_one_bloc(self, param_bloc, capsys):
+        blocs_str = (f"blockdef block1 {rtmp(param_bloc)} NCHAN=3 MASK=7 HAS_ENABLE=1\n"
+                     f"blockdef block2 {rtmp(param_bloc)} NCHAN=4 MASK=0xA HAS_ENABLE=0\n")
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        expect = "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
+        assert design is not None
+        assert design.block_defs["block1"].params["NCHAN"] == 3
+        assert design.block_defs["block1"].params["MASK"] == 7
+        assert design.block_defs["block1"].params["HAS_ENABLE"] == 1
+        assert design.block_defs["block2"].params["NCHAN"] == 4
+        assert design.block_defs["block2"].params["MASK"] == 10
+        assert design.block_defs["block2"].params["HAS_ENABLE"] == 0
+
+    def test_blockdef_unknown_param_warns(self, simple_bloc, capsys):
+        blocs_str = f"blockdef myblock {rtmp(simple_bloc)} UNKNOWN=3\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        expect = (
+            "tests/data/tmp/test.blocs:1:38: warning: unmatched parameter 'UNKNOWN' will be ignored\n"
             "tests/data/tmp/test.blocs: 0 error(s), 1 warning(s), 0 info(s)")
-        assert actual == expected, (
-            f"\nEXPECTED: {expected!r}\n"
-            f"ACTUAL:   {actual!r}\n"
-        )
+        assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
         assert design is not None
 
-    def test_blockdef_missing_param_uses_default_informs_message(self, tmp_dir, param_bloc, capsys):
-        blocs_str, source = make_blocs(tmp_dir, param_bloc)
-        design = parse_blocs_string(blocs_str, source=source)
+    def test_blockdef_missing_param_uses_default_informs(self, param_bloc, capsys):
+        blocs_str = f"blockdef myblock {rtmp(param_bloc)} MASK=7\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        expected = (
-            "tests/data/tmp/test.blocs:1: info: parameter 'NCHAN' not supplied, using default value 1\n"
+        expect = (
+            "tests/data/tmp/test.blocs:1: info: parameter 'NCHAN' not supplied, using default value 2\n"
             "tests/data/tmp/test.blocs:1: info: parameter 'HAS_ENABLE' not supplied, using default value 0\n"
             "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 2 info(s)")
-        assert actual == expected, (
-            f"\nEXPECTED: {expected!r}\n"
-            f"ACTUAL:   {actual!r}\n"
-        )
+        assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
         assert design is not None
-        assert design.block_defs["myblock"].params["NCHAN"] == 1
+        assert design.block_defs["myblock"].params["NCHAN"] == 2
+        assert design.block_defs["myblock"].params["MASK"] == 7
         assert design.block_defs["myblock"].params["HAS_ENABLE"] == 0
 
-    def test_blockdef_missing_name_fails_message(self, tmp_dir, capsys):
-        design = parse_blocs_string("blockdef\n", source="test.blocs")
+    def test_blockdef_too_few_tokens_fails(self, param_bloc, capsys):
+        blocs_str = f"blockdef {rtmp(param_bloc)}\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        expected = (
-            "test.blocs:1: error: 'blockdef' requires a name and a path\n"
-            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
-        assert actual == expected, (
-            f"\nEXPECTED: {expected!r}\n"
-            f"ACTUAL:   {actual!r}\n"
-        )
+        expect = (
+            "tests/data/tmp/test.blocs:1: error: 'blockdef' requires a name and a path\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
         assert design is None
 
-    def test_blockdef_missing_path_fails_message(self, tmp_dir, capsys):
-        design = parse_blocs_string("blockdef myblock\n", source="test.blocs")
+    def test_blockdef_missing_name_fails(self, param_bloc, capsys):
+        blocs_str = f"blockdef {rtmp(param_bloc)} NCHAN=3 MASK=7 HAS_ENABLE=1\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        expected = (
-            "test.blocs:1: error: 'blockdef' requires a name and a path\n"
-            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
-        assert actual == expected, (
-            f"\nEXPECTED: {expected!r}\n"
-            f"ACTUAL:   {actual!r}\n"
-        )
+        expect = (
+            "tests/data/tmp/test.blocs:1:10: error: invalid blockdef name '../good/parameterized.bloc'\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
         assert design is None
 
-    def test_blockdef_invalid_name_fails_message(self, tmp_dir, minimal_bloc, capsys):
-        blocs_str, source = make_blocs(tmp_dir, minimal_bloc)
-        blocs_str = blocs_str.replace("myblock", "123bad")
-        design = parse_blocs_string(blocs_str, source=source)
+    def test_blockdef_missing_path_fails(self, param_bloc, capsys):
+        blocs_str = f"blockdef myblock NCHAN=3 MASK=7 HAS_ENABLE=1\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        expected = (
+        expect = (
+            "tests/data/tmp/test.blocs:1:18: error: bloc file not found: 'NCHAN=3'\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
+        assert design is None
+
+    def test_blockdef_invalid_name_fails(self, simple_bloc, capsys):
+        blocs_str = f"blockdef 123bad {rtmp(simple_bloc)}\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        expect = (
             "tests/data/tmp/test.blocs:1:10: error: invalid blockdef name '123bad'\n"
             "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
-        assert actual == expected, (
-            f"\nEXPECTED: {expected!r}\n"
-            f"ACTUAL:   {actual!r}\n"
-        )
+        assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
         assert design is None
 
-    def test_blockdef_invalid_param_name_fails_message(self, tmp_dir, minimal_bloc, capsys):
-        blocs_str, source = make_blocs(tmp_dir, minimal_bloc, extra=" 123=1")
-        design = parse_blocs_string(blocs_str, source=source)
+    def test_blockdef_invalid_param_name_fails(self, simple_bloc, capsys):
+        blocs_str = f"blockdef myblock {rtmp(simple_bloc)} 123BAD=3\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        expected = (
-            "tests/data/tmp/test.blocs:1:31: error: invalid parameter name '123'\n"
+        expect = (
+            "tests/data/tmp/test.blocs:1:38: error: invalid parameter name '123BAD'\n"
             "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
-        assert actual == expected, (
-            f"\nEXPECTED: {expected!r}\n"
-            f"ACTUAL:   {actual!r}\n"
-        )
+        assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
         assert design is None
 
-    def test_blockdef_file_not_found_fails_message(self, tmp_dir, capsys):
-        design = parse_blocs_string("blockdef myblock nonexistent.bloc\n",
-                                  source="test.blocs")
+    def test_blockdef_file_not_found_fails(self, capsys):
+        blocs_str = f"blockdef myblock not_a_file.bloc\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        expected = (
-            "test.blocs:1:18: error: bloc file not found: 'nonexistent.bloc'\n"
-            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
-        assert actual == expected, (
-            f"\nEXPECTED: {expected!r}\n"
-            f"ACTUAL:   {actual!r}\n"
-        )
+        expect = (
+            "tests/data/tmp/test.blocs:1:18: error: bloc file not found: 'not_a_file.bloc'\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
         assert design is None
 
-    def test_blockdef_duplicate_name_fails_message(self, tmp_dir, minimal_bloc, capsys):
-        blocs_str, source = make_blocs(tmp_dir, minimal_bloc)
-        blocs_str = blocs_str + blocs_str
-        design = parse_blocs_string(blocs_str, source=source)
+    def test_blockdef_duplicate_name_fails(self, simple_bloc, capsys):
+        blocs_str = ( f"blockdef myblock {rtmp(simple_bloc)}\n"
+                      f"blockdef myblock {rtmp(simple_bloc)}\n")
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        expected = (
+        expect = (
             "tests/data/tmp/test.blocs:2:10: error: name 'myblock' is already in use\n"
             "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
-        assert actual == expected, (
-            f"\nEXPECTED: {expected!r}\n"
-            f"ACTUAL:   {actual!r}\n"
-        )
+        assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
         assert design is None
 
-    def test_blockdef_invalid_param_value_fails_message(self, tmp_dir, param_bloc, capsys):
-        blocs_str, source = make_blocs(tmp_dir, param_bloc,
-                                          extra=" NCHAN=notanumber")
-        design = parse_blocs_string(blocs_str, source=source)
+    def test_blockdef_invalid_param_value_fails(self, param_bloc, capsys):
+        blocs_str = f"blockdef myblock {rtmp(param_bloc)} NCHAN=notanumber MASK=7 HAS_ENABLE=1\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        expected = (
-            "tests/data/tmp/test.blocs:1:34: error: invalid value 'notanumber' for 'NCHAN'; expected an integer\n"
+        expect = (
+            "tests/data/tmp/test.blocs:1:45: error: invalid value 'notanumber' for 'NCHAN'; expected an integer\n"
             "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
-        assert actual == expected, (
-            f"\nEXPECTED: {expected!r}\n"
-            f"ACTUAL:   {actual!r}\n"
-        )
+        assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
         assert design is None
 
-    def test_blockdef_out_of_range_param_value_fails_message(self, tmp_dir, param_bloc, capsys):
-        blocs_str, source = make_blocs(tmp_dir, param_bloc,
-                                          extra=" NCHAN=12 HAS_ENABLE=1")
-        design = parse_blocs_string(blocs_str, source=source)
+    def test_blockdef_out_of_range_param_value_fails(self, param_bloc, capsys):
+        blocs_str = f"blockdef myblock {rtmp(param_bloc)} NCHAN=12 MASK=7 HAS_ENABLE=1\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        expected = (
-            "tests/data/tmp/test.blocs:1: error: parameter 'NCHAN' value 12 is greater than max (8)\n"
-            "tests/data/tmp/test.blocs:1: error: failed to resolve 'param_bloc.bloc' as 'myblock'\n"
+        expect = (
+            "tests/data/tmp/test.blocs:1: error: parameter 'NCHAN' value 12 is greater than max (4)\n"
+            "tests/data/tmp/test.blocs:1: error: failed to resolve '../good/parameterized.bloc' as 'myblock'\n"
             "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
-        assert actual == expected, (
-            f"\nEXPECTED: {expected!r}\n"
-            f"ACTUAL:   {actual!r}\n"
-        )
+        assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
+        assert design is None
+
+
+# ---------------------------------------------------------------------------
+# cmd_block tests
+# ---------------------------------------------------------------------------
+
+class TestCmdBlock:
+
+    def test_block_basic(self, blockdefs_x3, capsys):
+        capsys.readouterr()  # discard fixture output
+        blocs_str = "block b1 simple\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blockdefs_x3)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert "b1" in design.blocks
+        assert design.blocks["b1"].block_def.name == "simple"
+        assert "in" in design.blocks["b1"].pins
+        assert "out" in design.blocks["b1"].pins
+        assert "update" in design.blocks["b1"].functions
+        assert "b1" in design.namespace
+
+    def test_block_two_instances(self, blockdefs_x3, capsys):
+        capsys.readouterr()  # discard fixture output
+        blocs_str = "block b1 simple\nblock b2 simple\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blockdefs_x3)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert "b1" in design.blocks
+        assert "b2" in design.blocks
+        assert design.blocks["b1"] is not design.blocks["b2"]
+
+    def test_block_missing_args_fails(self, blockdefs_x3, capsys):
+        capsys.readouterr()  # discard fixture output
+        blocs_str = "block\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blockdefs_x3)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1: error: 'block' requires an instance name and a blockdef name\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+    def test_block_missing_blockdef_name_fails(self, blockdefs_x3, capsys):
+        capsys.readouterr()  # discard fixture output
+        blocs_str = "block b1\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blockdefs_x3)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1: error: 'block' requires an instance name and a blockdef name\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+    def test_block_invalid_instance_name_fails(self, blockdefs_x3, capsys):
+        capsys.readouterr()  # discard fixture output
+        blocs_str = "block 123bad simple\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blockdefs_x3)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1:7: error: invalid block instance name '123bad'\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+    def test_block_invalid_blockdef_name_fails(self, blockdefs_x3, capsys):
+        capsys.readouterr()  # discard fixture output
+        blocs_str = "block b1 123bad\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blockdefs_x3)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1:10: error: invalid blockdef name '123bad'\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+    def test_block_extra_token_fails(self, blockdefs_x3, capsys):
+        capsys.readouterr()  # discard fixture output
+        blocs_str = "block b1 simple extra\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blockdefs_x3)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1:17: error: unexpected token 'extra' after blockdef name\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+    def test_block_unknown_blockdef_name_fails(self, blockdefs_x3, capsys):
+        capsys.readouterr()  # discard fixture output
+        blocs_str = "block b1 nosuchblockdef\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blockdefs_x3)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1: error: unknown block definition 'nosuchblockdef'\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+    def test_block_duplicate_instance_name_fails(self, blockdefs_x3, capsys):
+        capsys.readouterr()  # discard fixture output
+        blocs_str = "block b1 simple\nblock b1 simple\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blockdefs_x3)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:2: error: name 'b1' is already in use\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+    def test_block_name_conflicts_with_blockdef_fails(self, blockdefs_x3, capsys):
+        capsys.readouterr()  # discard fixture output
+        blocs_str = "block simple simple\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blockdefs_x3)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1: error: name 'simple' is already in use\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert design is None

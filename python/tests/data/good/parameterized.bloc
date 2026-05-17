@@ -1,0 +1,13 @@
+// tests/good/parameterized.bloc
+block parameterized /// this is a test block definition using parameters
+param NCHAN u32 default=2 min=1 max=4
+param MASK  u32 default=0xF min=0 max=0xF
+param HAS_ENABLE bool default=0
+
+pin raw input ch{c:1}_in[c=NCHAN] if ((MASK>>c)&1)  /// array of input pins, optionally exported
+pin raw output out /// an output pin
+#if HAS_ENABLE
+pin bool input enable /// optional pin
+#endif
+
+function update /// the update function

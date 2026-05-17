@@ -1,0 +1,5 @@
+// tests/good/simple.bloc
+block simple /// this is a simple test block definition, no parameters
+pin float input in /// an input pin
+pin float output out /// an output pin
+function update /// the update function

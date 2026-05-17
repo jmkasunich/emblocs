@@ -2,10 +2,7 @@
 # Parser for .blocs system definition files.
 # Reads a .blocs file and returns a Design object.
 
-import os
-import re
 import sys
-from enum import Enum, auto
 from collections import namedtuple
 from pathlib import Path
 
@@ -13,8 +10,7 @@ from emblocs import (
     EmblocsError,
     BlockSpec,
     Design,
-    BlockDef, BlockInstance, PinInstance, FunctInstance,
-    Signal, Thread,
+    BlockDef, Signal, Thread,
     PinType,
 )
 from bloc_parser import parse_bloc_file
@@ -160,6 +156,41 @@ def cmd_blockdef(tokens: list[Token], design: Design) -> None:
         report(Severity.ERROR, str(e), token=name_tok)
 
 
+def cmd_block(tokens: list[Token], design: Design) -> None:
+    """
+    Handle the 'block' command.
+    Syntax: block <instance-name> <blockdef-name>
+    No subcommands are defined for block instances.
+    """
+    keyword = tokens[0]
+    if len(tokens) < 3:
+        report(Severity.ERROR,
+               "'block' requires an instance name and a blockdef name",
+               column=OMIT)
+        return
+    name_tok = tokens[1]
+    def_tok = tokens[2]
+    if not name_tok.text.isidentifier():
+        report(Severity.ERROR,
+               f"invalid block instance name {name_tok.text!r}",
+               token=name_tok)
+        return
+    if not def_tok.text.isidentifier():
+        report(Severity.ERROR,
+               f"invalid blockdef name {def_tok.text!r}",
+               token=def_tok)
+        return
+    if len(tokens) > 3:
+        report(Severity.ERROR,
+               f"unexpected token {tokens[3].text!r} after blockdef name",
+               token=tokens[3])
+        return
+    # create the instance
+    try:
+        design.add_block_instance(name_tok.text, def_tok.text)
+    except EmblocsError as e:
+        report(Severity.ERROR, str(e), column=OMIT)
+
 # ---------------------------------------------------------------------------
 # dispatcher
 # ---------------------------------------------------------------------------
@@ -173,6 +204,8 @@ def parse_command(tokens: list[Token], design: Design) -> None:
     keyword = tokens[0]
     if keyword.text == "blockdef":
         cmd_blockdef(tokens, design)
+    elif keyword.text == "block":
+        cmd_block(tokens, design)
     else:
         report(Severity.ERROR,
                f"unrecognized command: {keyword.text!r}",
