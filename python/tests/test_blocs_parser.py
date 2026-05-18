@@ -371,7 +371,7 @@ class TestCmdBlockdef:
         expect = (
             "tests/data/tmp/test.blocs:1: error: parameter 'NCHAN' value 12 is greater than max (4)\n"
             "tests/data/tmp/test.blocs:1: error: failed to resolve '../good/parameterized.bloc' as 'myblock'\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "tests/data/tmp/test.blocs: 2 error(s), 0 warning(s), 0 info(s)")
         assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
         assert design is None
 
