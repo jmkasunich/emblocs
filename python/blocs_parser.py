@@ -363,12 +363,15 @@ def parse_command(tokens: list[Token], design: Design) -> None:
     """
     current_context().line = tokens[0].line
     keyword = tokens[0]
+    # check for commands that create a target object
     if keyword.text == "blockdef":
         cmd_blockdef(tokens, design)
     elif keyword.text == "block":
         cmd_block(tokens, design)
     elif keyword.text == "signal":
         cmd_signal(tokens, design)
+    elif keyword.text == "thread":
+        cmd_thread(tokens, design)
     else:
         report(Severity.ERROR,
                f"unrecognized command: {keyword.text!r}",

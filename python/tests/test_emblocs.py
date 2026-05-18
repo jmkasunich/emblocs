@@ -112,7 +112,7 @@ def design_with_limit1(empty_design, minimal_block_def):
 def block_def_with_pins():
     """A BlockDef with one input pin and one function."""
     in_pin = PinDef(
-        emblocs_name = "in",
+        name         = "in",
         field_name   = "in_",
         pin_type     = PinType.FLOAT,
         direction    = PinDir.INPUT,
@@ -459,7 +459,7 @@ class TestSetSignalValue:
 def block_def_with_output():
     """A BlockDef with one output float pin."""
     out_pin = PinDef(
-        emblocs_name = "out",
+        name         = "out",
         field_name   = "out_",
         pin_type     = PinType.FLOAT,
         direction    = PinDir.OUTPUT,
@@ -479,7 +479,7 @@ def block_def_with_output():
 def block_def_with_raw():
     """A BlockDef with one raw input pin."""
     raw_pin = PinDef(
-        emblocs_name = "raw_in",
+        name         = "raw_in",
         field_name   = "raw_in_",
         pin_type     = PinType.RAW,
         direction    = PinDir.INPUT,

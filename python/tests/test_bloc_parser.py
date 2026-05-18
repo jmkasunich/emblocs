@@ -53,7 +53,7 @@ class TestParseBlocString:
         assert spec is not None
         assert len(spec.statements) == 1
         pin = spec.statements[0].statement
-        assert pin.emblocs_name == "in"
+        assert pin.name_template == "in"
         assert pin.pin_type == PinType.FLOAT
         assert pin.direction == PinDir.INPUT
 

@@ -74,8 +74,8 @@ def _recurse_pin(pin_spec: PinSpec, dims: list[DimSpec],
     """
     if not dims:
         # base case: no more dimensions, produce a PinDef
-        emblocs_name = _evaluate_template(pin_spec.emblocs_name, variables)
-        if emblocs_name is None:
+        name = _evaluate_template(pin_spec.name_template, variables)
+        if name is None:
             return []
         if pin_spec.export_condition is not None:
             try:
@@ -83,12 +83,12 @@ def _recurse_pin(pin_spec: PinSpec, dims: list[DimSpec],
             except ExpressionError as e:
                 report(Severity.ERROR,
                        f"export condition error in pin "
-                       f"{pin_spec.emblocs_name!r}: {e}")
+                       f"{pin_spec.name_template!r}: {e}")
                 return []
             if not exported:
                 return []
         return [PinDef(
-            emblocs_name = emblocs_name,
+            name         = name,
             field_name   = pin_spec.field_name,
             pin_type     = pin_spec.pin_type,
             direction    = pin_spec.direction,
@@ -103,7 +103,7 @@ def _recurse_pin(pin_spec: PinSpec, dims: list[DimSpec],
         except ExpressionError as e:
             report(Severity.ERROR,
                    f"dimension size error in pin "
-                   f"{pin_spec.emblocs_name!r}: {e}")
+                   f"{pin_spec.name_template!r}: {e}")
             return []
         results = []
         for idx in range(size):
@@ -261,12 +261,12 @@ def resolve(spec: BlockSpec, variant_name: str,
         for obj in expanded:
             ordered_declarations.append(obj)
             if isinstance(obj, PinDef):
-                if obj.emblocs_name in pins:
+                if obj.name in pins:
                     report(Severity.ERROR,
-                           f"duplicate pin name {obj.emblocs_name!r} "
+                           f"duplicate pin name {obj.name!r} "
                            f"after resolution")
                 else:
-                    pins[obj.emblocs_name] = obj
+                    pins[obj.name] = obj
             elif isinstance(obj, FunctDef):
                 if obj.name in functions:
                     report(Severity.ERROR,

@@ -381,7 +381,7 @@ def parse_pin(spec: BlockSpec, tokens: list[Token], description: str) -> PinSpec
         export_cond = if_cond_tok.text
 
     return PinSpec(
-        emblocs_name     = template,
+        name_template    = template,
         field_name       = field_name,
         dedup_name       = dedup_name,
         pin_type         = PIN_TYPES[type_tok.text],

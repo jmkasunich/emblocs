@@ -139,7 +139,7 @@ class PinSpec:
     Slots for which export_condition evaluates to false receive no PinDef
     and are initialized to NULL in system.c.
 
-    The emblocs_name is the template as written by the block author, with
+    The name_template is the template as written by the block author, with
     {expr:width} format specifiers intact.  The field_name is derived from
     the template by replacing each {expr:width} with 'width' zeros and
     appending '_', giving the C struct member name.  The dedup_name is the
@@ -147,10 +147,10 @@ class PinSpec:
     parse time.
 
     Fields:
-        emblocs_name     -- EMBLOCS-visible name template as written, e.g.
+        name_template    -- EMBLOCS-visible name template as written, e.g.
                             "in", "ch{i:2}_out", "pin_{i:2}_in{j:1}".
                             For scalar pins with no {..}, this is just the pin name.
-        field_name       -- C struct member name, derived from emblocs_name by
+        field_name       -- C struct member name, derived from name_template by
                             replacing each {expr:width} with width zeros and
                             appending '_'.  e.g. "in_", "ch00_out_", "pin_00_in0_"
         dedup_name       -- same as field_name; used for namespace collision
@@ -167,7 +167,7 @@ class PinSpec:
                             in scope.
         description      -- /// annotation text, or empty string if none
     """
-    emblocs_name:     str
+    name_template:    str
     field_name:       str
     dedup_name:       str
     pin_type:         PinType
@@ -185,7 +185,7 @@ class PinSpec:
         cond_str = f"  if {self.export_condition}" if self.export_condition else ""
         desc = _format_descr(self.description)
         return (f"pin  {self.pin_type.name:<6} {self.direction.name:<7} "
-                f"'{self.emblocs_name}' -> {self.field_name} ({dims_str})"
+                f"'{self.name_template}' -> {self.field_name} ({dims_str})"
                 f"{cond_str}{desc}")
 
 
@@ -331,14 +331,14 @@ class PinDef:
     A fully resolved pin definition, child of a BlockDef.
 
     Fields:
-        emblocs_name -- EMBLOCS-visible pin name (e.g. "ch00_out")
+        name         -- EMBLOCS-visible pin name (e.g. "ch00_out")
         field_name   -- C struct field name (e.g. "ch00_out_")
         field_indices -- for array pins, the list of concrete indices for this slot
         pin_type     -- PinType enum value
         direction    -- PinDir enum value
         description  -- /// annotation text, or empty string if none
     """
-    emblocs_name: str
+    name:         str
     field_name:   str
     pin_type:     PinType
     direction:    PinDir
@@ -353,7 +353,7 @@ class PinDef:
         else:
             field_str = self.field_name
         return (f"pin  {self.pin_type.name:<6} {self.direction.name:<7} "
-                f"{self.emblocs_name} -> {field_str}{desc}")
+                f"{self.name} -> {field_str}{desc}")
 
 
 @dataclass(frozen=True)
@@ -439,11 +439,11 @@ class Signal:
     is_dummy: bool = False
 
     def describe(self) -> str:
-        driver_str = self.driver.pin_def.emblocs_name if self.driver else "none"
+        driver_str = self.driver.pin_def.name if self.driver else "none"
         lines = [f"signal  {self.name}  {self.sig_type.name}  "
                  f"value={self.value}  driver={driver_str}"]
         for r in self.readers:
-            lines.append(f"  reader  {r.pin_def.emblocs_name}")
+            lines.append(f"  reader  {r.pin_def.name}")
         return "\n".join(lines)
 
 
@@ -484,7 +484,7 @@ class PinInstance:
 
     def describe(self) -> str:
         sig = self.signal.name if self.signal else "dummy"
-        return f"pin  {self.block.name!r}.{self.pin_def.emblocs_name} -> {sig}"
+        return f"pin  {self.block.name!r}.{self.pin_def.name} -> {sig}"
 
 
 @dataclass
@@ -710,7 +710,7 @@ class Design:
         signal = self.signals[name]
         if signal.driver is not None:
             raise EmblocsError(f"signal {name!r} is driven by "
-                            f"'{signal.driver.block.name}.{signal.driver.pin_def.emblocs_name}'; "
+                            f"'{signal.driver.block.name}.{signal.driver.pin_def.name}'; "
                             f"cannot set value directly")
         # call shared helper to finish the job
         self._validate_and_set_value(signal, value)
@@ -769,7 +769,7 @@ class Design:
             if signal.driver is not None:
                 raise EmblocsError(
                     f"signal {sig_name!r} already has a driver: "
-                    f"'{signal.driver.block.name}.{signal.driver.pin_def.emblocs_name}'")
+                    f"'{signal.driver.block.name}.{signal.driver.pin_def.name}'")
             signal.driver = pin
         else:
             signal.readers.append(pin)
