@@ -387,6 +387,9 @@ class BlockDef:
         description -- block description text
         pins        -- dict of PinDef keyed by emblocs pin name
         functions   -- dict of FunctDef keyed by function name
+        namespace   -- dict mapping all pin and function names to their
+                       PinDef or FunctDef objects; populated at resolution
+                       time, catches pin/function name collisions
         params      -- dict of param name -> concrete integer value
         ordered_declarations -- complete ordered list of PinDef, VarDef,
                                and FunctDef objects, preserving declaration
@@ -399,6 +402,7 @@ class BlockDef:
     description: str
     pins:        dict[str, PinDef]
     functions:   dict[str, FunctDef]
+    namespace:   dict[str, PinDef | FunctDef]
     params:      dict[str, int]
     ordered_declarations: list[PinDef | VarDef | FunctDef]
 
@@ -516,11 +520,14 @@ class BlockInstance:
         block_def -- the BlockDef this instance is based on
         pins      -- dict of PinInstance keyed by emblocs pin name
         functions -- dict of FunctInstance keyed by function name
+        namespace -- dict mapping all pin and function names to their
+                     PinInstance or FunctInstance objects for O(1) lookup
     """
     name:      str
     block_def: BlockDef
     pins:      dict[str, PinInstance]   = field(default_factory=dict)
     functions: dict[str, FunctInstance] = field(default_factory=dict)
+    namespace: dict[str, PinInstance | FunctInstance] = field(default_factory=dict)
 
     def describe(self) -> str:
         lines = [f"block  {self.name} ({self.block_def.name})"]
@@ -578,7 +585,7 @@ class Design:
                 lines.append(_indent_child(f"thread  {thr.name}  {thr.period_ns} ns"))
         return "\n".join(lines)
 
-    def add_block_def(self, block_def: BlockDef) -> None:
+    def add_block_def(self, block_def: BlockDef) -> BlockDef:
         """
         Add a fully resolved BlockDef to the Design.
         Raises EmblocsError if the name is already in use.
@@ -589,8 +596,9 @@ class Design:
         # add to design
         self.block_defs[block_def.name] = block_def
         self.namespace.add(block_def.name)
+        return block_def
 
-    def add_block_instance(self, instance_name: str, block_def_name: str) -> None:
+    def add_block_instance(self, instance_name: str, block_def_name: str) -> BlockInstance:
         """
         Create a named instance of a previously defined BlockDef.
         Raises EmblocsError if instance_name is already in use,
@@ -603,20 +611,24 @@ class Design:
             raise EmblocsError(f"unknown block definition {block_def_name!r}")
         # generate component parts
         block_def = self.block_defs[block_def_name]
-        pins = {
-            name: PinInstance(pin_def=pd)
-            for name, pd in block_def.pins.items()
-        }
-        functions = {
-            name: FunctInstance(funct_def=fd)
-            for name, fd in block_def.functions.items()
-        }
+        pins = {}
+        functions = {}
+        namespace = {}
+        for name, pd in block_def.pins.items():
+            pin = PinInstance(pin_def=pd)
+            pins[name] = pin
+            namespace[name] = pin
+        for name, fd in block_def.functions.items():
+            funct = FunctInstance(funct_def=fd)
+            functions[name] = funct
+            namespace[name] = funct
         # generate instance
         instance = BlockInstance(
             name      = instance_name,
             block_def = block_def,
             pins      = pins,
             functions = functions,
+            namespace  = namespace,
         )
         # set back-references and create dummy signals for each pin
         for pin_name, pin in instance.pins.items():
@@ -636,6 +648,7 @@ class Design:
         # add to design
         self.blocks[instance_name] = instance
         self.namespace.add(instance_name)
+        return instance
 
     def add_signal(self, name: str, sig_type: PinType) -> Signal:
         """

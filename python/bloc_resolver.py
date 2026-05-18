@@ -253,28 +253,24 @@ def resolve(spec: BlockSpec, variant_name: str,
         return None
 
     ordered_declarations = []
+    namespace = {}
     pins      = {}
     functions = {}
+    type_to_dict = { PinDef: pins, FunctDef: functions }
 
     for statement in spec.statements:
         expanded = _expand_statement(statement, variables)
         for obj in expanded:
             ordered_declarations.append(obj)
-            if isinstance(obj, PinDef):
-                if obj.name in pins:
+            if not isinstance(obj, VarDef):
+                if obj.name in namespace:
                     report(Severity.ERROR,
-                           f"duplicate pin name {obj.name!r} "
-                           f"after resolution")
+                           f"duplicate name {obj.name!r} after resolution")
                 else:
-                    pins[obj.name] = obj
-            elif isinstance(obj, FunctDef):
-                if obj.name in functions:
-                    report(Severity.ERROR,
-                           f"duplicate function name {obj.name!r} "
-                           f"after resolution")
-                else:
-                    functions[obj.name] = obj
-
+                    namespace[obj.name] = obj
+                    target_dict = type_to_dict.get(type(obj))
+                    if target_dict is not None:
+                        target_dict[obj.name] = obj
     if not current_context().no_errors():
         return None
 
@@ -285,6 +281,7 @@ def resolve(spec: BlockSpec, variant_name: str,
         params               = variables,
         pins                 = pins,
         functions            = functions,
+        namespace            = namespace,
         ordered_declarations = ordered_declarations,
     )
 

@@ -13,6 +13,7 @@ from emblocs import (
     Design,
     BlockDef, Signal, Thread,
     PinType,
+    BlockInstance, PinInstance, FunctInstance,
     U32_MAX, S32_MIN, S32_MAX,
 )
 from bloc_parser import parse_bloc_file
@@ -150,7 +151,7 @@ _bloc_spec_cache: dict[str, BlockSpec] = {}
 # Command handlers
 # ---------------------------------------------------------------------------
 
-def cmd_blockdef(tokens: list[Token], design: Design) -> None:
+def cmd_blockdef(tokens: list[Token], design: Design) -> tuple[BlockDef | None, int]:
     """
     Handle the 'blockdef' command.
     Syntax: blockdef <name> <path> [PARAM=value...]
@@ -159,21 +160,21 @@ def cmd_blockdef(tokens: list[Token], design: Design) -> None:
         report(Severity.ERROR,
                "'blockdef' requires a name and a path",
                column=OMIT)
-        return
+        return None, 0
     name_tok = tokens[1]
     path_tok = tokens[2]
     if not name_tok.text.isidentifier():
         report(Severity.ERROR,
                f"invalid blockdef name {name_tok.text!r}",
                token=name_tok)
-        return
+        return None, 0
     # resolve path to .bloc file
     resolved_path = resolve_bloc_path(path_tok.text)
     if resolved_path is None:
         report(Severity.ERROR,
                f"bloc file not found: {path_tok.text!r}",
                token=path_tok)
-        return
+        return None, 0
     # get BlockSpec from cache or create it by parsing the .bloc file
     if resolved_path not in _bloc_spec_cache:
         spec = parse_bloc_file(resolved_path)
@@ -181,24 +182,23 @@ def cmd_blockdef(tokens: list[Token], design: Design) -> None:
             report(Severity.ERROR,
                    f"failed to parse {path_tok.text!r}",
                    token=path_tok)
-            return
+            return None, 0
         _bloc_spec_cache[resolved_path] = spec
     spec = _bloc_spec_cache[resolved_path]
     # parse PARAM=value tokens
     supplied_params = {}
     spec_param_names = {p.name for p in spec.params}
+    n_tokens = 3
     for tok in tokens[3:]:
         param_name, sep, value_str = tok.text.partition("=")
         if sep == "":
-            report(Severity.ERROR,
-                   f"expected PARAM=value, got {tok.text!r}",
-                   token=tok)
-            return
+            break
+        n_tokens += 1
         if not param_name.isidentifier():
             report(Severity.ERROR,
                    f"invalid parameter name {param_name!r}",
                    token=tok)
-            return
+            return None, 0
         if param_name not in spec_param_names:
             report(Severity.WARNING,
                    f"unmatched parameter {param_name!r} will be ignored",
@@ -210,7 +210,7 @@ def cmd_blockdef(tokens: list[Token], design: Design) -> None:
                    f"invalid value {value_str!r} "
                    f"for {param_name!r}; expected an integer",
                    token=tok)
-            return
+            return None, 0
     # warn about params not supplied
     for param in spec.params:
         if param.name not in supplied_params:
@@ -226,15 +226,16 @@ def cmd_blockdef(tokens: list[Token], design: Design) -> None:
         report(Severity.ERROR,
                f"failed to resolve {path_tok.text!r} as {name_tok.text!r}",
                column=OMIT)
-        return
+        return None, 0
     # add to design
     try:
-        design.add_block_def(block_def)
+        blockdef = design.add_block_def(block_def)
     except EmblocsError as e:
         report(Severity.ERROR, str(e), token=name_tok)
+        return None, 0
+    return blockdef, n_tokens
 
-
-def cmd_block(tokens: list[Token], design: Design) -> None:
+def cmd_block(tokens: list[Token], design: Design) -> tuple[BlockInstance | None, int]:
     """
     Handle the 'block' command.
     Syntax: block <instance-name> <blockdef-name>
@@ -244,29 +245,26 @@ def cmd_block(tokens: list[Token], design: Design) -> None:
         report(Severity.ERROR,
                "'block' requires an instance name and a blockdef name",
                column=OMIT)
-        return
+        return None, 0
     name_tok = tokens[1]
     def_tok = tokens[2]
     if not name_tok.text.isidentifier():
         report(Severity.ERROR,
                f"invalid block instance name {name_tok.text!r}",
                token=name_tok)
-        return
+        return None, 0
     if not def_tok.text.isidentifier():
         report(Severity.ERROR,
                f"invalid blockdef name {def_tok.text!r}",
                token=def_tok)
-        return
-    if len(tokens) > 3:
-        report(Severity.ERROR,
-               f"unexpected token {tokens[3].text!r} after blockdef name",
-               token=tokens[3])
-        return
+        return None, 0
     # create the instance
     try:
-        design.add_block_instance(name_tok.text, def_tok.text)
+        block = design.add_block_instance(name_tok.text, def_tok.text)
     except EmblocsError as e:
         report(Severity.ERROR, str(e), column=OMIT)
+        return None, 0
+    return block, 3
 
 def subcmd_signal(token: Token, signal: Signal, design: Design) -> None:
     """
@@ -277,7 +275,16 @@ def subcmd_signal(token: Token, signal: Signal, design: Design) -> None:
            f"un-implemented subcommand {token.text!r} on signal {signal.name!r}",
            token=token)
 
-def cmd_signal(tokens: list[Token], design: Design) -> None:
+def subcmd_pin(token: Token, pin : PinInstance, design: Design) -> None:
+    """
+    Handle a single-token subcommand that applies to a Pin target.
+    Currently no subcommands are defined, so this just reports an error.
+    """
+    report(Severity.ERROR,
+           f"un-implemented subcommand {token.text!r} on pin {pin.pin_def.name!r}",
+           token=token)
+
+def cmd_signal(tokens: list[Token], design: Design) -> tuple[Signal | None:, int]:
     """
     Handle the 'signal' command.
     Syntax: signal <signal-name> <type>
@@ -288,30 +295,28 @@ def cmd_signal(tokens: list[Token], design: Design) -> None:
         report(Severity.ERROR,
                "'signal' requires a signal name and a type",
                column=OMIT)
-        return
+        return None, 0
     name_tok = tokens[1]
     type_tok = tokens[2]
     if not name_tok.text.isidentifier():
         report(Severity.ERROR,
                f"invalid signal name {name_tok.text!r}",
                token=name_tok)
-        return
+        return None, 0
     if type_tok.text not in SIGNAL_TYPES:
         report(Severity.ERROR,
                f"invalid signal type {type_tok.text!r}",
                token=type_tok)
-        return
+        return None, 0
     sig_type = SIGNAL_TYPES[type_tok.text]
     # create the signal
     try:
         sig = design.add_signal(name_tok.text, sig_type)
     except EmblocsError as e:
         report(Severity.ERROR, str(e), column=OMIT)
-        return
-    # check for subcommand tokens
-    for tok in tokens[3:]:
-        subcmd_signal(tok, sig, design)
-
+        return None, 0
+    return sig, 3
+ 
 def subcmd_thread(token: Token, thread : Thread, design: Design) -> None:
     """
     Handle a single-token subcommand that follows a 'thread' command.
@@ -321,7 +326,16 @@ def subcmd_thread(token: Token, thread : Thread, design: Design) -> None:
            f"un-implemented subcommand {token.text!r} on thread {thread.name!r}",
            token=token)
 
-def cmd_thread(tokens: list[Token], design: Design) -> None:
+def subcmd_funct(token: Token, funct : FunctInstance, design: Design) -> None:
+    """
+    Handle a single-token subcommand that applies to a Function target.
+    Currently no subcommands are defined, so this just reports an error.
+    """
+    report(Severity.ERROR,
+           f"un-implemented subcommand {token.text!r} on function {funct.funct_def.name!r}",
+           token=token)
+
+def cmd_thread(tokens: list[Token], design: Design) -> tuple[Thread | None, int]:
     """
     Handle the 'thread' command.
     Syntax: thread <thread-name> <periodns>
@@ -332,25 +346,24 @@ def cmd_thread(tokens: list[Token], design: Design) -> None:
         report(Severity.ERROR,
                "'thread' requires a thread name and a period",
                column=OMIT)
-        return
+        return None, 0
     name_tok = tokens[1]
     period_tok = tokens[2]
     if not name_tok.text.isidentifier():
         report(Severity.ERROR,
                f"invalid thread name {name_tok.text!r}",
                token=name_tok)
-        return
+        return None, 0
     period_ns = get_value(period_tok, PinType.U32)
     if period_ns is None:
-        return
+        return None, 0
+    # create the thread
     try:
         thread = design.add_thread(name_tok.text, period_ns)
     except EmblocsError as e:
         report(Severity.ERROR, str(e), column=OMIT)
-        return
-    # check for subcommand tokens
-    for tok in tokens[3:]:
-        subcmd_thread(tok, thread, design)
+        return None, 0
+    return thread, 3
 
 # ---------------------------------------------------------------------------
 # dispatcher
@@ -359,23 +372,78 @@ def cmd_thread(tokens: list[Token], design: Design) -> None:
 def parse_command(tokens: list[Token], design: Design) -> None:
     """
     Dispatch a complete command to the appropriate handler.
-    The first token determines the command type.
+
+    Commands fall into two categories:
+    - Creation commands (blockdef, block, signal, thread): create a new
+      object and return it as the target for any following subcommands.
+    - Modification commands (qualified or plain identifier): look up an
+      existing object as the target for following subcommands.
+
+    After the target is established, any remaining tokens are dispatched
+    one at a time to the appropriate subcommand handler.
     """
     current_context().line = tokens[0].line
     keyword = tokens[0]
-    # check for commands that create a target object
-    if keyword.text == "blockdef":
-        cmd_blockdef(tokens, design)
-    elif keyword.text == "block":
-        cmd_block(tokens, design)
-    elif keyword.text == "signal":
-        cmd_signal(tokens, design)
-    elif keyword.text == "thread":
-        cmd_thread(tokens, design)
+    creation_dispatch = {
+        "blockdef": cmd_blockdef,
+        "block":    cmd_block,
+        "signal":   cmd_signal,
+        "thread":   cmd_thread,
+    }
+    subcmd_dispatch = {
+        Signal:        subcmd_signal,
+        Thread:        subcmd_thread,
+        PinInstance:   subcmd_pin,
+        FunctInstance: subcmd_funct,
+    }
+    handler = creation_dispatch.get(keyword.text)
+    if handler is not None:
+        # create the target object
+        target, n_tokens = handler(tokens, design)
+        if target is None:
+            # handler alredy reported an error
+            return
+        subcommand_tokens = tokens[n_tokens:]
     else:
-        report(Severity.ERROR,
-               f"unrecognized command: {keyword.text!r}",
-               token=keyword)
+        # not a creation command - look up the target object for subcommands
+        name, sep, sub_name = tokens[0].text.partition(".")
+        if sep:
+            # qualified name: block.pin or block.func
+            if name not in design.blocks:
+                report(Severity.ERROR,
+                       f"unknown block instance {name!r}",
+                       token=tokens[0])
+                return
+            block = design.blocks[name]
+            target = block.namespace.get(sub_name)
+            if target is None:
+                report(Severity.ERROR,
+                       f"unknown pin or function {sub_name!r} "
+                       f"in block {name!r}",
+                       token=tokens[0])
+                return
+        else:
+            # plain identifier: target is Design level object
+            target = design.namespace.get(tokens[0].text)
+            if target is None:
+                report(Severity.ERROR,
+                       f"unrecognized command or unknown object "
+                       f"{tokens[0].text!r}",
+                       token=tokens[0])
+                return
+        subcommand_tokens = tokens[1:]
+    # now dispatch subcommands if any
+    if subcommand_tokens:
+        handler = subcmd_dispatch.get(type(target))
+        if handler is None:
+            report(Severity.ERROR,
+                f"{type(target).__name__} has no subcommands, "
+                f"got {subcommand_tokens[0].text!r}",
+                token=subcommand_tokens[0])
+            return
+        # dispatch each remaining token as a subcommand
+        for tok in subcommand_tokens:
+            handler(tok, target, design)
 
 
 # ---------------------------------------------------------------------------

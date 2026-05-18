@@ -453,7 +453,7 @@ class TestCmdBlock:
         design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blockdefs_x3)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1:17: error: unexpected token 'extra' after blockdef name\n"
+            "tests/data/tmp/test.blocs:1:17: error: BlockInstance has no subcommands, got 'extra'\n"
             "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert design is None
 

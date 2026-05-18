@@ -31,6 +31,7 @@ def minimal_block_def():
         params               = {},
         pins                 = {},
         functions            = {},
+        namespace            = {},
         ordered_declarations = [],
     )
 
@@ -45,6 +46,7 @@ def another_block_def():
         params               = {},
         pins                 = {},
         functions            = {},
+        namespace            = {},
         ordered_declarations = [],
     )
 
@@ -128,6 +130,7 @@ def block_def_with_pins():
         params               = {},
         pins                 = {"in": in_pin},
         functions            = {"update": update_func},
+        namespace            = {"in": in_pin, "update": update_func},
         ordered_declarations = [in_pin, update_func],
     )
 
@@ -471,6 +474,7 @@ def block_def_with_output():
         params               = {},
         pins                 = {"out": out_pin},
         functions            = {},
+        namespace            = {"out": out_pin},
         ordered_declarations = [out_pin],
     )
 
@@ -491,6 +495,7 @@ def block_def_with_raw():
         params               = {},
         pins                 = {"raw_in": raw_pin},
         functions            = {},
+        namespace            = {"raw_in": raw_pin},
         ordered_declarations = [raw_pin],
     )
 
