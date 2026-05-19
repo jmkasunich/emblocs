@@ -266,24 +266,6 @@ def cmd_block(tokens: list[Token], design: Design) -> tuple[BlockInstance | None
         return None, 0
     return block, 3
 
-def subcmd_signal(token: Token, signal: Signal, design: Design) -> None:
-    """
-    Handle a single-token subcommand that follows a 'signal' command.
-    Currently no subcommands are defined, so this just reports an error.
-    """
-    report(Severity.ERROR,
-           f"un-implemented subcommand {token.text!r} on signal {signal.name!r}",
-           token=token)
-
-def subcmd_pin(token: Token, pin : PinInstance, design: Design) -> None:
-    """
-    Handle a single-token subcommand that applies to a Pin target.
-    Currently no subcommands are defined, so this just reports an error.
-    """
-    report(Severity.ERROR,
-           f"un-implemented subcommand {token.text!r} on pin {pin.pin_def.name!r}",
-           token=token)
-
 def cmd_signal(tokens: list[Token], design: Design) -> tuple[Signal | None:, int]:
     """
     Handle the 'signal' command.
@@ -317,24 +299,6 @@ def cmd_signal(tokens: list[Token], design: Design) -> tuple[Signal | None:, int
         return None, 0
     return sig, 3
 
-def subcmd_thread(token: Token, thread : Thread, design: Design) -> None:
-    """
-    Handle a single-token subcommand that follows a 'thread' command.
-    Currently no subcommands are defined, so this just reports an error.
-    """
-    report(Severity.ERROR,
-           f"un-implemented subcommand {token.text!r} on thread {thread.name!r}",
-           token=token)
-
-def subcmd_funct(token: Token, funct : FunctInstance, design: Design) -> None:
-    """
-    Handle a single-token subcommand that applies to a Function target.
-    Currently no subcommands are defined, so this just reports an error.
-    """
-    report(Severity.ERROR,
-           f"un-implemented subcommand {token.text!r} on function {funct.funct_def.name!r}",
-           token=token)
-
 def cmd_thread(tokens: list[Token], design: Design) -> tuple[Thread | None, int]:
     """
     Handle the 'thread' command.
@@ -365,9 +329,59 @@ def cmd_thread(tokens: list[Token], design: Design) -> tuple[Thread | None, int]
         return None, 0
     return thread, 3
 
+
+# ---------------------------------------------------------------------------
+# Subcommand handlers
+# ---------------------------------------------------------------------------
+
+def subcmd_signal(cmd: str, arg: str, signal: Signal, design: Design) -> None:
+    """
+    Handle a single-token subcommand that applies to a Signal target.
+    Currently no subcommands are implemented, so this just reports an error.
+    """
+    report(Severity.ERROR,
+        f"un-implemented subcommand {cmd!r} with arg {arg!r} on signal {signal.name!r}")
+
+def subcmd_pin(cmd: str, arg: str, pin : PinInstance, design: Design) -> None:
+    """
+    Handle a single-token subcommand that applies to a Pin target.
+    Currently no subcommands are implemented, so this just reports an error.
+    """
+    report(Severity.ERROR,
+        f"un-implemented subcommand {cmd!r} with arg {arg!r} on pin {pin.pindef.name!r}")
+
+def subcmd_thread(cmd: str, arg: str, thread : Thread, design: Design) -> None:
+    """
+    Handle a single-token subcommand that applies to a Thread target.
+    Currently no subcommands are implemented, so this just reports an error.
+    """
+    report(Severity.ERROR,
+        f"un-implemented subcommand {cmd!r} with arg {arg!r} on thread {thread.name!r}")
+
+def subcmd_funct(cmd: str, arg: str, funct : FunctInstance, design: Design) -> None:
+    """
+    Handle a single-token subcommand that applies to a Function target.
+    Currently no subcommands are implemented, so this just reports an error.
+    """
+    report(Severity.ERROR,
+        f"un-implemented subcommand {cmd!r} with arg {arg!r} on function {funct.funct_def.name!r}")
+
 # ---------------------------------------------------------------------------
 # dispatcher
 # ---------------------------------------------------------------------------
+
+CMD_DISPATCH = {
+    "blockdef": cmd_blockdef,
+    "block":    cmd_block,
+    "signal":   cmd_signal,
+    "thread":   cmd_thread,
+}
+SUBCMD_DISPATCH = {
+    Signal:        ( subcmd_signal, ("-+", "+", "-", "=") ),
+    PinInstance:   ( subcmd_pin,    ("-+", "+", "-", "=") ),
+    Thread:        ( subcmd_thread, ("-+", "+", "-") ),
+    FunctInstance: ( subcmd_funct,  ("-+", "+", "-") ),
+}
 
 def parse_command(tokens: list[Token], design: Design) -> None:
     """
@@ -384,19 +398,7 @@ def parse_command(tokens: list[Token], design: Design) -> None:
     """
     current_context().line = tokens[0].line
     keyword = tokens[0]
-    creation_dispatch = {
-        "blockdef": cmd_blockdef,
-        "block":    cmd_block,
-        "signal":   cmd_signal,
-        "thread":   cmd_thread,
-    }
-    subcmd_dispatch = {
-        Signal:        subcmd_signal,
-        Thread:        subcmd_thread,
-        PinInstance:   subcmd_pin,
-        FunctInstance: subcmd_funct,
-    }
-    handler = creation_dispatch.get(keyword.text)
+    handler = CMD_DISPATCH.get(keyword.text)
     if handler is not None:
         # create the target object
         target, n_tokens = handler(tokens, design)
@@ -416,16 +418,29 @@ def parse_command(tokens: list[Token], design: Design) -> None:
         subcommand_tokens = tokens[1:]
     # dispatch subcommands if any
     if subcommand_tokens:
-        handler = subcmd_dispatch.get(type(target))
-        if handler is None:
-            report(Severity.ERROR,
+        entry = SUBCMD_DISPATCH.get(type(target))
+        if entry is None:
+            report(
+                Severity.ERROR,
                 f"{type(target).__name__} has no subcommands, "
                 f"got {subcommand_tokens[0].text!r}",
                 token=subcommand_tokens[0])
             return
+        handler, prefixes = entry
         # dispatch each remaining token as a subcommand
         for tok in subcommand_tokens:
-            handler(tok, target, design)
+            current_context().column = tok.column
+            subcmd = tok.text
+            for prefix in prefixes:
+                if subcmd.startswith(prefix):
+                    suffix = subcmd[len(prefix):]
+                    handler(prefix, suffix, target, design)
+                    break
+            else:
+                report(Severity.ERROR,
+                    f"subcommand {subcmd!r} is invalid for target "
+                    f"{target.name!r} ({type(target).__name__})")
+                # break - # uncomment to stop after one bad subcommand
 
 
 # ---------------------------------------------------------------------------
