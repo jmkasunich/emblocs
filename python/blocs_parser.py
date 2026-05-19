@@ -62,7 +62,7 @@ def get_value(tok: Token, value_type: PinType) -> int | float | None:
         if tok.text == "false":
             return 0
         try:
-            result = evaluate(tok.text, {}, int)
+            result = evaluate(tok.text, {}, 'int')
         except ExpressionError as e:
             report(Severity.ERROR,
                    f"invalid bool value {tok.text!r}: {e}",
@@ -71,7 +71,7 @@ def get_value(tok: Token, value_type: PinType) -> int | float | None:
         return int(result)
     elif value_type == PinType.U32:
         try:
-            result = evaluate(tok.text, {}, int)
+            result = evaluate(tok.text, {}, 'int')
         except ExpressionError as e:
             report(Severity.ERROR,
                    f"invalid u32 value {tok.text!r}: {e}",
@@ -85,7 +85,7 @@ def get_value(tok: Token, value_type: PinType) -> int | float | None:
         return int(result)
     elif value_type == PinType.S32:
         try:
-            result = evaluate(tok.text, {}, int)
+            result = evaluate(tok.text, {}, 'int')
         except ExpressionError as e:
             report(Severity.ERROR,
                    f"invalid s32 value {tok.text!r}: {e}",
@@ -99,7 +99,7 @@ def get_value(tok: Token, value_type: PinType) -> int | float | None:
         return int(result)
     elif value_type == PinType.FLOAT:
         try:
-            result = evaluate(tok.text, {}, float)
+            result = evaluate(tok.text, {}, 'float')
         except ExpressionError as e:
             report(Severity.ERROR,
                    f"invalid float value {tok.text!r}: {e}",
@@ -316,7 +316,7 @@ def cmd_signal(tokens: list[Token], design: Design) -> tuple[Signal | None:, int
         report(Severity.ERROR, str(e), column=OMIT)
         return None, 0
     return sig, 3
- 
+
 def subcmd_thread(token: Token, thread : Thread, design: Design) -> None:
     """
     Handle a single-token subcommand that follows a 'thread' command.

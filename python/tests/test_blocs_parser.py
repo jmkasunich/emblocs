@@ -12,6 +12,10 @@ from blocs_parser import (
     parse_blocs, parse_blocs_string, parse_blocs_file,
     _bloc_spec_cache,
 )
+from emblocs import (
+    PinType,
+)
+
 
 from conftest import TMP_DIR, PYTHON_DIR
 
@@ -77,6 +81,25 @@ def blockdefs_x3(simple_bloc, param_bloc, test_blocs):
     assert len(design.block_defs) == 3
     return design
 
+@pytest.fixture
+def blocks_x4(simple_bloc, param_bloc, test_blocs):
+    """Provides a design with three blockdefs and four block instances
+    for testing signal, thread, and subcommand behavior.
+    Two instances share the same blockdef (simple) to test independence.
+    Note: produces stderr output; call capsys.readouterr() before testing."""
+    blocs_str = (
+        f"blockdef simple     {rtmp(simple_bloc)}\n"
+        f"blockdef param_v1   {rtmp(param_bloc)} NCHAN=2 MASK=3 HAS_ENABLE=0\n"
+        f"blockdef param_v2   {rtmp(param_bloc)} NCHAN=4 MASK=0xA HAS_ENABLE=1\n"
+        f"block b1 simple\n"
+        f"block b2 simple\n"
+        f"block b3 param_v1\n"
+        f"block b4 param_v2\n"
+    )
+    design = parse_blocs_string(blocs_str, source=rcwd(test_blocs))
+    assert design is not None
+    assert len(design.blocks) == 4
+    return design
 
 
 # ---------------------------------------------------------------------------
@@ -477,12 +500,248 @@ class TestCmdBlock:
             "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert design is None
 
-    def test_block_name_conflicts_with_blockdef_fails(self, blockdefs_x3, capsys):
-        capsys.readouterr()  # discard fixture output
-        blocs_str = "block simple simple\n"
-        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blockdefs_x3)
+# ---------------------------------------------------------------------------
+# cmd_signal tests
+# ---------------------------------------------------------------------------
+
+class TestCmdSignal:
+
+    def test_signal_basic_float(self, capsys):
+        capsys.readouterr()
+        blocs_str = "signal s1 float\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert "s1" in design.signals
+        assert design.signals["s1"].sig_type == PinType.FLOAT
+        assert "s1" in design.namespace
+
+    def test_signal_basic_bool(self, capsys):
+        capsys.readouterr()
+        blocs_str = "signal s1 bool\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.signals["s1"].sig_type == PinType.BOOL
+
+    def test_signal_basic_u32(self, capsys):
+        capsys.readouterr()
+        blocs_str = "signal s1 u32\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.signals["s1"].sig_type == PinType.U32
+
+    def test_signal_basic_s32(self, capsys):
+        capsys.readouterr()
+        blocs_str = "signal s1 s32\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.signals["s1"].sig_type == PinType.S32
+
+    def test_signal_default_value(self, capsys):
+        capsys.readouterr()
+        blocs_str = "signal s1 float\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.signals["s1"].value == 0.0
+
+    def test_signal_missing_args_fails(self, capsys):
+        capsys.readouterr()
+        blocs_str = "signal\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1: error: name 'simple' is already in use\n"
+            "tests/data/tmp/test.blocs:1: error: 'signal' requires a signal name and a type\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+    def test_signal_missing_type_fails(self, capsys):
+        capsys.readouterr()
+        blocs_str = "signal s1\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1: error: 'signal' requires a signal name and a type\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+    def test_signal_invalid_name_fails(self, capsys):
+        capsys.readouterr()
+        blocs_str = "signal 123bad float\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1:8: error: invalid signal name '123bad'\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+    def test_signal_invalid_type_fails(self, capsys):
+        capsys.readouterr()
+        blocs_str = "signal s1 nosuchtype\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1:11: error: invalid signal type 'nosuchtype'\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+    def test_signal_duplicate_name_fails(self, capsys):
+        capsys.readouterr()
+        blocs_str = "signal s1 float\nsignal s1 float\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:2: error: name 's1' is already in use\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+# ---------------------------------------------------------------------------
+# cmd_thread tests
+# ---------------------------------------------------------------------------
+
+class TestCmdThread:
+
+    def test_thread_basic(self, capsys):
+        blocs_str = "thread t1 1000000\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert "t1" in design.threads
+        assert design.threads["t1"].period_ns == 1000000
+        assert "t1" in design.namespace
+
+    def test_thread_period_hex(self, capsys):
+        blocs_str = "thread t1 0xF4240\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.threads["t1"].period_ns == 1000000
+
+    def test_thread_period_expression(self, capsys):
+        blocs_str = "thread t1 1000*1000\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.threads["t1"].period_ns == 1000000
+
+    def test_thread_missing_args_fails(self, capsys):
+        blocs_str = "thread\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1: error: 'thread' requires a thread name and a period\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+    def test_thread_missing_period_fails(self, capsys):
+        blocs_str = "thread t1\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1: error: 'thread' requires a thread name and a period\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+    def test_thread_invalid_name_fails(self, capsys):
+        blocs_str = "thread 123bad 1000000\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1:8: error: invalid thread name '123bad'\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+    def test_thread_zero_period_fails(self, capsys):
+        blocs_str = "thread t1 0\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1: error: thread period must be positive, got 0\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+    def test_thread_negative_period_fails(self, capsys):
+        blocs_str = "thread t1 -1000000\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1:11: error: u32 value '-1000000' is out of range [0, 4294967295]\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+    def test_thread_invalid_period_fails(self, capsys):
+        blocs_str = "thread t1 notanumber\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1:11: error: invalid u32 value 'notanumber': "
+            "expression 'notanumber': unknown variable: 'notanumber'\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+    def test_thread_duplicate_name_fails(self, capsys):
+        blocs_str = "thread t1 1000000\nthread t1 2000000\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:2: error: name 't1' is already in use\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+# ---------------------------------------------------------------------------
+# namespace conflict tests (circular: A->B, B->C, C->D, D->A)
+# ---------------------------------------------------------------------------
+
+class TestCmdConflicts:
+
+    def test_signal_conflicts_with_blockdef(self, simple_bloc, test_blocs, capsys):
+        blocs_str = (f"blockdef myblock {rtmp(simple_bloc)}\n"
+                     f"signal myblock float\n")
+        design = parse_blocs_string(blocs_str, source=rcwd(test_blocs))
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:2: error: name 'myblock' is already in use\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+    def test_blockdef_conflicts_with_thread(self, simple_bloc, test_blocs, capsys):
+        blocs_str = (f"thread mythread 1000000\n"
+                     f"blockdef mythread {rtmp(simple_bloc)}\n")
+        design = parse_blocs_string(blocs_str, source=rcwd(test_blocs))
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:2:10: error: name 'mythread' is already in use\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+    def test_thread_conflicts_with_block(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "thread b1 1000000\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1: error: name 'b1' is already in use\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+    def test_block_conflicts_with_signal(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = ("signal mysignal float\n"
+                     "block mysignal simple\n")
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:2: error: name 'mysignal' is already in use\n"
             "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert design is None
