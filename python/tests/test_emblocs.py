@@ -95,7 +95,7 @@ class TestAddBlockDef:
 
     def test_name_conflict_with_signal(self, empty_design, minimal_block_def):
         """block_def name conflicts with a pre-existing namespace entry."""
-        empty_design.namespace.add("limit1")
+        empty_design.namespace["limit1"] = None
         with pytest.raises(EmblocsError):
             empty_design.add_block_def(minimal_block_def)
 

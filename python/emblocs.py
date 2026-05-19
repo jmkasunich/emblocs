@@ -10,6 +10,7 @@
 #
 
 from __future__ import annotations
+from typing import Union
 from dataclasses import dataclass, field
 from enum import Enum, auto
 import textwrap
@@ -372,6 +373,7 @@ class FunctDef:
         desc = _format_descr(self.description)
         return f"function  {self.name}{desc}"
 
+BlockDefChild = PinDef | FunctDef
 
 @dataclass(frozen=True)
 class BlockDef:
@@ -402,7 +404,7 @@ class BlockDef:
     description: str
     pins:        dict[str, PinDef]
     functions:   dict[str, FunctDef]
-    namespace:   dict[str, PinDef | FunctDef]
+    namespace:   dict[str, BlockDefChild]
     params:      dict[str, int]
     ordered_declarations: list[PinDef | VarDef | FunctDef]
 
@@ -509,6 +511,7 @@ class FunctInstance:
         thr = self.thread.name if self.thread else "unassigned"
         return f"function  {self.block.name!r}.{self.funct_def.name} -> {thr}"
 
+BlockInstChild = PinInstance | FunctInstance
 
 @dataclass
 class BlockInstance:
@@ -527,7 +530,7 @@ class BlockInstance:
     block_def: BlockDef
     pins:      dict[str, PinInstance]   = field(default_factory=dict)
     functions: dict[str, FunctInstance] = field(default_factory=dict)
-    namespace: dict[str, PinInstance | FunctInstance] = field(default_factory=dict)
+    namespace: dict[str, BlockInstChild] = field(default_factory=dict)
 
     def describe(self) -> str:
         lines = [f"block  {self.name} ({self.block_def.name})"]
@@ -537,6 +540,16 @@ class BlockInstance:
             lines.append(_indent_child(func.describe()))
         return "\n".join(lines)
 
+    def find_child_by_name(self, name: str) -> BlockInstChild:
+        """ takes name of pin or function and returns matching object """
+        child = self.namespace.get(name)
+        if child == None:
+            raise EmblocsError(f"{name!r} not found in block {self.name!r}")
+        return child
+
+
+DesignChild = BlockDef | BlockInstance | Thread | Signal
+DesignObject = DesignChild | BlockInstChild
 
 @dataclass
 class Design:
@@ -553,7 +566,8 @@ class Design:
         blocks      -- dict of BlockInstance keyed by instance name
         signals     -- dict of Signal keyed by signal name
         threads     -- dict of Thread keyed by thread name
-        namespace   -- set of all names for O(1) uniqueness enforcement
+        namespace   -- dict of all BlockDef, BlockInstance, Signal and Thread
+                       objects in the design, O(1) search and uniqueness checks
     """
     source_path:   str
     block_defs:    dict[str, BlockDef]      = field(default_factory=dict)
@@ -561,7 +575,7 @@ class Design:
     signals:       dict[str, Signal]        = field(default_factory=dict)
     dummy_signals: dict[str, Signal]        = field(default_factory=dict)
     threads:       dict[str, Thread]        = field(default_factory=dict)
-    namespace:     set[str]                 = field(default_factory=set)
+    namespace:     dict[str, DesignChild]   = field(default_factory=dict)
 
     def describe(self) -> str:
         lines = [f"Design: {self.source_path}"]
@@ -585,6 +599,26 @@ class Design:
                 lines.append(_indent_child(f"thread  {thr.name}  {thr.period_ns} ns"))
         return "\n".join(lines)
 
+    def find_child_by_name(self, name: str) -> DesignChild | None:
+        """ takes name of blockdef, block instance, signal, or thread
+            and returns matching object or None """
+        child = self.namespace.get(name)
+        if child == None:
+            raise EmblocsError(f"{name!r} not found in design {self.source_path!r}")
+        return child
+
+    def find_object_by_name(self, name: str) -> DesignChild | None:
+        """ takes name of blockdef, block instance, signal, thread,
+            block.pin, or block.function and returns matching object or None """
+        n1, sep, n2 = name.partition(".")
+        if sep == "":
+            return self.find_child_by_name(self, name)
+        else:
+            block = self.blocks.get(n1)
+            if block == None:
+                raise EmblocsError(f"block {n1!r} not found")
+            return block.find_child_by_name(n2)
+
     def add_block_def(self, block_def: BlockDef) -> BlockDef:
         """
         Add a fully resolved BlockDef to the Design.
@@ -595,7 +629,7 @@ class Design:
             raise EmblocsError(f"name {block_def.name!r} is already in use")
         # add to design
         self.block_defs[block_def.name] = block_def
-        self.namespace.add(block_def.name)
+        self.namespace[block_def.name] = block_def
         return block_def
 
     def add_block_instance(self, instance_name: str, block_def_name: str) -> BlockInstance:
@@ -647,7 +681,7 @@ class Design:
             func.block = instance
         # add to design
         self.blocks[instance_name] = instance
-        self.namespace.add(instance_name)
+        self.namespace[instance_name] = instance
         return instance
 
     def add_signal(self, name: str, sig_type: PinType) -> Signal:
@@ -663,7 +697,7 @@ class Design:
         # generate signal and add to design
         signal = Signal(name=name, sig_type=sig_type)
         self.signals[name] = signal
-        self.namespace.add(name)
+        self.namespace[name] = signal
         return signal
 
     def add_thread(self, name: str, period_ns: int) -> Thread:
@@ -679,7 +713,7 @@ class Design:
         # generate thread and add to design
         thread = Thread(name=name, period_ns=period_ns)
         self.threads[name] = thread
-        self.namespace.add(name)
+        self.namespace[name] = thread
         return thread
 
     def _validate_and_set_value(self, signal: Signal, value: int | float) -> None:

@@ -405,34 +405,16 @@ def parse_command(tokens: list[Token], design: Design) -> None:
             return
         subcommand_tokens = tokens[n_tokens:]
     else:
-        # not a creation command - look up the target object for subcommands
-        name, sep, sub_name = tokens[0].text.partition(".")
-        if sep:
-            # qualified name: block.pin or block.func
-            if name not in design.blocks:
-                report(Severity.ERROR,
-                       f"unknown block instance {name!r}",
-                       token=tokens[0])
-                return
-            block = design.blocks[name]
-            target = block.namespace.get(sub_name)
-            if target is None:
-                report(Severity.ERROR,
-                       f"unknown pin or function {sub_name!r} "
-                       f"in block {name!r}",
-                       token=tokens[0])
-                return
-        else:
-            # plain identifier: target is Design level object
-            target = design.namespace.get(tokens[0].text)
-            if target is None:
-                report(Severity.ERROR,
-                       f"unrecognized command or unknown object "
-                       f"{tokens[0].text!r}",
-                       token=tokens[0])
-                return
+        # look up target object
+        try:
+            target = design.find_object_by_name(keyword.text)
+        except EmblocsError as e:
+            report(Severity.ERROR,
+                    f"unknown command or object {keyword.text!r}: str(e)",
+                    token=keyword)
+            return
         subcommand_tokens = tokens[1:]
-    # now dispatch subcommands if any
+    # dispatch subcommands if any
     if subcommand_tokens:
         handler = subcmd_dispatch.get(type(target))
         if handler is None:
