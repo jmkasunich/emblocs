@@ -3,9 +3,7 @@ import os
 import pytest
 from pathlib import Path
 from parse_common import (
-    Token,
-     push_context, pop_context, clear_contexts, _context_stack,
-     Severity,
+    Token, ctx, Severity,
 )
 from blocs_parser import (
     lex_lines,
@@ -26,10 +24,10 @@ from conftest import TMP_DIR, PYTHON_DIR
 
 @pytest.fixture(autouse=True)
 def clean_context():
-    clear_contexts()
-    push_context(source="<test>")
+    ctx.clear()
+    ctx.push(source="<test>")
     yield
-    clear_contexts()
+    ctx.clear()
 
 
 @pytest.fixture(autouse=True)
@@ -476,7 +474,7 @@ class TestCmdBlock:
         design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blockdefs_x3)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1:17: error: BlockInstance has no subcommands, got 'extra'\n"
+            "tests/data/tmp/test.blocs:1:17: error: 'b1' (BlockInstance) has no subcommands, got 'extra'\n"
             "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert design is None
 

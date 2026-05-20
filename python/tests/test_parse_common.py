@@ -7,13 +7,7 @@ from pathlib import Path
 from parse_common import (
     read_source_file,
     read_source_string,
-    push_context,
-    pop_context,
-    current_context,
-    clear_contexts,
-    report,
-    Severity,
-    OMIT,
+    ctx, report, Severity, OMIT,
     tokenize_line,
     MAX_ENCODING_ERRORS,
 )
@@ -26,10 +20,10 @@ from parse_common import (
 @pytest.fixture(autouse=True)
 def clean_context():
     """Ensure context stack is clean before and after every test."""
-    clear_contexts()
-    push_context(source="<test>")
+    ctx.clear()
+    ctx.push(source="<test>")
     yield
-    clear_contexts()
+    ctx.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -40,88 +34,89 @@ class TestReadSourceFile:
 
     def test_valid_ascii_file_returns_lines(self, good_dir):
         lines = read_source_file(str(good_dir / "UTF-8.bloc"))
-        pop_context()
+        ctx.pop()
         assert lines is not None
         assert len(lines) > 0
 
     def test_valid_ascii_file_pushes_context(self, good_dir):
         path = (good_dir / "UTF-8.bloc").as_posix()
         read_source_file(path)
-        assert current_context().source == path
-        pop_context()
+        assert ctx.source == path
+        ctx.pop()
 
     def test_valid_ascii_file_no_errors(self, good_dir):
         read_source_file(str(good_dir / "UTF-8.bloc"))
-        ctx = pop_context()
         assert ctx.no_errors()
+        ctx.pop()
 
     def test_ansi_file_returns_lines(self, good_dir):
         lines = read_source_file(str(good_dir / "ANSI.bloc"))
-        pop_context()
+        ctx.pop()
         assert lines is not None
 
     def test_file_not_found_returns_none(self, bad_dir):
         lines = read_source_file(str(bad_dir / "does_not_exist.bloc"))
-        ctx = pop_context()
         assert lines is None
         assert not ctx.no_errors()
+        ctx.pop()
 
     def test_file_not_found_reports_error(self, bad_dir, capsys):
         path = str(bad_dir / "does_not_exist.bloc")
         read_source_file(path)
-        pop_context()
         actual = capsys.readouterr().err.strip()
         expected = "tests/data/bad/does_not_exist.bloc: error: file not found"
         assert actual == expected, (
             f"\nEXPECTED: {expected!r}\n"
             f"ACTUAL:   {actual!r}\n"
         )
+        ctx.pop()
 
     def test_utf16le_returns_none(self, bad_dir):
         lines = read_source_file(str(bad_dir / "UTF-16LE.bloc"))
-        ctx = pop_context()
         assert lines is None
         assert not ctx.no_errors()
+        ctx.pop()
 
     def test_utf16be_returns_none(self, bad_dir):
         lines = read_source_file(str(bad_dir / "UTF-16BE.bloc"))
-        ctx = pop_context()
         assert lines is None
         assert not ctx.no_errors()
+        ctx.pop()
 
     def test_utf16_reports_encoding_error(self, bad_dir, capsys):
         path = str(bad_dir / "UTF-16LE.bloc")
         read_source_file(path)
-        pop_context()
         actual = capsys.readouterr().err.strip()
         expected = "tests/data/bad/UTF-16LE.bloc: error: file is not valid UTF-8; re-save as UTF-8 and try again"
         assert actual == expected, (
             f"\nEXPECTED: {expected!r}\n"
             f"ACTUAL:   {actual!r}\n"
         )
+        ctx.pop()
 
     def test_utf8_bom_returns_none(self, bad_dir):
         lines = read_source_file(str(bad_dir / "UTF-8-BOM.bloc"))
-        ctx = pop_context()
         assert lines is None
         assert not ctx.no_errors()
+        ctx.pop()
 
     def test_nonascii_returns_none(self, bad_dir):
         lines = read_source_file(str(bad_dir / "test_nonascii.bloc"))
-        ctx = pop_context()
         assert lines is None
         assert not ctx.no_errors()
+        ctx.pop()
 
     def test_nonascii_reports_error_with_line_number(self, bad_dir, capsys):
         path = str(bad_dir / "test_nonascii.bloc")
         read_source_file(path)
-        pop_context()
         actual = capsys.readouterr().err.strip()
         expected = "tests/data/bad/test_nonascii.bloc:2: error: non-ASCII character"
         assert actual == expected, (
             f"\nEXPECTED: {expected!r}\n"
             f"ACTUAL:   {actual!r}\n"
         )
+        ctx.pop()
+
 # ---------------------------------------------------------------------------
 # read_source_string() tests
 # ---------------------------------------------------------------------------
@@ -130,56 +125,56 @@ class TestReadSourceString:
 
     def test_simple_string_returns_lines(self):
         lines = read_source_string("line one\nline two\n")
-        pop_context()
         assert lines == ["line one\n", "line two\n"]
+        ctx.pop()
 
     def test_empty_string_returns_empty_list(self):
         lines = read_source_string("")
-        pop_context()
         assert lines == []
+        ctx.pop()
 
     def test_default_source_label(self):
         read_source_string("hello\n")
-        assert current_context().source == "<string>"
-        pop_context()
+        assert ctx.source == "<string>"
+        ctx.pop()
 
     def test_custom_source_label(self):
         read_source_string("hello\n", source="my_input")
-        assert current_context().source == "my_input"
-        pop_context()
+        assert ctx.source == "my_input"
+        ctx.pop()
 
     def test_no_errors_for_clean_string(self):
         read_source_string("block foo\npin float input in\n")
-        ctx = pop_context()
         assert ctx.no_errors()
+        ctx.pop()
 
     def test_nonascii_string_returns_none(self):
         lines = read_source_string("hello\ncaf\u00e9\n")
-        ctx = pop_context()
         assert lines is None
         assert not ctx.no_errors()
+        ctx.pop()
 
     def test_nonascii_reports_correct_line(self, capsys):
         read_source_string("good line\nbad caf\u00e9\n")
-        pop_context()
         captured = capsys.readouterr()
         assert "2" in captured.err   # line 2 has the non-ASCII char
+        ctx.pop()
 
     def test_string_without_trailing_newline(self):
         lines = read_source_string("no newline")
-        pop_context()
         assert lines == ["no newline"]
+        ctx.pop()
 
     def test_max_encoding_errors_cutoff(self, capsys):
         # generate more than MAX_ENCODING_ERRORS non-ASCII lines
         bad_text = "caf\u00e9\n" * (MAX_ENCODING_ERRORS + 5)
         lines = read_source_string(bad_text)
-        pop_context()
         captured = capsys.readouterr()
         assert lines is None
         assert "too many" in captured.err
         # should not report more than MAX_ENCODING_ERRORS individual errors
         assert captured.err.count("non-ASCII") <= MAX_ENCODING_ERRORS
+        ctx.pop()
 
 
 # ---------------------------------------------------------------------------
@@ -189,60 +184,55 @@ class TestReadSourceString:
 class TestErrorContext:
 
     def test_push_creates_clean_context(self):
-        ctx = push_context(source="test.py")
+        ctx.push(source="test.py")
         assert ctx.source == "test.py"
         assert ctx.error_count == 0
         assert ctx.warning_count == 0
         assert ctx.info_count == 0
-        pop_context()
-
-    def test_pop_returns_context(self):
-        push_context(source="test.py")
-        ctx = pop_context()
-        assert ctx.source == "test.py"
+        ctx.pop()
 
     def test_nested_contexts(self):
-        push_context(source="outer.py")
-        push_context(source="inner.py")
-        assert current_context().source == "inner.py"
-        pop_context()
-        assert current_context().source == "outer.py"
-        pop_context()
+        ctx.push(source="outer.py")
+        ctx.push(source="inner.py")
+        assert ctx.source == "inner.py"
+        ctx.pop()
+        assert ctx.source == "outer.py"
+        ctx.pop()
 
     def test_no_errors_true_when_clean(self):
-        ctx = push_context()
+        ctx.push()
         assert ctx.no_errors()
-        pop_context()
+        ctx.pop()
 
     def test_no_errors_false_after_error(self):
-        push_context()
+        ctx.push()
         report(Severity.ERROR, "test error")
-        ctx = pop_context()
         assert not ctx.no_errors()
+        ctx.pop()
 
     def test_clean_true_when_clean(self):
-        ctx = push_context()
+        ctx.push()
         assert ctx.clean()
-        pop_context()
+        ctx.pop()
 
     def test_clean_false_after_warning(self):
-        push_context()
+        ctx.push()
         report(Severity.WARNING, "test warning")
-        ctx = pop_context()
         assert not ctx.clean()
+        ctx.pop()
 
     def test_error_count_increments(self):
-        push_context()
+        ctx.push()
         report(Severity.ERROR, "error 1")
         report(Severity.ERROR, "error 2")
-        ctx = pop_context()
         assert ctx.error_count == 2
+        ctx.pop()
 
     def test_warning_count_increments(self):
-        push_context()
+        ctx.push()
         report(Severity.WARNING, "warning 1")
-        ctx = pop_context()
         assert ctx.warning_count == 1
+        ctx.pop()
 
 
 # ---------------------------------------------------------------------------

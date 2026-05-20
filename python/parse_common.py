@@ -59,152 +59,226 @@ _SEVERITY_LABEL = {
 # Error context
 # ---------------------------------------------------------------------------
 
-@dataclass
+# ---------------------------------------------------------------------------
+# ErrorContext
+# ---------------------------------------------------------------------------
+
 class ErrorContext:
     """
-    Tracks the current source location and error counts for a parse operation.
+    Manages a stack of source locations and error counts for nested
+    parse operations.  Each push() creates a new frame for a file or
+    string being parsed; pop() discards it.
 
-    Fields:
-        source  -- source identifier (file path, "interactive", etc.), or None
-        line    -- current default line number, or None
-        column  -- current default column number, or None
-        error_count   -- number of errors reported in this context
-        warning_count -- number of warnings reported in this context
-        info_count    -- number of info messages reported in this context
+    Typical usage:
+        ctx.push(source="myfile.blocs")
+        ...parse...
+        ctx.summarize()
+        ctx.pop()
     """
-    source:        str | None = None
-    line:          int | None = None
-    column:        int | None = None
-    error_count:   int        = 0
-    warning_count: int        = 0
-    info_count:    int        = 0
 
-    def summarize(self) -> None:
-        """Print a summary of error/warning/info counts to stderr."""
-        source_str = self.source if self.source else "<unknown>"
-        print(f"{source_str}: {self.error_count} error(s), "
-              f"{self.warning_count} warning(s), "
-              f"{self.info_count} info(s)",
-              file=sys.stderr)
+    @dataclass
+    class _Frame:
+        source:        str = "<unknown>"
+        line:          int = 0
+        column:        int = 0
+        error_count:   int = 0
+        warning_count: int = 0
+        info_count:    int = 0
+
+    def __init__(self) -> None:
+        self._stack: list[ErrorContext._Frame] = []
+
+
+    @property
+    def source(self) -> str:
+        """Return the source identifier of the current frame."""
+        return self._top().source
+
+    @property
+    def line(self) -> int:
+        return self._top().line
+
+    @property
+    def column(self) -> int:
+        return self._top().column
+
+    @property
+    def error_count(self) -> int:
+        return self._top().error_count
+
+    @property
+    def warning_count(self) -> int:
+        return self._top().warning_count
+
+    @property
+    def info_count(self) -> int:
+        return self._top().info_count
+
+    # ------------------------------------------------------------------
+    # Stack management
+    # ------------------------------------------------------------------
+
+    def push(self, *, source: str | None = None,
+                      line: int | None = None,
+                      column: int | None = None) -> None:
+        """
+        Push a new frame onto the context stack.
+        source defaults to "<unknown>", line and column default to 0.
+        """
+        self._stack.append(ErrorContext._Frame(
+            source = source  if source  is not None else "<unknown>",
+            line   = line    if line    is not None else 0,
+            column = column  if column  is not None else 0,
+        ))
+
+    def pop(self) -> None:
+        """Pop and discard the current frame."""
+        if not self._stack:
+            raise RuntimeError("pop() called on empty context stack")
+        self._stack.pop()
+
+    def _top(self) -> _Frame:
+        """Return the current top frame without removing it."""
+        if not self._stack:
+            raise RuntimeError("context stack is empty; call push() first")
+        return self._stack[-1]
+
+    def clear(self) -> None:
+        """Clear the entire context stack. For use in tests only."""
+        self._stack.clear()
+
+    # ------------------------------------------------------------------
+    # Location management
+    # ------------------------------------------------------------------
+
+    def set(self, *, token: Token = None,
+                     source: str | None = None,
+                     line: int | None = None,
+                     column: int | None = None) -> None:
+        """
+        Update the current frame's line and/or column.
+        If token is provided, both line and column are taken from it.
+        Otherwise line and column are updated independently if not None.
+        None means "leave current value unchanged".
+        The current frame's source can also be updated, but you probably
+        should call push() to start a new file/string context.
+        """
+        frame = self._top()
+        if source is not None:
+            frame.source = source
+        if token is not None:
+            frame.line   = token.line
+            frame.column = token.column
+        else:
+            if line is not None:
+                frame.line = line
+            if column is not None:
+                frame.column = column
+
+    # ------------------------------------------------------------------
+    # Status queries (call before pop() if result is needed)
+    # ------------------------------------------------------------------
 
     def no_errors(self) -> bool:
-        """Return True if no errors were reported in this context."""
-        return self.error_count == 0
+        """Return True if no errors have been reported in the current frame."""
+        return self._top().error_count == 0
 
     def clean(self) -> bool:
-        """Return True if no errors or warnings were reported in this context."""
-        return self.error_count == 0 and self.warning_count == 0
+        """Return True if no errors or warnings in the current frame."""
+        frame = self._top()
+        return frame.error_count == 0 and frame.warning_count == 0
 
-# Context stack -- push when entering a new file, pop when leaving
-_context_stack: list[ErrorContext] = []
+    def summarize(self) -> None:
+        """Print error/warning/info counts for the current frame to stderr."""
+        frame = self._top()
+        print(f"{frame.source}: {frame.error_count} error(s), "
+              f"{frame.warning_count} warning(s), "
+              f"{frame.info_count} info(s)",
+              file=sys.stderr)
 
-def push_context(source: str | None = None,
-                 line: int | None = None,
-                 column: int | None = None) -> ErrorContext:
-    """Push a new ErrorContext onto the stack and return it."""
-    ctx = ErrorContext(source=source, line=line, column=column)
-    _context_stack.append(ctx)
-    return ctx
 
-def pop_context() -> ErrorContext:
-    """Pop and return the current ErrorContext."""
-    return _context_stack.pop()
+    # ------------------------------------------------------------------
+    # Error reporting
+    # ------------------------------------------------------------------
 
-def current_context() -> ErrorContext:
-    """Return the current ErrorContext without removing it."""
-    if not _context_stack:
-        raise RuntimeError("report() called with no active ErrorContext; "
-                           "call push_context() first")
-    return _context_stack[-1]
+    def report(self, severity: Severity,
+               message:  str, *,
+               source:   str | _Omit | None = None,
+               lineno:   int | _Omit | None = None,
+               column:   int | _Omit | None = None,
+               token:    Token | None       = None) -> None:
+        """
+        Print a diagnostic message and update the current frame's counters.
 
-def clear_contexts() -> None:
-    """Clear the context stack. For use in tests only."""
-    _context_stack.clear()
+        Location resolution priority for each field:
+            source: explicit arg > current frame source  (OMIT to suppress)
+            lineno: token.line  > explicit arg > current frame line  (OMIT to suppress)
+            column: token.column > explicit arg > current frame column (OMIT to suppress)
+
+        FATAL severity prints the message and calls sys.exit(1).
+        """
+        frame = self._top()
+        # resolve source
+        if source is OMIT:
+            resolved_source = None
+        elif source is not None:
+            resolved_source = source
+        else:
+            resolved_source = frame.source
+        # resolve lineno
+        if lineno is OMIT:
+            resolved_lineno = None
+        elif token is not None:
+            resolved_lineno = token.line
+        elif lineno is not None:
+            resolved_lineno = lineno
+        else:
+            resolved_lineno = frame.line
+        # resolve column
+        if column is OMIT:
+            resolved_column = None
+        elif token is not None:
+            resolved_column = token.column
+        elif column is not None:
+            resolved_column = column
+        else:
+            resolved_column = frame.column
+        # build location prefix
+        location = ""
+        if resolved_source is not None:
+            location = resolved_source
+            if resolved_lineno is not None:
+                location += f":{resolved_lineno}"
+                if resolved_column is not None:
+                    location += f":{resolved_column}"
+            location += ": "
+        # print and update counts
+        label = _SEVERITY_LABEL[severity]
+        print(f"{location}{label}: {message}", file=sys.stderr)
+        if severity == Severity.ERROR:
+            frame.error_count += 1
+        elif severity == Severity.WARNING:
+            frame.warning_count += 1
+        elif severity == Severity.INFO:
+            frame.info_count += 1
+        if severity == Severity.FATAL:
+            sys.exit(1)
 
 
 # ---------------------------------------------------------------------------
-# Error reporting
+# Module-level instance and report() compatibility wrapper
 # ---------------------------------------------------------------------------
 
-def report(severity: Severity,
-           message:  str,
-           source:   str | _Omit | None = None,
-           lineno:   int | _Omit | None = None,
-           column:   int | _Omit | None = None,
-           token:    Token | None       = None) -> None:
+ctx = ErrorContext()
+
+def report(severity: Severity, message: str, **kwargs) -> None:
     """
-    Print a diagnostic message and update the current context's counters.
-
-    Location resolution priority for each field:
-        source: explicit arg > current_context().source  (OMIT to suppress)
-        lineno: token.line  > explicit arg > current_context().line  (OMIT to suppress)
-        column: token.column > explicit arg > current_context().column (OMIT to suppress)
-
-    FATAL severity prints the message and calls sys.exit(1).
-    All others return normally.
+    Module-level wrapper around ctx.report().
+    Kept for compatibility since report() is called throughout the parsers.
+    New code should use ctx.report() directly.
     """
-    ctx = current_context()
+    ctx.report(severity, message, **kwargs)
 
-    # resolve source
-    if source is OMIT:
-        resolved_source = None
-    elif source is not None:
-        if not isinstance(source, str):
-            raise TypeError(f"source must be str, None, or OMIT, "
-                            f"got {type(source)!r}")
-        resolved_source = source
-    else:
-        resolved_source = ctx.source
-
-    # resolve lineno
-    if lineno is OMIT:
-        resolved_lineno = None
-    elif token is not None:
-        resolved_lineno = token.line
-    elif lineno is not None:
-        if not isinstance(lineno, int):
-            raise TypeError(f"lineno must be int, None, or OMIT, "
-                            f"got {type(lineno)!r}")
-        resolved_lineno = lineno
-    else:
-        resolved_lineno = ctx.line
-
-    # resolve column
-    if column is OMIT:
-        resolved_column = None
-    elif token is not None:
-        resolved_column = token.column
-    elif column is not None:
-        if not isinstance(column, int):
-            raise TypeError(f"column must be int, None, or OMIT, "
-                            f"got {type(column)!r}")
-        resolved_column = column
-    else:
-        resolved_column = ctx.column
-
-    # build location prefix
-    location = ""
-    if resolved_source is not None:
-        location = resolved_source
-        if resolved_lineno is not None:
-            location += f":{resolved_lineno}"
-            if resolved_column is not None:
-                location += f":{resolved_column}"
-        location += ": "
-
-    label = _SEVERITY_LABEL[severity]
-    print(f"{location}{label}: {message}", file=sys.stderr)
-
-    # update counters
-    if severity == Severity.ERROR:
-        ctx.error_count += 1
-    elif severity == Severity.WARNING:
-        ctx.warning_count += 1
-    elif severity == Severity.INFO:
-        ctx.info_count += 1
-
-    if severity == Severity.FATAL:
-        sys.exit(1)
 
 
 # ---------------------------------------------------------------------------
@@ -224,13 +298,13 @@ def _check_ascii(lines: list[str]) -> bool:
     encoding_errors = 0
     for lineno, line in enumerate(lines, start=1):
         if not line.isascii():
-            report(Severity.ERROR, "non-ASCII character",
-                   lineno=lineno, column=OMIT)
+            ctx.report(Severity.ERROR, "non-ASCII character",
+                       lineno=lineno, column=OMIT)
             encoding_errors += 1
             if encoding_errors >= MAX_ENCODING_ERRORS:
-                report(Severity.ERROR,
-                       f"too many encoding errors ({MAX_ENCODING_ERRORS}); "
-                       f"file may be in the wrong encoding")
+                ctx.report(Severity.ERROR,
+                           f"too many encoding errors ({MAX_ENCODING_ERRORS}); "
+                           f"file may be in the wrong encoding")
                 return False
     return encoding_errors == 0
 
@@ -245,18 +319,17 @@ def read_source_file(path: str) -> list[str] | None:
     not be read or contains encoding errors.
     """
     posix_path = Path(path).as_posix()
-    push_context(source=posix_path)
+    ctx.push(source=posix_path)
     try:
         with open(path, "r", encoding="utf-8") as f:
             lines = f.readlines()
     except UnicodeDecodeError:
-        report(Severity.ERROR,
-               "file is not valid UTF-8; re-save as UTF-8 and try again",
-               lineno=OMIT, column=OMIT)
+        ctx.report(Severity.ERROR,
+                   "file is not valid UTF-8; re-save as UTF-8 and try again",
+                   lineno=OMIT, column=OMIT)
         return None
     except FileNotFoundError:
-        report(Severity.ERROR, "file not found",
-               lineno=OMIT, column=OMIT)
+        ctx.report(Severity.ERROR, "file not found", lineno=OMIT, column=OMIT)
         return None
 
     return lines if _check_ascii(lines) else None
@@ -274,7 +347,7 @@ def read_source_string(text: str,
 
     Returns the list of lines, or None if encoding errors were found.
     """
-    push_context(source=source)
+    ctx.push(source=source)
     lines = text.splitlines(keepends=True)
     return lines if _check_ascii(lines) else None
 

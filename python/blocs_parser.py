@@ -18,11 +18,11 @@ from emblocs import (
 )
 from bloc_parser import parse_bloc_file
 from bloc_resolver import resolve
-from parse_common import ( Token, tokenize_line,
-                           Severity, report, OMIT,
-                           current_context, push_context, pop_context,
-                           read_source_file, read_source_string
-                            )
+from parse_common import (
+    ctx, Severity, report, OMIT,
+    Token, tokenize_line,
+    read_source_file, read_source_string
+)
 
 
 # ---------------------------------------------------------------------------
@@ -40,7 +40,7 @@ SIGNAL_TYPES = {
 # helper for parsing values and expressions
 # ---------------------------------------------------------------------------
 
-def get_value(tok: Token, value_type: PinType) -> int | float | None:
+def get_value(text: str, value_type: PinType) -> int | float | None:
     """
     Parse and validate a value/expression token against the given EMBLOCS type.
 
@@ -49,69 +49,61 @@ def get_value(tok: Token, value_type: PinType) -> int | float | None:
     An empty variable dict is passed, so named variables are not supported.
 
     Returns the parsed value as int or float, or None if parsing fails.
-    Reports an error into the current context on failure.
+    Reports an error using the current context on failure.
     """
     if value_type == PinType.RAW:
         report(Severity.ERROR,
-               "internal error: get_value() called with RAW type",
-               token=tok)
+               "internal error: get_value() called with RAW type")
         return None
     if value_type == PinType.BOOL:
-        if tok.text == "true":
+        if text == "true":
             return 1
-        if tok.text == "false":
+        if text == "false":
             return 0
         try:
-            result = evaluate(tok.text, {}, 'int')
+            result = evaluate(text, {}, 'int')
         except ExpressionError as e:
             report(Severity.ERROR,
-                   f"invalid bool value {tok.text!r}: {e}",
-                   token=tok)
+                   f"invalid bool value {text!r}: {e}")
             return None
         return int(result)
     elif value_type == PinType.U32:
         try:
-            result = evaluate(tok.text, {}, 'int')
+            result = evaluate(text, {}, 'int')
         except ExpressionError as e:
             report(Severity.ERROR,
-                   f"invalid u32 value {tok.text!r}: {e}",
-                   token=tok)
+                   f"invalid u32 value {text!r}: {e}")
             return None
         if result < 0 or result > U32_MAX:
             report(Severity.ERROR,
-                   f"u32 value {tok.text!r} is out of range [0, {U32_MAX}]",
-                   token=tok)
+                   f"u32 value {text!r} is out of range [0, {U32_MAX}]")
             return None
         return int(result)
     elif value_type == PinType.S32:
         try:
-            result = evaluate(tok.text, {}, 'int')
+            result = evaluate(text, {}, 'int')
         except ExpressionError as e:
             report(Severity.ERROR,
-                   f"invalid s32 value {tok.text!r}: {e}",
-                   token=tok)
+                   f"invalid s32 value {text!r}: {e}")
             return None
         if result < S32_MIN or result > S32_MAX:
             report(Severity.ERROR,
-                   f"s32 value {tok.text!r} is out of range [{S32_MIN}, {S32_MAX}]",
-                   token=tok)
+                   f"s32 value {text!r} is out of range [{S32_MIN}, {S32_MAX}]")
             return None
         return int(result)
     elif value_type == PinType.FLOAT:
         try:
-            result = evaluate(tok.text, {}, 'float')
+            result = evaluate(text, {}, 'float')
         except ExpressionError as e:
             report(Severity.ERROR,
-                   f"invalid float value {tok.text!r}: {e}",
-                   token=tok)
+                   f"invalid float value {text!r}: {e}")
             return None
         try:
             import struct
             struct.pack('f', result)
         except struct.error:
             report(Severity.ERROR,
-                   f"float value {tok.text!r} is out of range for a 32-bit float",
-                   token=tok)
+                   f"float value {text!r} is out of range for a 32-bit float")
             return None
         return float(result)
 
@@ -133,7 +125,7 @@ def resolve_bloc_path(path: str) -> str | None:
     Future enhancement: search path support could be added here by
     checking additional directories if the relative resolution fails.
     """
-    blocs_dir = Path(current_context().source).parent
+    blocs_dir = Path(ctx.source).parent
     resolved = (blocs_dir / path).resolve()
     if not resolved.exists():
         return None
@@ -219,8 +211,7 @@ def cmd_blockdef(tokens: list[Token], design: Design) -> tuple[BlockDef | None, 
                    f"using default value {param.default}",
                    column=OMIT)
     # resolve BlockSpec to BlockDef - set context for resolve() errors
-    current_context().line = name_tok.line
-    current_context().column = name_tok.column
+    ctx.set(token=name_tok)
     block_def = resolve(spec, name_tok.text, supplied_params)
     if block_def is None:
         report(Severity.ERROR,
@@ -318,7 +309,8 @@ def cmd_thread(tokens: list[Token], design: Design) -> tuple[Thread | None, int]
                f"invalid thread name {name_tok.text!r}",
                token=name_tok)
         return None, 0
-    period_ns = get_value(period_tok, PinType.U32)
+    ctx.set(token=period_tok)
+    period_ns = get_value(period_tok.text, PinType.U32)
     if period_ns is None:
         return None, 0
     # create the thread
@@ -376,6 +368,8 @@ CMD_DISPATCH = {
     "signal":   cmd_signal,
     "thread":   cmd_thread,
 }
+
+# longer prefixes must come first to ensure correct matching
 SUBCMD_DISPATCH = {
     Signal:        ( subcmd_signal, ("-+", "+", "-", "=") ),
     PinInstance:   ( subcmd_pin,    ("-+", "+", "-", "=") ),
@@ -396,8 +390,8 @@ def parse_command(tokens: list[Token], design: Design) -> None:
     After the target is established, any remaining tokens are dispatched
     one at a time to the appropriate subcommand handler.
     """
-    current_context().line = tokens[0].line
     keyword = tokens[0]
+    ctx.set(token=keyword)
     handler = CMD_DISPATCH.get(keyword.text)
     if handler is not None:
         # create the target object
@@ -406,30 +400,32 @@ def parse_command(tokens: list[Token], design: Design) -> None:
             # handler alredy reported an error
             return
         subcommand_tokens = tokens[n_tokens:]
+        target_name = target.name
     else:
         # look up target object
         try:
             target = design.find_object_by_name(keyword.text)
         except EmblocsError as e:
             report(Severity.ERROR,
-                    f"unknown command or object {keyword.text!r}: str(e)",
+                    f"unknown command or object {keyword.text!r}: {str(e)}",
                     token=keyword)
             return
         subcommand_tokens = tokens[1:]
+        target_name = keyword.text
     # dispatch subcommands if any
     if subcommand_tokens:
         entry = SUBCMD_DISPATCH.get(type(target))
         if entry is None:
             report(
                 Severity.ERROR,
-                f"{type(target).__name__} has no subcommands, "
+                f"{target_name!r} ({type(target).__name__}) has no subcommands, "
                 f"got {subcommand_tokens[0].text!r}",
                 token=subcommand_tokens[0])
             return
         handler, prefixes = entry
         # dispatch each remaining token as a subcommand
         for tok in subcommand_tokens:
-            current_context().column = tok.column
+            ctx.set(token=tok)
             subcmd = tok.text
             for prefix in prefixes:
                 if subcmd.startswith(prefix):
@@ -439,7 +435,7 @@ def parse_command(tokens: list[Token], design: Design) -> None:
             else:
                 report(Severity.ERROR,
                     f"subcommand {subcmd!r} is invalid for target "
-                    f"{target.name!r} ({type(target).__name__})")
+                    f"{target_name!r} ({type(target).__name__})")
                 # break - # uncomment to stop after one bad subcommand
 
 
@@ -505,12 +501,12 @@ def parse_blocs(lines: list[str],
     Returns None if any errors were reported.
     """
     if design is None:
-        design = Design(source_path=current_context().source)
+        design = Design(source_path=ctx.source)
 
     for tokens in lex_lines(lines):
         parse_command(tokens, design)
 
-    return design if current_context().no_errors() else None
+    return design if ctx.no_errors() else None
 
 
 def parse_blocs_file(path: str,
@@ -522,12 +518,12 @@ def parse_blocs_file(path: str,
     """
     lines = read_source_file(path)
     if lines is None:
-        ctx = pop_context()
         ctx.summarize()
+        ctx.pop()
         return None
     design = parse_blocs(lines, design)
-    ctx = pop_context()
     ctx.summarize()
+    ctx.pop()
     return design
 
 
@@ -540,12 +536,12 @@ def parse_blocs_string(text: str, source: str = "<string>",
     """
     lines = read_source_string(text, source=source)
     if lines is None:
-        ctx = pop_context()
         ctx.summarize()
+        ctx.pop()
         return None
     design = parse_blocs(lines, design)
-    ctx = pop_context()
     ctx.summarize()
+    ctx.pop()
     return design
 
 

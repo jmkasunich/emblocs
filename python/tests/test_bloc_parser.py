@@ -2,9 +2,7 @@
 # Tests for bloc_parser.py
 
 import pytest
-from parse_common import (
-    push_context, pop_context, clear_contexts, _context_stack,
-)
+from parse_common import ctx
 from bloc_parser import parse_bloc_string, parse_bloc_file
 from emblocs import BlockSpec, PinType, PinDir
 
@@ -15,10 +13,10 @@ from emblocs import BlockSpec, PinType, PinDir
 
 @pytest.fixture(autouse=True)
 def clean_context():
-    clear_contexts()
-    push_context(source="<test>")
+    ctx.clear()
+    ctx.push(source="<test>")
     yield
-    clear_contexts()
+    ctx.clear()
 
 
 # ---------------------------------------------------------------------------

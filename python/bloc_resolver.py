@@ -16,7 +16,7 @@ from emblocs import (
     PinType, PinDir,
 )
 from expressions import evaluate, ExpressionError
-from parse_common import ( Severity, OMIT, current_context, report)
+from parse_common import ( ctx, Severity, OMIT, report)
 
 # ---------------------------------------------------------------------------
 # Parameter validation and variable dict construction
@@ -234,7 +234,6 @@ def resolve(spec: BlockSpec, variant_name: str,
     Returns a BlockDef if successful, None if any errors were reported.
     """
     # ensure we have a clean context to work with
-    ctx = current_context()
     if not ctx.no_errors():
         report(Severity.ERROR,
                "resolve() called with pre-existing errors in context")
@@ -271,7 +270,7 @@ def resolve(spec: BlockSpec, variant_name: str,
                     target_dict = type_to_dict.get(type(obj))
                     if target_dict is not None:
                         target_dict[obj.name] = obj
-    if not current_context().no_errors():
+    if not ctx.no_errors():
         return None
 
     return BlockDef(

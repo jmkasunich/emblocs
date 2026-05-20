@@ -599,23 +599,23 @@ class Design:
                 lines.append(_indent_child(f"thread  {thr.name}  {thr.period_ns} ns"))
         return "\n".join(lines)
 
-    def find_child_by_name(self, name: str) -> DesignChild | None:
+    def find_child_by_name(self, name: str) -> DesignChild:
         """ takes name of blockdef, block instance, signal, or thread
             and returns matching object or None """
         child = self.namespace.get(name)
-        if child == None:
+        if child is None:
             raise EmblocsError(f"{name!r} not found in design {self.source_path!r}")
         return child
 
-    def find_object_by_name(self, name: str) -> DesignChild | None:
+    def find_object_by_name(self, name: str) -> DesignObject:
         """ takes name of blockdef, block instance, signal, thread,
             block.pin, or block.function and returns matching object or None """
         n1, sep, n2 = name.partition(".")
         if sep == "":
-            return self.find_child_by_name(self, name)
+            return self.find_child_by_name(name)
         else:
             block = self.blocks.get(n1)
-            if block == None:
+            if block is None:
                 raise EmblocsError(f"block {n1!r} not found")
             return block.find_child_by_name(n2)
 

@@ -10,8 +10,7 @@ from emblocs import (BlockSpec, ParamSpec, Statement, PinSpec,
                      DimSpec, VarDef, FunctSpec, PinType, PinDir, U32_MAX)
 from expressions import evaluate, ExpressionError
 from parse_common import (Token, tokenize_line,
-                          Severity, report, OMIT,
-                          push_context, pop_context, current_context,
+                          ctx, Severity, report, OMIT,
                           read_source_file, read_source_string)
 
 # ---------------------------------------------------------------------------
@@ -578,7 +577,7 @@ def parse_bloc(lines: list[str]) -> BlockSpec | None:
     Expects an active ErrorContext (pushed by parse_bloc_file or
     parse_bloc_string).
     """
-    spec  = BlockSpec(source_path=current_context().source)
+    spec  = BlockSpec(source_path=ctx.source)
     state = ParseState()
     pending_tokens:      list[Token] = []
     pending_description: str         = ""
@@ -618,14 +617,14 @@ def parse_bloc(lines: list[str]) -> BlockSpec | None:
             # else: empty line or comment-only line, do nothing
     # end of input
     flush()
-    if spec.name == "" and current_context().error_count == 0:
+    if spec.name == "" and ctx.no_errors():
         report(Severity.ERROR,
-               "no 'block' declaration found")
+               "no 'block' declaration found", lineno=OMIT)
     if state.if_stack:
         report(Severity.ERROR,
                f"end-of-file with {len(state.if_stack)} "
-               f"unterminated '#if' statements")
-    return spec if current_context().no_errors() else None
+               f"unterminated '#if' statements", lineno=OMIT)
+    return spec if ctx.no_errors() else None
 
 
 def parse_bloc_file(path: str) -> BlockSpec | None:
@@ -636,13 +635,13 @@ def parse_bloc_file(path: str) -> BlockSpec | None:
     """
     lines = read_source_file(path)
     if lines is None:
-        ctx = pop_context()
         ctx.summarize()
+        ctx.pop()
         return None
     result = parse_bloc(lines)
-    ctx = pop_context()
     if not ctx.clean():
         ctx.summarize()
+    ctx.pop()
     return result
 
 
@@ -654,10 +653,10 @@ def parse_bloc_string(text: str, source: str = "<string>") -> BlockSpec | None:
     """
     lines = read_source_string(text, source=source)
     if lines is None:
-        ctx = pop_context()
+        ctx.pop()
         return None
     result = parse_bloc(lines)
-    ctx = pop_context()
+    ctx.pop()
     return result
 
 
