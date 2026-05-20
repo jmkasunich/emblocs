@@ -1,10 +1,8 @@
 # parse_common.py
 # Shared infrastructure for EMBLOCS parsers.
-# Provides Severity, ErrorContext, and report() used for
-# error reporting.
+# Provides ctx, ErrorContet, Severity and OMIT used for error reporting.
 # Also provides Token (named tuple) and tokenize_line()
-# for breaking source lines into Tokens tagged with
-# line and column.
+# for breaking source lines into Tokens tagged with line and column.
 
 from __future__ import annotations
 
@@ -54,10 +52,6 @@ _SEVERITY_LABEL = {
     Severity.INFO:    "info",
 }
 
-
-# ---------------------------------------------------------------------------
-# Error context
-# ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
 # ErrorContext
@@ -183,7 +177,7 @@ class ErrorContext:
         """Return True if no errors have been reported in the current frame."""
         return self._top().error_count == 0
 
-    def clean(self) -> bool:
+    def is_clean(self) -> bool:
         """Return True if no errors or warnings in the current frame."""
         frame = self._top()
         return frame.error_count == 0 and frame.warning_count == 0
@@ -266,19 +260,10 @@ class ErrorContext:
 
 
 # ---------------------------------------------------------------------------
-# Module-level instance and report() compatibility wrapper
+# Module-level instance
 # ---------------------------------------------------------------------------
 
 ctx = ErrorContext()
-
-def report(severity: Severity, message: str, **kwargs) -> None:
-    """
-    Module-level wrapper around ctx.report().
-    Kept for compatibility since report() is called throughout the parsers.
-    New code should use ctx.report() directly.
-    """
-    ctx.report(severity, message, **kwargs)
-
 
 
 # ---------------------------------------------------------------------------

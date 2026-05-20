@@ -16,7 +16,7 @@ from emblocs import (
     PinType, PinDir,
 )
 from expressions import evaluate, ExpressionError
-from parse_common import ( ctx, Severity, OMIT, report)
+from parse_common import ( ctx, Severity, OMIT)
 
 # ---------------------------------------------------------------------------
 # Parameter validation and variable dict construction
@@ -37,18 +37,18 @@ def _build_variables(spec: BlockSpec,
         # validate type and range
         if param.param_type == "bool":
             if val not in (0, 1):
-                report(Severity.WARNING,
+                ctx.report(Severity.WARNING,
                        f"parameter {param.name!r} is bool; "
                        f"value {val} is not 0 or 1",
                        column=OMIT)
         elif param.param_type == "u32":
             if val < param.min_val:
-                report(Severity.ERROR,
+                ctx.report(Severity.ERROR,
                        f"parameter {param.name!r} value {val} "
                        f"is less than min ({param.min_val})",
                        column=OMIT)
             if val > param.max_val:
-                report(Severity.ERROR,
+                ctx.report(Severity.ERROR,
                        f"parameter {param.name!r} value {val} "
                        f"is greater than max ({param.max_val})",
                        column=OMIT)
@@ -81,7 +81,7 @@ def _recurse_pin(pin_spec: PinSpec, dims: list[DimSpec],
             try:
                 exported = evaluate(pin_spec.export_condition, variables)
             except ExpressionError as e:
-                report(Severity.ERROR,
+                ctx.report(Severity.ERROR,
                        f"export condition error in pin "
                        f"{pin_spec.name_template!r}: {e}")
                 return []
@@ -101,7 +101,7 @@ def _recurse_pin(pin_spec: PinSpec, dims: list[DimSpec],
         try:
             size = evaluate(dim.size_expr, variables)
         except ExpressionError as e:
-            report(Severity.ERROR,
+            ctx.report(Severity.ERROR,
                    f"dimension size error in pin "
                    f"{pin_spec.name_template!r}: {e}")
             return []
@@ -157,7 +157,7 @@ def _expand_statement(statement: Statement,
         try:
             result = evaluate(cond, variables)
         except ExpressionError as e:
-            report(Severity.ERROR,
+            ctx.report(Severity.ERROR,
                    f"condition expression error {cond!r}: {e}")
             return []
         if not result:
@@ -171,7 +171,7 @@ def _expand_statement(statement: Statement,
     elif isinstance(obj, FunctSpec):
         return _expand_funct(obj, variables)
     else:
-        report(Severity.ERROR,
+        ctx.report(Severity.ERROR,
                f"unknown statement type: {type(obj).__name__}")
         return []
 
@@ -209,7 +209,7 @@ def _evaluate_template(template: str,
         try:
             val = evaluate(expr_str, variables)
         except ExpressionError as e:
-            report(Severity.ERROR,
+            ctx.report(Severity.ERROR,
                    f"template expression error {expr_str!r}: {e}")
             return None
         result = result.replace(m.group(0), str(int(val)).zfill(width), 1)
@@ -235,12 +235,12 @@ def resolve(spec: BlockSpec, variant_name: str,
     """
     # ensure we have a clean context to work with
     if not ctx.no_errors():
-        report(Severity.ERROR,
+        ctx.report(Severity.ERROR,
                "resolve() called with pre-existing errors in context")
         return None
 
     if not variant_name.isidentifier():
-        report(Severity.ERROR,
+        ctx.report(Severity.ERROR,
                f"invalid variant name {variant_name!r}")
         return None
 
@@ -263,7 +263,7 @@ def resolve(spec: BlockSpec, variant_name: str,
             ordered_declarations.append(obj)
             if not isinstance(obj, VarDef):
                 if obj.name in namespace:
-                    report(Severity.ERROR,
+                    ctx.report(Severity.ERROR,
                            f"duplicate name {obj.name!r} after resolution")
                 else:
                     namespace[obj.name] = obj
