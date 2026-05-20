@@ -10,7 +10,7 @@ from emblocs import (BlockSpec, ParamSpec, Statement, PinSpec,
                      DimSpec, VarDef, FunctSpec, PinType, PinDir, U32_MAX)
 from expressions import evaluate, ExpressionError
 from parse_common import (Token, tokenize_line,
-                          ctx, Severity, OMIT,
+                          ctx, OMIT,
                           read_source_file, read_source_string)
 
 # ---------------------------------------------------------------------------
@@ -69,14 +69,14 @@ def parse_block(spec: BlockSpec,
     """Handle the 'block' declaration."""
     keyword = tokens[0]
     if spec.name:
-        ctx.report(Severity.ERROR, "'block' declared more than once", token=keyword)
+        ctx.error("'block' declared more than once", token=keyword)
         return
     if len(tokens) < 2:
-        ctx.report(Severity.ERROR, "'block' declaration requires a name", token=keyword)
+        ctx.error("'block' declaration requires a name", token=keyword)
         return
     name_tok = tokens[1]
     if not name_tok.text.isidentifier():
-        ctx.report(Severity.ERROR, f"invalid block name: {name_tok.text!r}", token=name_tok)
+        ctx.error(f"invalid block name: {name_tok.text!r}", token=name_tok)
         return
     spec.name        = name_tok.text
     spec.description = description
@@ -90,31 +90,26 @@ def parse_param(spec: BlockSpec, tokens: list[Token], description: str) -> None:
     keyword = tokens[0]
 
     if len(tokens) < 4:
-        ctx.report(Severity.ERROR,
-               "'param' requires name, type, and default=value",
-               token=keyword)
+        ctx.error("'param' requires name, type, and default=value",
+                  token=keyword)
         return
 
     name_tok = tokens[1]
     type_tok = tokens[2]
 
     if not name_tok.text.isidentifier():
-        ctx.report(Severity.ERROR,
-               f"invalid parameter name: {name_tok.text!r}",
-               token=name_tok)
+        ctx.error(f"invalid parameter name: {name_tok.text!r}",
+                  token=name_tok)
         return
 
     if any(p.name == name_tok.text for p in spec.params):
-        ctx.report(Severity.ERROR,
-               f"duplicate parameter name: {name_tok.text!r}",
-               token=name_tok)
+        ctx.error(f"duplicate parameter name: {name_tok.text!r}",
+                  token=name_tok)
         return
 
     if type_tok.text not in ("bool", "u32"):
-        ctx.report(Severity.ERROR,
-               f"invalid parameter type {type_tok.text!r}; "
-               f"expected 'bool' or 'u32'",
-               token=type_tok)
+        ctx.error(f"invalid parameter type {type_tok.text!r}; "
+                  f"expected 'bool' or 'u32'", token=type_tok)
         return
 
     param_type = type_tok.text
@@ -127,35 +122,29 @@ def parse_param(spec: BlockSpec, tokens: list[Token], description: str) -> None:
     for tok in tokens[3:]:
         key, sep, val_str = tok.text.partition("=")
         if key not in ("default", "min", "max") or sep != "=":
-            ctx.report(Severity.ERROR,
-                   f"unexpected token {tok.text!r}; "
-                   f"expected 'default=', 'min=', or 'max='",
-                   token=tok)
+            ctx.error(f"unexpected token {tok.text!r}; "
+                      f"expected 'default=', 'min=', or 'max='",
+                      token=tok)
             return
         if not val_str:
-            ctx.report(Severity.ERROR,
-                   f"missing value after '{key}='",
-                   token=tok)
+            ctx.error(f"missing value after '{key}='", token=tok)
             return
 
         try:
             val = evaluate(val_str)
         except ExpressionError as e:
-            ctx.report(Severity.ERROR, f"bad {key}: {str(e)}", token=tok)
+            ctx.error(f"bad {key}: {str(e)}", token=tok)
             return
 
         if param_type == "u32":
             if val < 0 or val > U32_MAX:
-                ctx.report(Severity.ERROR,
-                       f"{key} value {val} is out of range for u32 "
-                       f"[0, {U32_MAX}]",
-                       token=tok)
+                ctx.error(f"{key} value {val} is out of range for u32 "
+                          f"[0, {U32_MAX}]", token=tok)
                 return
         elif param_type == "bool":
             if val not in (0, 1):
-                ctx.report(Severity.WARNING,
-                       f"{key} value {val} is not 0 or 1 for bool parameter",
-                       token=tok)
+                ctx.warning(f"{key} value {val} is not 0 or 1 for bool parameter",
+                            token=tok)
 
         if key == "default" and default is None:
             default = val
@@ -164,41 +153,35 @@ def parse_param(spec: BlockSpec, tokens: list[Token], description: str) -> None:
         elif key == "max" and max_val == U32_MAX:
             max_val = val
         else:
-            ctx.report(Severity.ERROR, f"duplicate '{key}=' token", token=tok)
+            ctx.error(f"duplicate '{key}=' token", token=tok)
             return
 
     if default is None:
-        ctx.report(Severity.ERROR,
-               f"'param' requires a 'default=' value",
-               lineno=keyword.line, column=OMIT)
+        ctx.error(f"'param' requires a 'default=' value",
+                  lineno=keyword.line, column=OMIT)
         return
 
     if min_val != 0 and param_type == "bool":
-        ctx.report(Severity.WARNING,
-               "'min' is not meaningful for bool parameters",
-               lineno=keyword.line, column=OMIT)
+        ctx.warning("'min' is not meaningful for bool parameters",
+                    lineno=keyword.line, column=OMIT)
     if max_val != U32_MAX and param_type == "bool":
-        ctx.report(Severity.WARNING,
-               "'max' is not meaningful for bool parameters",
-               lineno=keyword.line, column=OMIT)
+        ctx.warning("'max' is not meaningful for bool parameters",
+                    lineno=keyword.line, column=OMIT)
 
     # cross-validate min, max, default
     if min_val > max_val:
-        ctx.report(Severity.ERROR,
-                f"min ({min_val}) is greater than max ({max_val})",
-                lineno=keyword.line, column=OMIT)
+        ctx.error(f"min ({min_val}) is greater than max ({max_val})",
+                  lineno=keyword.line, column=OMIT)
         return
 
     if default < min_val:
-        ctx.report(Severity.ERROR,
-               f"default ({default}) is less than min ({min_val})",
-               lineno=keyword.line, column=OMIT)
+        ctx.error(f"default ({default}) is less than min ({min_val})",
+                  lineno=keyword.line, column=OMIT)
         return
 
     if default > max_val:
-        ctx.report(Severity.ERROR,
-               f"default ({default}) is greater than max ({max_val})",
-               lineno=keyword.line, column=OMIT)
+        ctx.error(f"default ({default}) is greater than max ({max_val})",
+                  lineno=keyword.line, column=OMIT)
         return
 
     spec.params.append(ParamSpec(
@@ -238,9 +221,8 @@ def parse_pin(spec: BlockSpec, tokens: list[Token], description: str) -> PinSpec
     keyword = tokens[0]
 
     if len(tokens) not in (4, 6):
-        ctx.report(Severity.ERROR,
-                f"'pin' declaration must have 4 or 6 tokens, got {len(tokens)}",
-                lineno=keyword.line, column=OMIT)
+        ctx.error(f"'pin' declaration must have 4 or 6 tokens, got {len(tokens)}",
+                  lineno=keyword.line, column=OMIT)
         return None
 
     # token assignment
@@ -252,69 +234,50 @@ def parse_pin(spec: BlockSpec, tokens: list[Token], description: str) -> PinSpec
 
     # validate type and direction
     if type_tok.text not in PIN_TYPES:
-        ctx.report(Severity.ERROR,
-                f"unknown pin type {type_tok.text!r}; "
-                f"expected one of {list(PIN_TYPES)}", token=type_tok)
+        ctx.error(f"unknown pin type {type_tok.text!r}; "
+                  f"expected one of {list(PIN_TYPES)}", token=type_tok)
         return None
     if dir_tok.text not in PIN_DIRS:
-        ctx.report(Severity.ERROR,
-                f"unknown pin direction {dir_tok.text!r}; "
-                f"expected 'input' or 'output'", token=dir_tok)
+        ctx.error(f"unknown pin direction {dir_tok.text!r}; "
+                  f"expected 'input' or 'output'", token=dir_tok)
         return None
 
     # split name/template from dimension specifiers
     # e.g. "ch{i:2}_out[i=NCHAN]" -> template="ch{i:2}_out", dim_strings=["i=NCHAN]"]
     template, *dim_strings = name_tok.text.split('[')
-
+    ctx.set(token=name_tok)
     if not template:
-        ctx.report(Severity.ERROR,
-                "pin name/template cannot be empty", token=name_tok)
+        ctx.error("pin name/template cannot be empty")
         return None
-
     # parse dimension specifiers, collecting index variables
     dims = []
     template_vars = dict(spec.defaults)   # copy, grows as index vars are added
-
     for dim_string in dim_strings:
         if not dim_string.endswith(']'):
-            ctx.report(Severity.ERROR,
-                    f"missing closing ']' in dimension {dim_string!r}",
-                    token=name_tok)
+            ctx.error(f"missing closing ']' in dimension {dim_string!r}")
             return None
         dim_string = dim_string[:-1]  # strip closing ']'
         index, sep, expr = dim_string.partition('=')
         if sep != '=':
-            ctx.report(Severity.ERROR,
-                   f"missing '=' in dimension {dim_string!r}",
-                   token=name_tok)
+            ctx.error(f"missing '=' in dimension {dim_string!r}")
             return None
         if not index.isidentifier():
-            ctx.report(Severity.ERROR,
-                   f"invalid index variable {index!r}",
-                   token=name_tok)
+            ctx.error(f"invalid index variable {index!r}")
             return None
         if index in template_vars:
-            ctx.report(Severity.ERROR,
-                f"index variable name {index!r} already in use",
-                token=name_tok)
+            ctx.error(f"index variable name {index!r} already in use")
             return None
         if not expr:
-            ctx.report(Severity.ERROR,
-                   f"missing size in dimension {dim_string!r}",
-                   token=name_tok)
+            ctx.error(f"missing size in dimension {dim_string!r}")
             return None
         # validate dimension size expression using params
         try:
             val=evaluate(expr, spec.defaults)
         except ExpressionError as e:
-            ctx.report(Severity.ERROR,
-                   f"invalid dimension: {str(e)}",
-                   token=name_tok)
+            ctx.error(f"invalid dimension: {str(e)}")
             return None
         if val < 1:
-            ctx.report(Severity.ERROR,
-                   f"invalid dimension: {val}; must be at least 1",
-                   token=name_tok)
+            ctx.error(f"invalid dimension: {val}; must be at least 1")
             return None
         template_vars[index] = 0
         dims.append(DimSpec(size_expr=expr, index_var=index))
@@ -328,26 +291,20 @@ def parse_pin(spec: BlockSpec, tokens: list[Token], description: str) -> PinSpec
 
     # any remaining { or } in field_name means a malformed specifier
     if '{' in field_name or '}' in field_name:
-        ctx.report(Severity.ERROR,
-               f"malformed template specifier in {template!r}; "
-               f"expected {{expr:N}} where N is 1-9",
-               token=name_tok)
+        ctx.error(f"malformed template specifier in {template!r}; "
+                  f"expected {{expr:N}} where N is 1-9")
         return None
 
     # field_name (with trailing _) must be a valid C identifier
     if not field_name.isidentifier():
-        ctx.report(Severity.ERROR,
-               f"template {template!r} produces invalid field name {field_name!r}",
-               token=name_tok)
+        ctx.error(f"template {template!r} produces invalid field name {field_name!r}")
         return None
 
     dedup_name = field_name
 
     # check for duplicate in namespace
     if dedup_name in spec.namespace:
-        ctx.report(Severity.ERROR,
-               f"duplicate name {dedup_name!r} in block namespace",
-               token=name_tok)
+        ctx.error(f"duplicate name {dedup_name!r} in block namespace")
         return None
 
     # validate each specifier's expression
@@ -356,26 +313,20 @@ def parse_pin(spec: BlockSpec, tokens: list[Token], description: str) -> PinSpec
         try:
             evaluate(expr_str, template_vars)
         except ExpressionError as e:
-            ctx.report(Severity.ERROR,
-                   f"invalid template: {str(e)}",
-                   token=name_tok)
+            ctx.error(f"invalid template: {str(e)}")
             return None
 
     # parse optional trailing export condition
     export_cond = None
     if if_tok is not None:
         if if_tok.text != "if":
-            ctx.report(Severity.ERROR,
-                   f"expected 'if', got {if_tok.text!r}",
-                   token=if_tok)
+            ctx.error(f"expected 'if', got {if_tok.text!r}", token=if_tok)
             return None
         # validate export condition using params + index vars
         try:
             evaluate(if_cond_tok.text, template_vars)
         except ExpressionError as e:
-            ctx.report(Severity.ERROR,
-                   f"invalid 'if' condition: {str(e)}",
-                   token=if_cond_tok)
+            ctx.error(f"invalid 'if' condition: {str(e)}", token=if_cond_tok)
             return None
         export_cond = if_cond_tok.text
 
@@ -407,18 +358,14 @@ def parse_var(spec: BlockSpec, tokens: list[Token], description: str) -> VarDef 
     keyword = tokens[0]
 
     if len(tokens) < 2:
-        ctx.report(Severity.ERROR,
-               "'var' statement requires a C declaration",
-               token=keyword)
+        ctx.error("'var' statement requires a C declaration", token=keyword)
         return None
 
     # reconstruct C declaration from tokens (whitespace not preserved)
     c_decl = " ".join(t.text for t in tokens[1:])
 
     if not c_decl.endswith(";"):
-        ctx.report(Severity.ERROR,
-               "'var' declaration must end with a semicolon",
-               token=tokens[-1])
+        ctx.error("'var' declaration must end with a semicolon", token=tokens[-1])
         return None
 
     # extract field name from last token before semicolon
@@ -427,17 +374,13 @@ def parse_var(spec: BlockSpec, tokens: list[Token], description: str) -> VarDef 
     field_name = last_tok.text.rstrip(";").lstrip("*").split("[")[0]
 
     if not field_name.isidentifier():
-        ctx.report(Severity.ERROR,
-               f"could not extract valid field name from 'var' declaration; "
-               f"got {field_name!r}",
-               token=last_tok)
+        ctx.error(f"could not extract valid field name from 'var' declaration; "
+                  f"got {field_name!r}", token=last_tok)
         return None
 
     # check for duplicate in namespace
     if field_name in spec.namespace:
-        ctx.report(Severity.ERROR,
-               f"duplicate name {field_name!r} in block namespace",
-               token=last_tok)
+        ctx.error(f"duplicate name {field_name!r} in block namespace", token=last_tok)
         return None
 
     return VarDef(
@@ -459,25 +402,21 @@ def parse_function(spec: BlockSpec, tokens: list[Token], description: str) -> Fu
     keyword = tokens[0]
 
     if len(tokens) != 2:
-        ctx.report(Severity.ERROR,
-               "'function' declaration should be 'function <name>'",
-               token=keyword)
+        ctx.error("'function' declaration should be 'function <name>'",
+                  token=keyword)
         return None
 
     name_tok = tokens[1]
 
     if not name_tok.text.isidentifier():
-        ctx.report(Severity.ERROR,
-               f"invalid function name: {name_tok.text!r}",
-               token=name_tok)
+        ctx.error(f"invalid function name: {name_tok.text!r}", token=name_tok)
         return None
 
     dedup_name = name_tok.text + '_'
 
     if dedup_name in spec.namespace:
-        ctx.report(Severity.ERROR,
-               f"duplicate name {name_tok.text!r} in block namespace",
-               token=name_tok)
+        ctx.error(f"duplicate name {name_tok.text!r} in block namespace",
+                  token=name_tok)
         return None
 
     return FunctSpec(
@@ -525,9 +464,8 @@ def parse_statement(spec: BlockSpec, state: ParseState,
 
     # Step 2: validate keyword is allowed in current section
     if keyword.text not in _ALLOWED[state.section]:
-        ctx.report(Severity.ERROR,
-               f"unexpected keyword {keyword.text!r} in current section",
-               token=keyword)
+        ctx.error(f"unexpected keyword {keyword.text!r} in current section",
+                  token=keyword)
         return
 
     # Step 3: dispatch
@@ -544,27 +482,27 @@ def parse_statement(spec: BlockSpec, state: ParseState,
 
     elif keyword.text == "#if":
         if len(tokens) < 2:
-            ctx.report(Severity.ERROR, "'#if' requires an expression", token=keyword)
+            ctx.error("'#if' requires an expression", token=keyword)
         else:
             ifexpr = tokens[1]
             # validate #if expression - can contain only params, constants, operators
             try:
                 val = evaluate(ifexpr.text, spec.defaults)
             except ExpressionError as e:
-                ctx.report(Severity.ERROR, f"bad #if condition: {str(e)}", token=ifexpr)
+                ctx.error(f"bad #if condition: {str(e)}", token=ifexpr)
                 return
             state.if_stack.append(ifexpr.text)
 
     elif keyword.text == "#endif":
         if len(tokens) > 1:
-            ctx.report(Severity.WARNING, "'#endif' takes no arguments", token=tokens[1])
+            ctx.warning("'#endif' takes no arguments", token=tokens[1])
         if not state.if_stack:
-            ctx.report(Severity.ERROR, "'#endif' without matching '#if'", token=keyword)
+            ctx.error("'#endif' without matching '#if'", token=keyword)
         else:
             state.if_stack.pop()
 
     else:
-        ctx.report(Severity.ERROR, f"unrecognized token: {keyword.text!r}", token=keyword)
+        ctx.error(f"unrecognized token: {keyword.text!r}", token=keyword)
 
 
 # ---------------------------------------------------------------------------
@@ -608,8 +546,8 @@ def parse_bloc(lines: list[str]) -> BlockSpec | None:
             flush()
             if new_description and not new_tokens:
                 # misplaced description
-                ctx.report(Severity.ERROR, "Misplaced description",
-                       lineno=lineno, column=len(first_part))
+                ctx.error("Misplaced description",
+                          lineno=lineno, column=len(first_part))
             elif new_tokens:
                 # new statement
                 pending_tokens      = new_tokens
@@ -618,12 +556,10 @@ def parse_bloc(lines: list[str]) -> BlockSpec | None:
     # end of input
     flush()
     if spec.name == "" and ctx.no_errors():
-        ctx.report(Severity.ERROR,
-               "no 'block' declaration found", lineno=OMIT)
+        ctx.error("no 'block' declaration found", lineno=OMIT)
     if state.if_stack:
-        ctx.report(Severity.ERROR,
-               f"end-of-file with {len(state.if_stack)} "
-               f"unterminated '#if' statements", lineno=OMIT)
+        ctx.error(f"end-of-file with {len(state.if_stack)} "
+                  f"unterminated '#if' statements", lineno=OMIT)
     return spec if ctx.no_errors() else None
 
 

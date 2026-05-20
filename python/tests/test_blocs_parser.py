@@ -2,9 +2,7 @@
 import os
 import pytest
 from pathlib import Path
-from parse_common import (
-    Token, ctx, Severity,
-)
+from parse_common import (Token, ctx)
 from blocs_parser import (
     lex_lines,
     parse_blocs, parse_blocs_string, parse_blocs_file,
@@ -380,7 +378,7 @@ class TestCmdBlockdef:
         design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         expect = (
-            "tests/data/tmp/test.blocs:1:45: error: invalid value 'notanumber' for 'NCHAN'; expected an integer\n"
+            "tests/data/tmp/test.blocs:1:45: error: invalid value 'notanumber' for 'NCHAN': expected an integer\n"
             "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
         assert design is None

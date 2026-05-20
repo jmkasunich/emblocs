@@ -39,17 +39,17 @@ Token = namedtuple("Token", ["text", "line", "column"])
 # Severity
 # ---------------------------------------------------------------------------
 
-class Severity(Enum):
+class _Severity(Enum):
     FATAL   = auto()
     ERROR   = auto()
     WARNING = auto()
     INFO    = auto()
 
 _SEVERITY_LABEL = {
-    Severity.FATAL:   "fatal error",
-    Severity.ERROR:   "error",
-    Severity.WARNING: "warning",
-    Severity.INFO:    "info",
+    _Severity.FATAL:   "fatal error",
+    _Severity.ERROR:   "error",
+    _Severity.WARNING: "warning",
+    _Severity.INFO:    "info",
 }
 
 
@@ -192,10 +192,10 @@ class ErrorContext:
 
 
     # ------------------------------------------------------------------
-    # Error reporting
+    # Private helper for error reporting
     # ------------------------------------------------------------------
 
-    def report(self, severity: Severity,
+    def _report(self, severity: _Severity,
                message:  str, *,
                source:   str | _Omit | None = None,
                lineno:   int | _Omit | None = None,
@@ -249,14 +249,51 @@ class ErrorContext:
         # print and update counts
         label = _SEVERITY_LABEL[severity]
         print(f"{location}{label}: {message}", file=sys.stderr)
-        if severity == Severity.ERROR:
+        if severity == _Severity.ERROR:
             frame.error_count += 1
-        elif severity == Severity.WARNING:
+        elif severity == _Severity.WARNING:
             frame.warning_count += 1
-        elif severity == Severity.INFO:
+        elif severity == _Severity.INFO:
             frame.info_count += 1
-        if severity == Severity.FATAL:
+        if severity == _Severity.FATAL:
             sys.exit(1)
+
+
+    # ------------------------------------------------------------------
+    # Public reporting methods
+    # ------------------------------------------------------------------
+
+    def error(self, message:  str, *,
+                    source:   str | _Omit | None = None,
+                    lineno:   int | _Omit | None = None,
+                    column:   int | _Omit | None = None,
+                    token:    Token | None       = None) -> None:
+        self._report(_Severity.ERROR, message, source = source,
+                      lineno = lineno, column = column, token = token)
+
+    def warning(self, message:  str, *,
+                    source:   str | _Omit | None = None,
+                    lineno:   int | _Omit | None = None,
+                    column:   int | _Omit | None = None,
+                    token:    Token | None       = None) -> None:
+        self._report(_Severity.WARNING, message, source = source,
+                      lineno = lineno, column = column, token = token)
+
+    def info(self, message:  str, *,
+                    source:   str | _Omit | None = None,
+                    lineno:   int | _Omit | None = None,
+                    column:   int | _Omit | None = None,
+                    token:    Token | None       = None) -> None:
+        self._report(_Severity.INFO, message, source = source,
+                      lineno = lineno, column = column, token = token)
+
+    def fatal(self, message:  str, *,
+                    source:   str | _Omit | None = None,
+                    lineno:   int | _Omit | None = None,
+                    column:   int | _Omit | None = None,
+                    token:    Token | None       = None) -> None:
+        self._report(_Severity.FATAL, message, source = source,
+                      lineno = lineno, column = column, token = token)
 
 
 # ---------------------------------------------------------------------------
@@ -283,12 +320,10 @@ def _check_ascii(lines: list[str]) -> bool:
     encoding_errors = 0
     for lineno, line in enumerate(lines, start=1):
         if not line.isascii():
-            ctx.report(Severity.ERROR, "non-ASCII character",
-                       lineno=lineno, column=OMIT)
+            ctx.error("non-ASCII character", lineno=lineno, column=OMIT)
             encoding_errors += 1
             if encoding_errors >= MAX_ENCODING_ERRORS:
-                ctx.report(Severity.ERROR,
-                           f"too many encoding errors ({MAX_ENCODING_ERRORS}); "
+                ctx.error( f"too many encoding errors ({MAX_ENCODING_ERRORS}); "
                            f"file may be in the wrong encoding")
                 return False
     return encoding_errors == 0
@@ -309,12 +344,11 @@ def read_source_file(path: str) -> list[str] | None:
         with open(path, "r", encoding="utf-8") as f:
             lines = f.readlines()
     except UnicodeDecodeError:
-        ctx.report(Severity.ERROR,
-                   "file is not valid UTF-8; re-save as UTF-8 and try again",
+        ctx.error("file is not valid UTF-8; re-save as UTF-8 and try again",
                    lineno=OMIT, column=OMIT)
         return None
     except FileNotFoundError:
-        ctx.report(Severity.ERROR, "file not found", lineno=OMIT, column=OMIT)
+        ctx.error("file not found", lineno=OMIT, column=OMIT)
         return None
 
     return lines if _check_ascii(lines) else None

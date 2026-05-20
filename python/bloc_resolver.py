@@ -16,7 +16,7 @@ from emblocs import (
     PinType, PinDir,
 )
 from expressions import evaluate, ExpressionError
-from parse_common import ( ctx, Severity, OMIT)
+from parse_common import ( ctx, OMIT)
 
 # ---------------------------------------------------------------------------
 # Parameter validation and variable dict construction
@@ -37,21 +37,15 @@ def _build_variables(spec: BlockSpec,
         # validate type and range
         if param.param_type == "bool":
             if val not in (0, 1):
-                ctx.report(Severity.WARNING,
-                       f"parameter {param.name!r} is bool; "
-                       f"value {val} is not 0 or 1",
-                       column=OMIT)
+                ctx.warning(f"parameter {param.name!r} is bool; "
+                            f"value {val} is not 0 or 1", column=OMIT)
         elif param.param_type == "u32":
             if val < param.min_val:
-                ctx.report(Severity.ERROR,
-                       f"parameter {param.name!r} value {val} "
-                       f"is less than min ({param.min_val})",
-                       column=OMIT)
+                ctx.error(f"parameter {param.name!r} value {val} "
+                          f"is less than min ({param.min_val})", column=OMIT)
             if val > param.max_val:
-                ctx.report(Severity.ERROR,
-                       f"parameter {param.name!r} value {val} "
-                       f"is greater than max ({param.max_val})",
-                       column=OMIT)
+                ctx.error(f"parameter {param.name!r} value {val} "
+                          f"is greater than max ({param.max_val})", column=OMIT)
         # save value
         variables[param.name] = val
     return variables
@@ -81,9 +75,8 @@ def _recurse_pin(pin_spec: PinSpec, dims: list[DimSpec],
             try:
                 exported = evaluate(pin_spec.export_condition, variables)
             except ExpressionError as e:
-                ctx.report(Severity.ERROR,
-                       f"export condition error in pin "
-                       f"{pin_spec.name_template!r}: {e}")
+                ctx.error(f"export condition error in pin "
+                          f"{pin_spec.name_template!r}: {e}")
                 return []
             if not exported:
                 return []
@@ -101,9 +94,8 @@ def _recurse_pin(pin_spec: PinSpec, dims: list[DimSpec],
         try:
             size = evaluate(dim.size_expr, variables)
         except ExpressionError as e:
-            ctx.report(Severity.ERROR,
-                   f"dimension size error in pin "
-                   f"{pin_spec.name_template!r}: {e}")
+            ctx.error(f"dimension size error in pin "
+                      f"{pin_spec.name_template!r}: {e}")
             return []
         results = []
         for idx in range(size):
@@ -157,8 +149,7 @@ def _expand_statement(statement: Statement,
         try:
             result = evaluate(cond, variables)
         except ExpressionError as e:
-            ctx.report(Severity.ERROR,
-                   f"condition expression error {cond!r}: {e}")
+            ctx.error(f"condition expression error {cond!r}: {e}")
             return []
         if not result:
             return []
@@ -171,8 +162,7 @@ def _expand_statement(statement: Statement,
     elif isinstance(obj, FunctSpec):
         return _expand_funct(obj, variables)
     else:
-        ctx.report(Severity.ERROR,
-               f"unknown statement type: {type(obj).__name__}")
+        ctx.error(f"unknown statement type: {type(obj).__name__}")
         return []
 
 
@@ -209,8 +199,7 @@ def _evaluate_template(template: str,
         try:
             val = evaluate(expr_str, variables)
         except ExpressionError as e:
-            ctx.report(Severity.ERROR,
-                   f"template expression error {expr_str!r}: {e}")
+            ctx.error(f"template expression error {expr_str!r}: {e}")
             return None
         result = result.replace(m.group(0), str(int(val)).zfill(width), 1)
     return result
@@ -235,13 +224,11 @@ def resolve(spec: BlockSpec, variant_name: str,
     """
     # ensure we have a clean context to work with
     if not ctx.no_errors():
-        ctx.report(Severity.ERROR,
-               "resolve() called with pre-existing errors in context")
+        ctx.error("resolve() called with pre-existing errors in context")
         return None
 
     if not variant_name.isidentifier():
-        ctx.report(Severity.ERROR,
-               f"invalid variant name {variant_name!r}")
+        ctx.error(f"invalid variant name {variant_name!r}")
         return None
 
     if supplied_params is None:
@@ -263,8 +250,7 @@ def resolve(spec: BlockSpec, variant_name: str,
             ordered_declarations.append(obj)
             if not isinstance(obj, VarDef):
                 if obj.name in namespace:
-                    ctx.report(Severity.ERROR,
-                           f"duplicate name {obj.name!r} after resolution")
+                    ctx.error(f"duplicate name {obj.name!r} after resolution")
                 else:
                     namespace[obj.name] = obj
                     target_dict = type_to_dict.get(type(obj))
@@ -331,8 +317,8 @@ if __name__ == "__main__":
 
     push_context(source=variant_name)
     block_def = resolve(spec, variant_name, supplied)
-    ctx = pop_context()
     ctx.summarize()
+    ctx = pop_context()
     if block_def is None:
         sys.exit(1)
 

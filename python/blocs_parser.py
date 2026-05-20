@@ -19,7 +19,7 @@ from emblocs import (
 from bloc_parser import parse_bloc_file
 from bloc_resolver import resolve
 from parse_common import (
-    ctx, Severity, OMIT,
+    ctx, OMIT,
     Token, tokenize_line,
     read_source_file, read_source_string
 )
@@ -42,7 +42,7 @@ SIGNAL_TYPES = {
 
 def get_value(text: str, value_type: PinType) -> int | float | None:
     """
-    Parse and validate a value/expression token against the given EMBLOCS type.
+    Parse and validate a value/expression string against the given EMBLOCS type.
 
     Calls the expression evaluator to support literal constants and
     arithmetic expressions (e.g. 48*200, 25.4/4) as single tokens.
@@ -52,8 +52,7 @@ def get_value(text: str, value_type: PinType) -> int | float | None:
     Reports an error using the current context on failure.
     """
     if value_type == PinType.RAW:
-        ctx.report(Severity.ERROR,
-               "internal error: get_value() called with RAW type")
+        ctx.error("internal error: get_value() called with RAW type")
         return None
     if value_type == PinType.BOOL:
         if text == "true":
@@ -63,47 +62,40 @@ def get_value(text: str, value_type: PinType) -> int | float | None:
         try:
             result = evaluate(text, {}, 'int')
         except ExpressionError as e:
-            ctx.report(Severity.ERROR,
-                   f"invalid bool value {text!r}: {e}")
+            ctx.error(f"invalid bool value {text!r}: {e}")
             return None
         return int(result)
     elif value_type == PinType.U32:
         try:
             result = evaluate(text, {}, 'int')
         except ExpressionError as e:
-            ctx.report(Severity.ERROR,
-                   f"invalid u32 value {text!r}: {e}")
+            ctx.error(f"invalid u32 value {text!r}: {e}")
             return None
         if result < 0 or result > U32_MAX:
-            ctx.report(Severity.ERROR,
-                   f"u32 value {text!r} is out of range [0, {U32_MAX}]")
+            ctx.error(f"u32 value {text!r} is out of range [0, {U32_MAX}]")
             return None
         return int(result)
     elif value_type == PinType.S32:
         try:
             result = evaluate(text, {}, 'int')
         except ExpressionError as e:
-            ctx.report(Severity.ERROR,
-                   f"invalid s32 value {text!r}: {e}")
+            ctx.error(f"invalid s32 value {text!r}: {e}")
             return None
         if result < S32_MIN or result > S32_MAX:
-            ctx.report(Severity.ERROR,
-                   f"s32 value {text!r} is out of range [{S32_MIN}, {S32_MAX}]")
+            ctx.error(f"s32 value {text!r} is out of range [{S32_MIN}, {S32_MAX}]")
             return None
         return int(result)
     elif value_type == PinType.FLOAT:
         try:
             result = evaluate(text, {}, 'float')
         except ExpressionError as e:
-            ctx.report(Severity.ERROR,
-                   f"invalid float value {text!r}: {e}")
+            ctx.error(f"invalid float value {text!r}: {e}")
             return None
         try:
             import struct
             struct.pack('f', result)
         except struct.error:
-            ctx.report(Severity.ERROR,
-                   f"float value {text!r} is out of range for a 32-bit float")
+            ctx.error(f"float value {text!r} is out of range for a 32-bit float")
             return None
         return float(result)
 
@@ -147,33 +139,27 @@ def cmd_blockdef(tokens: list[Token], design: Design) -> tuple[BlockDef | None, 
     """
     Handle the 'blockdef' command.
     Syntax: blockdef <name> <path> [PARAM=value...]
+    Returns the newly created Blockdef and the number of tokens consumed,
+    or (None, 0) on error.
     """
     if len(tokens) < 3:
-        ctx.report(Severity.ERROR,
-               "'blockdef' requires a name and a path",
-               column=OMIT)
+        ctx.error("'blockdef' requires a name and a path", column=OMIT)
         return None, 0
     name_tok = tokens[1]
     path_tok = tokens[2]
     if not name_tok.text.isidentifier():
-        ctx.report(Severity.ERROR,
-               f"invalid blockdef name {name_tok.text!r}",
-               token=name_tok)
+        ctx.error(f"invalid blockdef name {name_tok.text!r}", token=name_tok)
         return None, 0
     # resolve path to .bloc file
     resolved_path = resolve_bloc_path(path_tok.text)
     if resolved_path is None:
-        ctx.report(Severity.ERROR,
-               f"bloc file not found: {path_tok.text!r}",
-               token=path_tok)
+        ctx.error(f"bloc file not found: {path_tok.text!r}", token=path_tok)
         return None, 0
     # get BlockSpec from cache or create it by parsing the .bloc file
     if resolved_path not in _bloc_spec_cache:
         spec = parse_bloc_file(resolved_path)
         if spec is None:
-            ctx.report(Severity.ERROR,
-                   f"failed to parse {path_tok.text!r}",
-                   token=path_tok)
+            ctx.error(f"failed to parse {path_tok.text!r}", token=path_tok)
             return None, 0
         _bloc_spec_cache[resolved_path] = spec
     spec = _bloc_spec_cache[resolved_path]
@@ -187,42 +173,34 @@ def cmd_blockdef(tokens: list[Token], design: Design) -> tuple[BlockDef | None, 
             break
         n_tokens += 1
         if not param_name.isidentifier():
-            ctx.report(Severity.ERROR,
-                   f"invalid parameter name {param_name!r}",
-                   token=tok)
+            ctx.error(f"invalid parameter name {param_name!r}", token=tok)
             return None, 0
         if param_name not in spec_param_names:
-            ctx.report(Severity.WARNING,
-                   f"unmatched parameter {param_name!r} will be ignored",
-                   token=tok)
+            ctx.warning(f"unmatched parameter {param_name!r} will be ignored",
+                        token=tok)
         try:
             supplied_params[param_name] = int(value_str, 0)
         except ValueError:
-            ctx.report(Severity.ERROR,
-                   f"invalid value {value_str!r} "
-                   f"for {param_name!r}; expected an integer",
-                   token=tok)
+            ctx.error(f"invalid value {value_str!r} for {param_name!r}: "
+                       "expected an integer", token=tok)
             return None, 0
     # warn about params not supplied
     for param in spec.params:
         if param.name not in supplied_params:
-            ctx.report(Severity.INFO,
-                   f"parameter {param.name!r} not supplied, "
-                   f"using default value {param.default}",
-                   column=OMIT)
+            ctx.info(f"parameter {param.name!r} not supplied, "
+                     f"using default value {param.default}", column=OMIT)
     # resolve BlockSpec to BlockDef - set context for resolve() errors
     ctx.set(token=name_tok)
     block_def = resolve(spec, name_tok.text, supplied_params)
     if block_def is None:
-        ctx.report(Severity.ERROR,
-               f"failed to resolve {path_tok.text!r} as {name_tok.text!r}",
-               column=OMIT)
+        ctx.error(f"failed to resolve {path_tok.text!r} as {name_tok.text!r}",
+                  column=OMIT)
         return None, 0
     # add to design
     try:
         blockdef = design.add_block_def(block_def)
     except EmblocsError as e:
-        ctx.report(Severity.ERROR, str(e), token=name_tok)
+        ctx.error(str(e), token=name_tok)
         return None, 0
     return blockdef, n_tokens
 
@@ -233,27 +211,23 @@ def cmd_block(tokens: list[Token], design: Design) -> tuple[BlockInstance | None
     No subcommands are defined for block instances.
     """
     if len(tokens) < 3:
-        ctx.report(Severity.ERROR,
-               "'block' requires an instance name and a blockdef name",
-               column=OMIT)
+        ctx.error("'block' requires an instance name and a blockdef name",
+                  column=OMIT)
         return None, 0
     name_tok = tokens[1]
     def_tok = tokens[2]
     if not name_tok.text.isidentifier():
-        ctx.report(Severity.ERROR,
-               f"invalid block instance name {name_tok.text!r}",
-               token=name_tok)
+        ctx.error(f"invalid block instance name {name_tok.text!r}",
+                  token=name_tok)
         return None, 0
     if not def_tok.text.isidentifier():
-        ctx.report(Severity.ERROR,
-               f"invalid blockdef name {def_tok.text!r}",
-               token=def_tok)
+        ctx.error(f"invalid blockdef name {def_tok.text!r}", token=def_tok)
         return None, 0
     # create the instance
     try:
         block = design.add_block_instance(name_tok.text, def_tok.text)
     except EmblocsError as e:
-        ctx.report(Severity.ERROR, str(e), column=OMIT)
+        ctx.error(str(e), column=OMIT)
         return None, 0
     return block, 3
 
@@ -265,28 +239,22 @@ def cmd_signal(tokens: list[Token], design: Design) -> tuple[Signal | None:, int
     single-token subcommands that act on the new signal.
     """
     if len(tokens) < 3:
-        ctx.report(Severity.ERROR,
-               "'signal' requires a signal name and a type",
-               column=OMIT)
+        ctx.error("'signal' requires a signal name and a type", column=OMIT)
         return None, 0
     name_tok = tokens[1]
     type_tok = tokens[2]
     if not name_tok.text.isidentifier():
-        ctx.report(Severity.ERROR,
-               f"invalid signal name {name_tok.text!r}",
-               token=name_tok)
+        ctx.error(f"invalid signal name {name_tok.text!r}", token=name_tok)
         return None, 0
     if type_tok.text not in SIGNAL_TYPES:
-        ctx.report(Severity.ERROR,
-               f"invalid signal type {type_tok.text!r}",
-               token=type_tok)
+        ctx.error(f"invalid signal type {type_tok.text!r}", token=type_tok)
         return None, 0
     sig_type = SIGNAL_TYPES[type_tok.text]
     # create the signal
     try:
         sig = design.add_signal(name_tok.text, sig_type)
     except EmblocsError as e:
-        ctx.report(Severity.ERROR, str(e), column=OMIT)
+        ctx.error(str(e), column=OMIT)
         return None, 0
     return sig, 3
 
@@ -298,16 +266,13 @@ def cmd_thread(tokens: list[Token], design: Design) -> tuple[Thread | None, int]
     single-token subcommands that act on the new thread.
     """
     if len(tokens) < 3:
-        ctx.report(Severity.ERROR,
-               "'thread' requires a thread name and a period",
+        ctx.error("'thread' requires a thread name and a period",
                column=OMIT)
         return None, 0
     name_tok = tokens[1]
     period_tok = tokens[2]
     if not name_tok.text.isidentifier():
-        ctx.report(Severity.ERROR,
-               f"invalid thread name {name_tok.text!r}",
-               token=name_tok)
+        ctx.error(f"invalid thread name {name_tok.text!r}", token=name_tok)
         return None, 0
     ctx.set(token=period_tok)
     period_ns = get_value(period_tok.text, PinType.U32)
@@ -317,7 +282,7 @@ def cmd_thread(tokens: list[Token], design: Design) -> tuple[Thread | None, int]
     try:
         thread = design.add_thread(name_tok.text, period_ns)
     except EmblocsError as e:
-        ctx.report(Severity.ERROR, str(e), column=OMIT)
+        ctx.error(str(e), column=OMIT)
         return None, 0
     return thread, 3
 
@@ -331,32 +296,28 @@ def subcmd_signal(cmd: str, arg: str, signal: Signal, design: Design) -> None:
     Handle a single-token subcommand that applies to a Signal target.
     Currently no subcommands are implemented, so this just reports an error.
     """
-    ctx.report(Severity.ERROR,
-        f"un-implemented subcommand {cmd!r} with arg {arg!r} on signal {signal.name!r}")
+    ctx.error(f"un-implemented subcommand {cmd!r} with arg {arg!r} on signal {signal.name!r}")
 
 def subcmd_pin(cmd: str, arg: str, pin : PinInstance, design: Design) -> None:
     """
     Handle a single-token subcommand that applies to a Pin target.
     Currently no subcommands are implemented, so this just reports an error.
     """
-    ctx.report(Severity.ERROR,
-        f"un-implemented subcommand {cmd!r} with arg {arg!r} on pin {pin.pindef.name!r}")
+    ctx.error(f"un-implemented subcommand {cmd!r} with arg {arg!r} on pin {pin.pindef.name!r}")
 
 def subcmd_thread(cmd: str, arg: str, thread : Thread, design: Design) -> None:
     """
     Handle a single-token subcommand that applies to a Thread target.
     Currently no subcommands are implemented, so this just reports an error.
     """
-    ctx.report(Severity.ERROR,
-        f"un-implemented subcommand {cmd!r} with arg {arg!r} on thread {thread.name!r}")
+    ctx.error(f"un-implemented subcommand {cmd!r} with arg {arg!r} on thread {thread.name!r}")
 
 def subcmd_funct(cmd: str, arg: str, funct : FunctInstance, design: Design) -> None:
     """
     Handle a single-token subcommand that applies to a Function target.
     Currently no subcommands are implemented, so this just reports an error.
     """
-    ctx.report(Severity.ERROR,
-        f"un-implemented subcommand {cmd!r} with arg {arg!r} on function {funct.funct_def.name!r}")
+    ctx.error(f"un-implemented subcommand {cmd!r} with arg {arg!r} on function {funct.funct_def.name!r}")
 
 # ---------------------------------------------------------------------------
 # dispatcher
@@ -406,9 +367,8 @@ def parse_command(tokens: list[Token], design: Design) -> None:
         try:
             target = design.find_object_by_name(keyword.text)
         except EmblocsError as e:
-            ctx.report(Severity.ERROR,
-                    f"unknown command or object {keyword.text!r}: {str(e)}",
-                    token=keyword)
+            ctx.error(f"unknown command or object {keyword.text!r}: {str(e)}",
+                      token=keyword)
             return
         subcommand_tokens = tokens[1:]
         target_name = keyword.text
@@ -416,11 +376,8 @@ def parse_command(tokens: list[Token], design: Design) -> None:
     if subcommand_tokens:
         entry = SUBCMD_DISPATCH.get(type(target))
         if entry is None:
-            ctx.report(
-                Severity.ERROR,
-                f"{target_name!r} ({type(target).__name__}) has no subcommands, "
-                f"got {subcommand_tokens[0].text!r}",
-                token=subcommand_tokens[0])
+            ctx.error(f"{target_name!r} ({type(target).__name__}) has no subcommands, "
+                      f"got {subcommand_tokens[0].text!r}", token=subcommand_tokens[0])
             return
         handler, prefixes = entry
         # dispatch each remaining token as a subcommand
@@ -433,9 +390,8 @@ def parse_command(tokens: list[Token], design: Design) -> None:
                     handler(prefix, suffix, target, design)
                     break
             else:
-                ctx.report(Severity.ERROR,
-                    f"subcommand {subcmd!r} is invalid for target "
-                    f"{target_name!r} ({type(target).__name__})")
+                ctx.error(f"subcommand {subcmd!r} is invalid for target "
+                          f"{target_name!r} ({type(target).__name__})")
                 # break - # uncomment to stop after one bad subcommand
 
 
@@ -479,9 +435,8 @@ def lex_lines(lines: list[str]) -> list[list[Token]]:
 
     # end of input
     if in_continuation:
-        ctx.report(Severity.ERROR,
-               "unexpected end of file after line continuation",
-               lineno=lineno, column=OMIT)
+        ctx.error("unexpected end of file after line continuation",
+                  lineno=lineno, column=OMIT)
     elif logical_tokens:
         # file ended without final newline
         logical_lines.append(logical_tokens)

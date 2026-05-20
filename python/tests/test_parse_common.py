@@ -7,7 +7,7 @@ from pathlib import Path
 from parse_common import (
     read_source_file,
     read_source_string,
-    ctx, Severity, OMIT,
+    ctx, OMIT,
     tokenize_line,
     MAX_ENCODING_ERRORS,
 )
@@ -206,31 +206,31 @@ class TestErrorContext:
 
     def test_no_errors_false_after_error(self):
         ctx.push()
-        ctx.report(Severity.ERROR, "test error")
+        ctx.error("test error")
         assert not ctx.no_errors()
         ctx.pop()
 
-    def test_clean_true_when_clean(self):
+    def test_is_clean_true_when_clean(self):
         ctx.push()
         assert ctx.is_clean()
         ctx.pop()
 
-    def test_clean_false_after_warning(self):
+    def test_is_clean_false_after_warning(self):
         ctx.push()
-        ctx.report(Severity.WARNING, "test warning")
+        ctx.warning("test warning")
         assert not ctx.is_clean()
         ctx.pop()
 
     def test_error_count_increments(self):
         ctx.push()
-        ctx.report(Severity.ERROR, "error 1")
-        ctx.report(Severity.ERROR, "error 2")
+        ctx.error("error 1")
+        ctx.error("error 2")
         assert ctx.error_count == 2
         ctx.pop()
 
     def test_warning_count_increments(self):
         ctx.push()
-        ctx.report(Severity.WARNING, "warning 1")
+        ctx.warning("warning 1")
         assert ctx.warning_count == 1
         ctx.pop()
 
