@@ -445,11 +445,11 @@ class Signal:
     is_dummy: bool = False
 
     def describe(self) -> str:
-        driver_str = self.driver.pin_def.name if self.driver else "none"
+        driver_str = self.driver.full_name if self.driver else "none"
         lines = [f"signal  {self.name}  {self.sig_type.name}  "
                  f"value={self.value}  driver={driver_str}"]
         for r in self.readers:
-            lines.append(f"  reader  {r.pin_def.name}")
+            lines.append(f"  reader  {r.full_name}")
         return "\n".join(lines)
 
 
@@ -470,7 +470,7 @@ class Thread:
     def describe(self) -> str:
         lines = [f"thread  {self.name}  ({self.period_ns} ns)"]
         for func in self.functions:
-            lines.append(f"  {func.funct_def.name}")
+            lines.append(f"  {func.full_name}")
         return "\n".join(lines)
 
 
@@ -483,14 +483,17 @@ class PinInstance:
     Fields:
         pin_def -- PinDef metadata (type, direction, names)
         signal  -- connected Signal, or None if unconnected (dummy signal)
+        block   -- back-reference to parent block
+        full_name -- "{block.name}.{pin_def.name}"
     """
     pin_def: PinDef
     signal:  Signal | None = None
     block:   BlockInstance | None = None
+    full_name: str = ""
 
     def describe(self) -> str:
         sig = self.signal.name if self.signal else "dummy"
-        return f"pin  {self.block.name!r}.{self.pin_def.name} -> {sig}"
+        return f"pin  {self.full_name} -> {sig}"
 
 
 @dataclass
@@ -502,14 +505,17 @@ class FunctInstance:
     Fields:
         funct_def -- FunctDef metadata (name, description)
         thread    -- Thread this function is assigned to, or None
+        block     -- back-reference to parent block
+        full_name -- "{block.name}.{funct_def.name}"
     """
     funct_def: FunctDef
     thread:    Thread | None = None
     block:     BlockInstance | None = None
+    full_name: str = ""
 
     def describe(self) -> str:
         thr = self.thread.name if self.thread else "unassigned"
-        return f"function  {self.block.name!r}.{self.funct_def.name} -> {thr}"
+        return f"function  {self.full_name} -> {thr}"
 
 BlockInstChild = PinInstance | FunctInstance
 
@@ -664,9 +670,10 @@ class Design:
             functions = functions,
             namespace  = namespace,
         )
-        # set back-references and create dummy signals for each pin
+        # set back-reference, full name, and dummy signal for each pin
         for pin_name, pin in instance.pins.items():
             pin.block = instance
+            pin.full_name = f"{instance_name}.{pin_name}"
             dummy_name = f"__{instance_name}__{pin_name}"
             dummy = Signal(
                 name     = dummy_name,
@@ -676,9 +683,10 @@ class Design:
             )
             self.dummy_signals[dummy_name] = dummy
             pin.signal = dummy
-        # set back references for functions
-        for func in instance.functions.values():
+        # set back reference and full name for each function
+        for func_name, func in instance.functions.items():
             func.block = instance
+            func.full_name = f"{instance_name}.{func_name}"
         # add to design
         self.blocks[instance_name] = instance
         self.namespace[instance_name] = instance
@@ -753,7 +761,7 @@ class Design:
         """
         if signal.driver is not None:
             raise EmblocsError(f"signal {signal.name!r} is driven by "
-                               f"'{signal.driver.block.name}.{signal.driver.pin_def.name}'; "
+                               f"'{signal.driver.full_name}'; "
                                f"cannot set value directly")
         # call shared helper to finish the job
         self._validate_and_set_value(signal, value)
@@ -764,7 +772,7 @@ class Design:
         Raises EmblocsError if the pin is connected to a named signal
         """
         if not pin.signal.is_dummy:
-            raise EmblocsError(f"pin '{pin.block.name}.{pin.pin_def.name}' is connected to "
+            raise EmblocsError(f"pin '{pin.full_name}' is connected to "
                                f"signal {pin.signal.name!r}; cannot set value directly")
         # call shared helper to finish the job
         self._validate_and_set_value(pin.signal, value)
@@ -805,13 +813,13 @@ class Design:
         - pin is an output and signal already has a driver
         """
         if not pin.signal.is_dummy:
-            raise EmblocsError(f"pin '{pin.block.name}.{pin.pin_def.name}' is already connected"
+            raise EmblocsError(f"pin '{pin.full_name}' is already connected"
                                f" to signal {pin.signal.name!r}")
         # validate type: raw pins connect to any signal type
         if pin.pin_def.pin_type != PinType.RAW:
             if pin.pin_def.pin_type != signal.sig_type:
                 raise EmblocsError(
-                    f"type mismatch: pin '{pin.block.name}.{pin.pin_def.name}' is "
+                    f"type mismatch: pin '{pin.full_name}' is "
                     f"{pin.pin_def.pin_type.name} but signal {signal.name!r} is "
                     f"{signal.sig_type.name}")
         # check for driver conflicts, then connect
@@ -819,7 +827,7 @@ class Design:
             if signal.driver is not None:
                 raise EmblocsError(
                     f"signal {signal.name!r} already has driver "
-                    f"'{signal.driver.block.name}.{signal.driver.pin_def.name}'")
+                    f"'{signal.driver.full_name}'")
             signal.driver = pin
         else:
             signal.readers.append(pin)
@@ -853,7 +861,7 @@ class Design:
         # validate not already linked
         if func.thread is not None:
             raise EmblocsError(
-                f"function '{func.block.name}.{func.funct_def.name}' is already assigned to "
+                f"function '{func.full_name}' is already assigned to "
                 f"thread {func.thread.name!r}")
         # link function to thread
         func.thread = thread
