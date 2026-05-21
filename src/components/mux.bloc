@@ -5,11 +5,20 @@ block mux /// N-channel M-to-1 multiplexor.
 param NUM_CHAN   u32  default=1  min=1  max=100 /// number of independent channels
 param NUM_INPUT  u32  default=2  min=2  max=10  /// number of inputs per channel
 
+// single channel mux is special-case with simpler pin names
+#if NUM_CHAN==1
+pin raw  input   in{i:1}[i=NUM_INPUT] /// mux input
+pin raw  output  out                  /// mux output
+#endif
+
+#if NUM_CHAN>1
 // storage order [NUM_INPUT][NUM_CHAN] for cache efficiency:
 // all channels for one select value are contiguous in memory.
 // EMBLOCS name order is channel-first: ch00_in0, ch00_in1, ch01_in0, ...
 pin raw  input   ch{c:2}_in{i:1}[i=NUM_INPUT][c=NUM_CHAN] /// mux input
 pin raw  output  ch{c:2}_out[c=NUM_CHAN]                  /// mux output
+#endif
+
 pin u32  input   select                       /// selects active input (0-based)
 
 function update /// copy in[select][ch] to out[ch] for all channels

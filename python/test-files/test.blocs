@@ -1,6 +1,8 @@
 # a comment
-blockdef mux_2ch_3in    ../src/components/mux.bloc NUM_CHAN=2 NUM_INPUT=2
-blockdef mux_default    ../src/components/mux.bloc
+blockdef mux_2ch_3in    ../../src/components/mux.bloc NUM_CHAN=2 NUM_INPUT=3
+blockdef mux_default    ../../src/components/mux.bloc
 block my_default_mux    mux_default
 block my_3in_mux        mux_2ch_3in
-signal sel u32 =0 +my_3in_mux.sel +my_default_mux.sel
+signal sel u32 =0 +my_3in_mux.select +my_default_mux.select
+signal loop float =1 +my_default_mux.out +my_3in_mux.ch00_in2
+thread fast 1000000 +my_default_mux.update +my_3in_mux.update
