@@ -10,7 +10,7 @@ from expressions import evaluate, ExpressionError
 from emblocs import (
     EmblocsError,
     BlockSpec,
-    Design,
+    Design, DesignObject,
     BlockDef, Signal, Thread,
     PinType,
     BlockInstance, PinInstance, FunctInstance,
@@ -91,10 +91,7 @@ def get_value(text: str, value_type: PinType) -> int | float | None:
         except ExpressionError as e:
             ctx.error(f"invalid float value {text!r}: {e}")
             return None
-        try:
-            import struct
-            struct.pack('f', result)
-        except struct.error:
+        if not (abs(result) <= 3.4028235e38):
             ctx.error(f"float value {text!r} is out of range for a 32-bit float")
             return None
         return float(result)
@@ -291,33 +288,79 @@ def cmd_thread(tokens: list[Token], design: Design) -> tuple[Thread | None, int]
 # Subcommand handlers
 # ---------------------------------------------------------------------------
 
-def subcmd_signal(cmd: str, arg: str, signal: Signal, design: Design) -> None:
-    """
-    Handle a single-token subcommand that applies to a Signal target.
-    Currently no subcommands are implemented, so this just reports an error.
-    """
-    ctx.error(f"un-implemented subcommand {cmd!r} with arg {arg!r} on signal {signal.name!r}")
+def link_handler(arg: str, target: DesignObject, design: Design) -> bool:
+    """'+' subcommand: link target to the named object."""
+    if not arg:
+        ctx.error("'+' requires a name")
+        return False
+    try:
+        obj = design.find_object_by_name(arg)
+        design.link(target, obj)
+    except EmblocsError as e:
+        ctx.error(str(e))
+        return False
+    return True
 
-def subcmd_pin(cmd: str, arg: str, pin : PinInstance, design: Design) -> None:
-    """
-    Handle a single-token subcommand that applies to a Pin target.
-    Currently no subcommands are implemented, so this just reports an error.
-    """
-    ctx.error(f"un-implemented subcommand {cmd!r} with arg {arg!r} on pin {pin.pindef.name!r}")
 
-def subcmd_thread(cmd: str, arg: str, thread : Thread, design: Design) -> None:
-    """
-    Handle a single-token subcommand that applies to a Thread target.
-    Currently no subcommands are implemented, so this just reports an error.
-    """
-    ctx.error(f"un-implemented subcommand {cmd!r} with arg {arg!r} on thread {thread.name!r}")
+def relink_handler(arg: str, target: DesignObject, design: Design) -> bool:
+    """-+' subcommand: unlink then link to the named object."""
+    if not arg:
+        ctx.error("'-+' requires a name")
+        return False
+    try:
+        obj = design.find_object_by_name(arg)
+        if isinstance(target, (PinInstance, FunctInstance)):
+            design.unlink(target)
+        else:
+            design.unlink(obj)
+        design.link(target, obj)
+    except EmblocsError as e:
+        ctx.error(str(e))
+        return False
+    return True
 
-def subcmd_funct(cmd: str, arg: str, funct : FunctInstance, design: Design) -> None:
-    """
-    Handle a single-token subcommand that applies to a Function target.
-    Currently no subcommands are implemented, so this just reports an error.
-    """
-    ctx.error(f"un-implemented subcommand {cmd!r} with arg {arg!r} on function {funct.funct_def.name!r}")
+
+def unlink_with_arg_handler(arg: str, target: DesignObject, design: Design) -> bool:
+    """'-' subcommand on signal or thread: unlink the named object from target."""
+    if not arg:
+        ctx.error("'-' requires a name")
+        return False
+    try:
+        obj = design.find_object_by_name(arg)
+        design.unlink(obj)
+    except EmblocsError as e:
+        ctx.error(str(e))
+        return False
+    return True
+
+
+def unlink_no_arg_handler(arg: str, target: DesignObject, design: Design) -> bool:
+    """'-' subcommand on pin or function: unlink target from whatever it is connected to."""
+    if arg:
+        ctx.error(f"'-' does not take an argument for {type(target).__name__}")
+        return False
+    try:
+        design.unlink(target)
+    except EmblocsError as e:
+        ctx.error(str(e))
+        return False
+    return True
+
+
+def set_handler(arg: str, target: DesignObject, design: Design) -> bool:
+    """'=' subcommand: set the value of a signal or pin."""
+    value_type = (target.sig_type if isinstance(target, Signal)
+                  else target.pin_def.pin_type)
+    value = get_value(arg, value_type)
+    if value is None:
+        return False
+    try:
+        design.set_value(target, value)
+    except EmblocsError as e:
+        ctx.error(str(e))
+        return False
+    return True
+
 
 # ---------------------------------------------------------------------------
 # dispatcher
@@ -330,12 +373,21 @@ CMD_DISPATCH = {
     "thread":   cmd_thread,
 }
 
-# longer prefixes must come first to ensure correct matching
 SUBCMD_DISPATCH = {
-    Signal:        ( subcmd_signal, ("-+", "+", "-", "=") ),
-    PinInstance:   ( subcmd_pin,    ("-+", "+", "-", "=") ),
-    Thread:        ( subcmd_thread, ("-+", "+", "-") ),
-    FunctInstance: ( subcmd_funct,  ("-+", "+", "-") ),
+    Signal:        (("-+", relink_handler),
+                    ("+",  link_handler),
+                    ("-",  unlink_with_arg_handler),
+                    ("=",  set_handler)),
+    PinInstance:   (("-+", relink_handler),
+                    ("+",  link_handler),
+                    ("-",  unlink_no_arg_handler),
+                    ("=",  set_handler)),
+    Thread:        (("-+", relink_handler),
+                    ("+",  link_handler),
+                    ("-",  unlink_with_arg_handler)),
+    FunctInstance: (("-+", relink_handler),
+                    ("+",  link_handler),
+                    ("-",  unlink_no_arg_handler)),
 }
 
 def parse_command(tokens: list[Token], design: Design) -> None:
@@ -379,20 +431,20 @@ def parse_command(tokens: list[Token], design: Design) -> None:
             ctx.error(f"{target_name!r} ({type(target).__name__}) has no subcommands, "
                       f"got {subcommand_tokens[0].text!r}", token=subcommand_tokens[0])
             return
-        handler, prefixes = entry
         # dispatch each remaining token as a subcommand
         for tok in subcommand_tokens:
             ctx.set(token=tok)
             subcmd = tok.text
-            for prefix in prefixes:
+            for prefix, handler in entry:
                 if subcmd.startswith(prefix):
                     suffix = subcmd[len(prefix):]
-                    handler(prefix, suffix, target, design)
+                    if not handler(suffix, target, design):
+                        return
                     break
             else:
                 ctx.error(f"subcommand {subcmd!r} is invalid for target "
                           f"{target_name!r} ({type(target).__name__})")
-                # break - # uncomment to stop after one bad subcommand
+                break # uncomment to stop after one bad subcommand
 
 
 # ---------------------------------------------------------------------------

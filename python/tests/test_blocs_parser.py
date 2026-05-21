@@ -91,10 +91,19 @@ def blocks_x4(simple_bloc, param_bloc, test_blocs):
         f"block b2 simple\n"
         f"block b3 param_v1\n"
         f"block b4 param_v2\n"
+        f"thread fast 1000000\n"
+        f"thread slow 10000000\n"
+        f"signal sig_float float\n"
+        f"signal sig_bool  bool\n"
+        f"signal sig_u32   u32\n"
+        f"signal sig_s32   s32\n"
     )
     design = parse_blocs_string(blocs_str, source=rcwd(test_blocs))
     assert design is not None
+    assert len(design.block_defs) == 3
     assert len(design.blocks) == 4
+    assert len(design.signals) == 4
+    assert len(design.threads) == 2
     return design
 
 
@@ -741,3 +750,440 @@ class TestCmdConflicts:
             "tests/data/tmp/test.blocs:2: error: name 'mysignal' is already in use\n"
             "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert design is None
+
+# ---------------------------------------------------------------------------
+# subcmd '=' tests
+# ---------------------------------------------------------------------------
+
+class TestSubcmdEquals:
+
+    def test_set_float_signal_inline(self, capsys):
+        blocs_str = "signal s1 float =1.5\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.signals["s1"].value == 1.5
+
+    def test_set_float_signal_modification(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "sig_float =2.5\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.signals["sig_float"].value == 2.5
+
+    def test_set_bool_signal_true(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "sig_bool =true\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.signals["sig_bool"].value == 1
+
+    def test_set_bool_signal_false(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "sig_bool =false\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.signals["sig_bool"].value == 0
+
+    def test_set_bool_signal_expression(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "sig_bool =4&3\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.signals["sig_bool"].value == 0
+
+    def test_set_u32_signal(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "sig_u32 =42\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.signals["sig_u32"].value == 42
+
+    def test_set_u32_signal_hex(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "sig_u32 =0xFF\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.signals["sig_u32"].value == 255
+
+    def test_set_u32_signal_expression(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "sig_u32 =48*200\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.signals["sig_u32"].value == 9600
+
+    def test_set_s32_signal(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "sig_s32 =-42\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.signals["sig_s32"].value == -42
+
+    def test_set_float_signal_expression(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "sig_float =25.4/4\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert abs(design.signals["sig_float"].value - 6.35) < 1e-6
+
+    def test_set_signal_empty_arg_fails(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "sig_float =\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1:11: error: invalid float value '': expression '': invalid syntax\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+    def test_set_u32_signal_out_of_range_fails(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "sig_u32 =5000000000\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1:9: error: u32 value '5000000000' is out of range [0, 4294967295]\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+    def test_set_s32_signal_out_of_range_fails(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "sig_s32 =5000000000\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1:9: error: s32 value '5000000000' is out of range [-2147483648, 2147483647]\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+    def test_set_float_pin_inline(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "b1.in =3.14\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.blocks["b1"].pins["in"].signal.value == 3.14
+
+    def test_set_float_pin_out_of_range_fails(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "b1.in =1e300\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1:7: error: float value '1e300' is out of range for a 32-bit float\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+
+# ---------------------------------------------------------------------------
+# subcommand '+' tests
+# ---------------------------------------------------------------------------
+
+class TestSubcmdPlus:
+
+    def test_link_signal_to_pin(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "sig_float +b1.in\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.blocks["b1"].pins["in"].signal is design.signals["sig_float"]
+
+    def test_link_pin_to_signal(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "b1.in +sig_float\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.blocks["b1"].pins["in"].signal is design.signals["sig_float"]
+
+    def test_link_signal_to_output_pin(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "sig_float +b1.out\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.signals["sig_float"].driver is design.blocks["b1"].pins["out"]
+
+    def test_link_thread_to_function(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "fast +b1.update\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.blocks["b1"].functions["update"].thread is design.threads["fast"]
+
+    def test_link_function_to_thread(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "b1.update +fast\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.blocks["b1"].functions["update"].thread is design.threads["fast"]
+
+    def test_link_unknown_arg_fails(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "sig_float +nosuchpin\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1:11: error: 'nosuchpin' not found in design 'tests/data/tmp/test.blocs'\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+    def test_link_empty_arg_fails(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "sig_float +\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1:11: error: '+' requires a name\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+    def test_link_inline_signal_creation(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "signal s1 float +b1.in\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.blocks["b1"].pins["in"].signal is design.signals["s1"]
+
+    def test_link_inline_thread_creation(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "thread t1 500000 +b1.update\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.blocks["b1"].functions["update"].thread is design.threads["t1"]
+
+    def test_link_pin_to_new_signal_fails(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = ("signal sig_float2 float\n"
+                     "sig_float +b1.in\n"
+                     "b1.in +sig_float2\n")
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:3:7: error: pin 'b1.in' is already connected to signal 'sig_float'\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+# ---------------------------------------------------------------------------
+# subcommand '-' tests
+# ---------------------------------------------------------------------------
+
+class TestSubcmdMinus:
+
+    def test_unlink_pin_no_arg(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = ("sig_float +b1.in\n"
+                     "b1.in -\n")
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.blocks["b1"].pins["in"].signal.is_dummy
+
+    def test_unlink_function_no_arg(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = ("fast +b1.update\n"
+                     "b1.update -\n")
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.blocks["b1"].functions["update"].thread is None
+
+    def test_unlink_pin_from_signal(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = ("sig_float +b1.in\n"
+                     "sig_float -b1.in\n")
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.blocks["b1"].pins["in"].signal.is_dummy
+
+    def test_unlink_function_from_thread(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = ("fast +b1.update\n"
+                     "fast -b1.update\n")
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.blocks["b1"].functions["update"].thread is None
+
+    def test_unlink_pin_with_arg_fails(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "b1.in -sig_float\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1:7: error: '-' does not take an argument for PinInstance\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+    def test_unlink_signal_no_arg_fails(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "sig_float -\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1:11: error: '-' requires a name\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+
+# ---------------------------------------------------------------------------
+# subcommand '-+' tests
+# ---------------------------------------------------------------------------
+
+class TestSubcmdRelink:
+
+    def test_relink_pin_to_new_signal(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = ("signal sig_float2 float\n"
+                     "sig_float +b1.in\n"
+                     "b1.in -+sig_float2\n")
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.blocks["b1"].pins["in"].signal is design.signals["sig_float2"]
+        assert design.blocks["b1"].pins["in"] not in design.signals["sig_float"].readers
+
+    def test_relink_pin_to_new_signal_rev(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = ("signal sig_float2 float\n"
+                     "sig_float +b1.in\n"
+                     "sig_float2 -+b1.in\n")
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.blocks["b1"].pins["in"].signal is design.signals["sig_float2"]
+        assert design.blocks["b1"].pins["in"] not in design.signals["sig_float"].readers
+
+    def test_relink_function_to_new_thread(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = ("fast +b1.update\n"
+                     "b1.update -+slow\n")
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.blocks["b1"].functions["update"].thread is design.threads["slow"]
+        assert design.blocks["b1"].functions["update"] not in design.threads["fast"].functions
+
+    def test_relink_function_to_new_thread_rev(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = ("fast +b1.update\n"
+                     "slow -+b1.update\n")
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.blocks["b1"].functions["update"].thread is design.threads["slow"]
+        assert design.blocks["b1"].functions["update"] not in design.threads["fast"].functions
+
+    def test_relink_unconnected_pin(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "b1.in -+sig_float\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.blocks["b1"].pins["in"].signal is design.signals["sig_float"]
+
+    def test_relink_empty_arg_fails(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "b1.in -+\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1:7: error: '-+' requires a name\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+
+    def test_multiple_plus_subcommands(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "signal s1 float +b1.in +b2.in\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.blocks["b1"].pins["in"].signal is design.signals["s1"]
+        assert design.blocks["b2"].pins["in"].signal is design.signals["s1"]
+
+    def test_mixed_subcommands_on_one_line(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "signal s1 float =1.5 +b1.in\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.signals["s1"].value == 1.5
+        assert design.blocks["b1"].pins["in"].signal is design.signals["s1"]
+
+    def test_connect_then_disconnect_on_one_line(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "signal s1 float +b1.in -b1.in\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        assert design.blocks["b1"].pins["in"].signal.is_dummy
+
+    def test_thread_multiple_functions(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "thread t1 500000 +b1.update +b2.update\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert design is not None
+        funcs = design.threads["t1"].functions
+        assert len(funcs) == 2
+        assert funcs[0] is design.blocks["b1"].functions["update"]
+        assert funcs[1] is design.blocks["b2"].functions["update"]
+
+    def test_signal_multiple_subcommand_abort_on_error(self, blocks_x4, capsys):
+        capsys.readouterr()
+        blocs_str = "sig_float +b1.in =1.5 +b3.out =3 -b1.in\n"
+        design = parse_blocs_string(blocs_str, source=BLOCS_SRC, design=blocks_x4)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1:31: error: signal 'sig_float' is driven by 'b3.out'; cannot set value directly\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert design is None
+        assert blocks_x4.signals["sig_float"].value==1.5
+        assert blocks_x4.blocks["b1"].pins["in"].signal == blocks_x4.signals["sig_float"]

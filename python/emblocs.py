@@ -723,124 +723,119 @@ class Design:
         """
         # validate value against signal type
         if signal.sig_type == PinType.BOOL:
-            if value not in (0, 1, True, False):
+            if not isinstance(value, int):
                 raise EmblocsError(
-                    f"value {value!r} is not valid for bool signal {signal.name!r}")
-            value = int(value)
+                    f"value {value!r} is not valid for bool")
+            value = 1 if value else 0
         elif signal.sig_type == PinType.U32:
             if not isinstance(value, int) or value < 0 or value > U32_MAX:
                 raise EmblocsError(
-                    f"value {value!r} is out of range for u32 signal {signal.name!r}")
+                    f"value {value!r} is out of range for u32")
         elif signal.sig_type == PinType.S32:
             if not isinstance(value, int) or value < S32_MIN or value > S32_MAX:
                 raise EmblocsError(
-                    f"value {value!r} is out of range for s32 signal {signal.name!r}")
+                    f"value {value!r} is out of range for s32")
         elif signal.sig_type == PinType.FLOAT:
             if not isinstance(value, (int, float)):
                 raise EmblocsError(
-                    f"value {value!r} is not valid for float signal {signal.name!r}")
+                    f"value {value!r} is not valid for float")
             value = float(value)
         # set value
         signal.value = value
 
 
-    def set_signal_value(self, name: str, value: int | float) -> None:
+    def _set_signal_value(self, signal: Signal, value: int | float) -> None:
         """
         Set the stored value of a signal.
-        Raises EmblocsError if the signal does not exist, if the signal
-        has an output pin driver (value is driven, not stored), or if
-        the value is incompatible with the signal type.
+        Raises EmblocsError if the signal has an output pin driver
+        (value is driven, not stored), or if the value is incompatible
+        with the signal type.
         """
-        # validate existance and settability
-        if name not in self.signals:
-            raise EmblocsError(f"unknown signal {name!r}")
-        signal = self.signals[name]
         if signal.driver is not None:
-            raise EmblocsError(f"signal {name!r} is driven by "
-                            f"'{signal.driver.block.name}.{signal.driver.pin_def.name}'; "
-                            f"cannot set value directly")
+            raise EmblocsError(f"signal {signal.name!r} is driven by "
+                               f"'{signal.driver.block.name}.{signal.driver.pin_def.name}'; "
+                               f"cannot set value directly")
         # call shared helper to finish the job
         self._validate_and_set_value(signal, value)
 
-    def set_pin_value(self, block_name: str, pin_name: str, value) -> None:
+    def _set_pin_value(self, pin: PinInstance, value: int | float) -> None:
         """
         Set the value of an unconnected pin's dummy signal.
-        Raises EmblocsError if the pin is connected to a named signal,
-        or if block or pin name is unknown.
+        Raises EmblocsError if the pin is connected to a named signal
         """
-        # validate existance and settability
-        if block_name not in self.blocks:
-            raise EmblocsError(f"unknown block {block_name!r}")
-        instance = self.blocks[block_name]
-        if pin_name not in instance.pins:
-            raise EmblocsError(f"unknown pin '{block_name}.{pin_name}'")
-        pin = instance.pins[pin_name]
         if not pin.signal.is_dummy:
-            raise EmblocsError(f"pin '{block_name}.{pin_name}' is connected to "
-                            f"signal {pin.signal.name!r}; cannot set value directly")
+            raise EmblocsError(f"pin '{pin.block.name}.{pin.pin_def.name}' is connected to "
+                               f"signal {pin.signal.name!r}; cannot set value directly")
         # call shared helper to finish the job
         self._validate_and_set_value(pin.signal, value)
 
-    def link_pin(self, block_name: str, pin_name: str, sig_name: str) -> None:
+    def set_value(self, obj: Signal | PinInstance, value: int | float) -> None:
+        """
+        Set the value of a signal or unconnected pin.
+        Raises EmblocsError if the object is not a Signal or PinInstance,
+        or if the object is a connected pin.
+        """
+        if isinstance(obj, Signal):
+            self._set_signal_value(obj, value)
+        elif isinstance(obj, PinInstance):
+            self._set_pin_value(obj, value)
+        else:
+            raise EmblocsError(
+                f"cannot set value on object of type {type(obj).__name__}")
+
+    def set_value_by_name(self, name: str, value: int | float) -> None:
+        """
+        Look up a Signal or PinInstance by name and set its value.
+        Supports dotted names for pins (e.g. 'b1.in').
+        Raises EmblocsError if the name is not found, or if the object
+        is not a Signal or PinInstance, or if the pin is connected.
+        """
+        obj = self.find_object_by_name(name)
+        try:
+            self.set_value(obj, value)
+        except EmblocsError as e:
+            raise EmblocsError(f"cannot set value of {name!r}: {e}") from e
+
+    def _link_pin_to_signal(self, pin: PinInstance, signal: Signal) -> None:
         """
         Connect a pin to a signal.
         Raises EmblocsError if:
-        - block, pin, or signal name is unknown
         - pin is already connected
         - signal type is incompatible with pin type
         - pin is an output and signal already has a driver
         """
-        # validate names and existence
-        if block_name not in self.blocks:
-            raise EmblocsError(f"unknown block {block_name!r}")
-        instance = self.blocks[block_name]
-        if pin_name not in instance.pins:
-            raise EmblocsError(f"unknown pin '{block_name}.{pin_name}'")
-        if sig_name not in self.signals:
-            raise EmblocsError(f"unknown signal {sig_name!r}")
-        # validate pin not already linked
-        pin = instance.pins[pin_name]
-        signal = self.signals[sig_name]
         if not pin.signal.is_dummy:
-            raise EmblocsError(f"pin '{block_name}.{pin_name}' is already connected"
+            raise EmblocsError(f"pin '{pin.block.name}.{pin.pin_def.name}' is already connected"
                                f" to signal {pin.signal.name!r}")
         # validate type: raw pins connect to any signal type
         if pin.pin_def.pin_type != PinType.RAW:
             if pin.pin_def.pin_type != signal.sig_type:
                 raise EmblocsError(
-                    f"type mismatch: pin '{block_name}.{pin_name}' is "
-                    f"{pin.pin_def.pin_type.name} but signal {sig_name!r} is "
+                    f"type mismatch: pin '{pin.block.name}.{pin.pin_def.name}' is "
+                    f"{pin.pin_def.pin_type.name} but signal {signal.name!r} is "
                     f"{signal.sig_type.name}")
         # check for driver conflicts, then connect
         if pin.pin_def.direction == PinDir.OUTPUT:
             if signal.driver is not None:
                 raise EmblocsError(
-                    f"signal {sig_name!r} already has a driver: "
+                    f"signal {signal.name!r} already has driver "
                     f"'{signal.driver.block.name}.{signal.driver.pin_def.name}'")
             signal.driver = pin
         else:
             signal.readers.append(pin)
         pin.signal = signal
 
-    def unlink_pin(self, block_name: str, pin_name: str) -> None:
+    def _unlink_pin(self, pin: PinInstance) -> None:
         """
         Disconnect a pin from its signal.
         If the pin is not connected, this is a no-op.
-        Raises EmblocsError if block or pin name is unknown.
         """
-        # validate names and existence
-        if block_name not in self.blocks:
-            raise EmblocsError(f"unknown block {block_name!r}")
-        instance = self.blocks[block_name]
-        if pin_name not in instance.pins:
-            raise EmblocsError(f"unknown pin '{block_name}.{pin_name}'")
-        pin = instance.pins[pin_name]
         # if not linked, no-op
         if pin.signal.is_dummy:
             return
         # disconnect pin from signal
         signal = pin.signal
-        dummy = self.dummy_signals[f"__{block_name}__{pin_name}"]
+        dummy = self.dummy_signals[f"__{pin.block.name}__{pin.pin_def.name}"]
         dummy.value = signal.value
         if pin.pin_def.direction == PinDir.OUTPUT:
             signal.driver = None
@@ -848,50 +843,91 @@ class Design:
             signal.readers.remove(pin)
         pin.signal = dummy
 
-    def link_function(self, block_name: str, func_name: str, thread_name: str) -> None:
+    def _link_function_to_thread(self, func: FunctInstance, thread: Thread) -> None:
         """
         Assign a block function to a thread, appending it to the thread's
         execution list.
         Raises EmblocsError if:
-        - block, function, or thread name is unknown
         - function is already assigned to a thread
         """
-        # validate names and existence
-        if block_name not in self.blocks:
-            raise EmblocsError(f"unknown block {block_name!r}")
-        instance = self.blocks[block_name]
-        if func_name not in instance.functions:
-            raise EmblocsError(f"unknown function '{block_name}.{func_name}'")
-        if thread_name not in self.threads:
-            raise EmblocsError(f"unknown thread {thread_name!r}")
         # validate not already linked
-        func = instance.functions[func_name]
         if func.thread is not None:
             raise EmblocsError(
-                f"function '{block_name}.{func_name}' is already assigned to "
+                f"function '{func.block.name}.{func.funct_def.name}' is already assigned to "
                 f"thread {func.thread.name!r}")
         # link function to thread
-        thread = self.threads[thread_name]
         func.thread = thread
         thread.functions.append(func)
 
-
-    def unlink_function(self, block_name: str, func_name: str) -> None:
+    def _unlink_function(self, func: FunctInstance) -> None:
         """
         Remove a block function from its thread.
         If the function is not assigned to any thread, this is a no-op.
         Raises EmblocsError if block or function name is unknown.
         """
-        # validate names and existence
-        if block_name not in self.blocks:
-            raise EmblocsError(f"unknown block {block_name!r}")
-        instance = self.blocks[block_name]
-        if func_name not in instance.functions:
-            raise EmblocsError(f"unknown function '{block_name}.{func_name}'")
-        func = instance.functions[func_name]
         # if not linked, no-op
         if func.thread is None:
             return
         # disconnect function from thread
         func.thread.functions.remove(func)
         func.thread = None
+
+    def link(self, obj1: DesignObject, obj2: DesignObject) -> None:
+        """
+        Link two design objects together, if they are linkable types.
+        Supported linkages:
+        - PinInstance to Signal (link_pin)
+        - FunctInstance to Thread (link_function)
+        Raises EmblocsError if the objects are not linkable or if the
+        specific objects cannot be linked due to validation errors.
+        """
+        if isinstance(obj1, PinInstance) and isinstance(obj2, Signal):
+            self._link_pin_to_signal(obj1, obj2)
+        elif isinstance(obj2, PinInstance) and isinstance(obj1, Signal):
+            self._link_pin_to_signal(obj2, obj1)
+        elif isinstance(obj1, FunctInstance) and isinstance(obj2, Thread):
+            self._link_function_to_thread(obj1, obj2)
+        elif isinstance(obj2, FunctInstance) and isinstance(obj1, Thread):
+            self._link_function_to_thread(obj2, obj1)
+        else:
+            raise EmblocsError(
+                f"cannot link {type(obj1).__name__} to {type(obj2).__name__}")
+
+    def unlink(self, obj: PinInstance | FunctInstance) -> None:
+        """
+        Unlinks a pin or function if currently linked.
+        Raises EmblocsError if the object is not a PinInstance or FunctInstance
+        """
+        if isinstance(obj, PinInstance):
+            self._unlink_pin(obj)
+        elif isinstance(obj, FunctInstance):
+            self._unlink_function(obj)
+        else:
+            raise EmblocsError(f"cannot unlink {type(obj).__name__}")
+
+    def link_by_name(self, name1: str, name2: str) -> None:
+        """
+        Look up two objects by name and link them.
+        Supports dotted names for pins and functions (e.g. 'b1.in').
+        Raises EmblocsError if either name is not found, or if the
+        objects are not a linkable combination.
+        """
+        obj1 = self.find_object_by_name(name1)
+        obj2 = self.find_object_by_name(name2)
+        try:
+            self.link(obj1, obj2)
+        except EmblocsError as e:
+            raise EmblocsError(f"cannot link {name1!r} to {name2!r}: {e}") from e
+
+    def unlink_by_name(self, name: str) -> None:
+        """
+        Look up a pin or function by name and unlink it.
+        Supports dotted names (e.g. 'b1.in').
+        Raises EmblocsError if the name is not found or the object
+        is not unlinkable.
+        """
+        obj = self.find_object_by_name(name)
+        try:
+            self.unlink(obj)
+        except EmblocsError as e:
+            raise EmblocsError(f"cannot unlink {name!r}: {e}") from e

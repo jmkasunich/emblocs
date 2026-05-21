@@ -354,107 +354,6 @@ class TestAddThread:
         assert len(empty_design.threads) == 2
 
 # ---------------------------------------------------------------------------
-# set_signal_value tests
-# ---------------------------------------------------------------------------
-
-@pytest.fixture
-def design_with_signals(empty_design):
-    empty_design.add_signal("b", PinType.BOOL)
-    empty_design.add_signal("u", PinType.U32)
-    empty_design.add_signal("s", PinType.S32)
-    empty_design.add_signal("f", PinType.FLOAT)
-    return empty_design
-
-
-class TestSetSignalValue:
-
-    def test_set_bool_zero(self, design_with_signals):
-        design_with_signals.set_signal_value("b", 0)
-        assert design_with_signals.signals["b"].value == 0
-
-    def test_set_bool_one(self, design_with_signals):
-        design_with_signals.set_signal_value("b", 1)
-        assert design_with_signals.signals["b"].value == 1
-
-    def test_set_bool_true_converts_to_int(self, design_with_signals):
-        design_with_signals.set_signal_value("b", True)
-        assert design_with_signals.signals["b"].value == 1
-        assert isinstance(design_with_signals.signals["b"].value, int)
-
-    def test_set_bool_invalid_raises(self, design_with_signals):
-        with pytest.raises(EmblocsError) as exc:
-            design_with_signals.set_signal_value("b", 2)
-        assert str(exc.value) == "value 2 is not valid for bool signal 'b'"
-
-    def test_set_u32_zero(self, design_with_signals):
-        design_with_signals.set_signal_value("u", 0)
-        assert design_with_signals.signals["u"].value == 0
-
-    def test_set_u32_max(self, design_with_signals):
-        design_with_signals.set_signal_value("u", 0xFFFFFFFF)
-        assert design_with_signals.signals["u"].value == 0xFFFFFFFF
-
-    def test_set_u32_negative_raises(self, design_with_signals):
-        with pytest.raises(EmblocsError) as exc:
-            design_with_signals.set_signal_value("u", -1)
-        assert str(exc.value) == "value -1 is out of range for u32 signal 'u'"
-
-    def test_set_u32_overflow_raises(self, design_with_signals):
-        with pytest.raises(EmblocsError) as exc:
-            design_with_signals.set_signal_value("u", 0x100000000)
-        assert str(exc.value) == "value 4294967296 is out of range for u32 signal 'u'"
-
-    def test_set_s32_zero(self, design_with_signals):
-        design_with_signals.set_signal_value("s", 0)
-        assert design_with_signals.signals["s"].value == 0
-
-    def test_set_s32_min(self, design_with_signals):
-        design_with_signals.set_signal_value("s", -0x80000000)
-        assert design_with_signals.signals["s"].value == -0x80000000
-
-    def test_set_s32_max(self, design_with_signals):
-        design_with_signals.set_signal_value("s", 0x7FFFFFFF)
-        assert design_with_signals.signals["s"].value == 0x7FFFFFFF
-
-    def test_set_s32_overflow_raises(self, design_with_signals):
-        with pytest.raises(EmblocsError) as exc:
-            design_with_signals.set_signal_value("s", 0x80000000)
-        assert str(exc.value) == "value 2147483648 is out of range for s32 signal 's'"
-
-    def test_set_s32_underflow_raises(self, design_with_signals):
-        with pytest.raises(EmblocsError) as exc:
-            design_with_signals.set_signal_value("s", -0x80000001)
-        assert str(exc.value) == "value -2147483649 is out of range for s32 signal 's'"
-
-    def test_set_float(self, design_with_signals):
-        design_with_signals.set_signal_value("f", 1.5)
-        assert design_with_signals.signals["f"].value == 1.5
-
-    def test_set_float_from_int(self, design_with_signals):
-        design_with_signals.set_signal_value("f", 1)
-        assert design_with_signals.signals["f"].value == 1.0
-        assert isinstance(design_with_signals.signals["f"].value, float)
-
-    def test_set_float_invalid_raises(self, design_with_signals):
-        with pytest.raises(EmblocsError) as exc:
-            design_with_signals.set_signal_value("f", "oops")
-        assert str(exc.value) == "value 'oops' is not valid for float signal 'f'"
-
-    def test_unknown_signal_raises(self, design_with_signals):
-        with pytest.raises(EmblocsError) as exc:
-            design_with_signals.set_signal_value("nonexistent", 0)
-        assert str(exc.value) == "unknown signal 'nonexistent'"
-
-    def test_driven_signal_raises(self, design_with_signals, block_def_with_pins):
-        design_with_signals.add_block_def(block_def_with_pins)
-        design_with_signals.add_block_instance("s1", "simple")
-        instance = design_with_signals.blocks["s1"]
-        design_with_signals.signals["f"].driver = instance.pins["in"]
-        with pytest.raises(EmblocsError) as exc:
-            design_with_signals.set_signal_value("f", 1.0)
-        assert str(exc.value) == "signal 'f' is driven by 's1.in'; cannot set value directly"
-
-# ---------------------------------------------------------------------------
 # Fixtures for link/unlink tests
 # ---------------------------------------------------------------------------
 
@@ -514,286 +413,387 @@ def linked_design(empty_design, block_def_with_pins,
     empty_design.add_block_def(block_def_with_output)
     empty_design.add_block_instance("src", "source")
     empty_design.add_block_instance("s1", "simple")
-    empty_design.add_signal("vel", PinType.FLOAT)
-    return empty_design
-
-
-# ---------------------------------------------------------------------------
-# link_pin tests
-# ---------------------------------------------------------------------------
-
-class TestLinkPin:
-
-    def test_link_input_pin(self, linked_design):
-        linked_design.link_pin("s1", "in", "vel")
-        assert linked_design.blocks["s1"].pins["in"].signal is linked_design.signals["vel"]
-
-    def test_link_input_adds_to_readers(self, linked_design):
-        linked_design.link_pin("s1", "in", "vel")
-        assert linked_design.blocks["s1"].pins["in"] in linked_design.signals["vel"].readers
-
-    def test_link_input_no_driver(self, linked_design):
-        linked_design.link_pin("s1", "in", "vel")
-        assert linked_design.signals["vel"].driver is None
-
-    def test_link_output_pin(self, linked_design):
-        linked_design.link_pin("src", "out", "vel")
-        assert linked_design.blocks["src"].pins["out"].signal is linked_design.signals["vel"]
-
-    def test_link_output_sets_driver(self, linked_design):
-        linked_design.link_pin("src", "out", "vel")
-        assert linked_design.signals["vel"].driver is linked_design.blocks["src"].pins["out"]
-
-    def test_link_output_no_readers(self, linked_design):
-        linked_design.link_pin("src", "out", "vel")
-        assert linked_design.signals["vel"].readers == []
-
-    def test_link_input_and_output(self, linked_design):
-        linked_design.link_pin("src", "out", "vel")
-        linked_design.link_pin("s1", "in", "vel")
-        assert linked_design.signals["vel"].driver is linked_design.blocks["src"].pins["out"]
-        assert linked_design.blocks["s1"].pins["in"] in linked_design.signals["vel"].readers
-
-    def test_multiple_inputs(self, linked_design, block_def_with_pins):
-        linked_design.add_block_instance("s2", "simple")
-        linked_design.link_pin("s1", "in", "vel")
-        linked_design.link_pin("s2", "in", "vel")
-        assert len(linked_design.signals["vel"].readers) == 2
-
-    def test_raw_pin_accepts_any_type(self, empty_design, block_def_with_raw):
-        empty_design.add_block_def(block_def_with_raw)
-        empty_design.add_block_instance("p1", "passthrough")
-        empty_design.add_signal("u", PinType.U32)
-        empty_design.link_pin("p1", "raw_in", "u")
-        assert empty_design.blocks["p1"].pins["raw_in"].signal is empty_design.signals["u"]
-
-    def test_unknown_block_raises(self, linked_design):
-        with pytest.raises(EmblocsError) as exc:
-            linked_design.link_pin("nonexistent", "in", "vel")
-        assert str(exc.value) == "unknown block 'nonexistent'"
-
-    def test_unknown_pin_raises(self, linked_design):
-        with pytest.raises(EmblocsError) as exc:
-            linked_design.link_pin("s1", "nonexistent", "vel")
-        assert str(exc.value) == "unknown pin 's1.nonexistent'"
-
-    def test_unknown_signal_raises(self, linked_design):
-        with pytest.raises(EmblocsError) as exc:
-            linked_design.link_pin("s1", "in", "nonexistent")
-        assert str(exc.value) == "unknown signal 'nonexistent'"
-
-    def test_already_connected_raises(self, linked_design):
-        linked_design.link_pin("s1", "in", "vel")
-        with pytest.raises(EmblocsError) as exc:
-            linked_design.link_pin("s1", "in", "vel")
-        assert str(exc.value) == "pin 's1.in' is already connected to signal 'vel'"
-
-    def test_type_mismatch_raises(self, linked_design):
-        linked_design.add_signal("b", PinType.BOOL)
-        with pytest.raises(EmblocsError) as exc:
-            linked_design.link_pin("s1", "in", "b")
-        assert str(exc.value) == "type mismatch: pin 's1.in' is FLOAT but signal 'b' is BOOL"
-
-    def test_second_driver_raises(self, linked_design, block_def_with_output):
-        linked_design.add_block_instance("src2", "source")
-        linked_design.link_pin("src", "out", "vel")
-        with pytest.raises(EmblocsError) as exc:
-            linked_design.link_pin("src2", "out", "vel")
-        assert str(exc.value) == "signal 'vel' already has a driver: 'src.out'"
-
-
-# ---------------------------------------------------------------------------
-# unlink_pin tests
-# ---------------------------------------------------------------------------
-
-class TestUnlinkPin:
-
-    def test_unlink_input_pin(self, linked_design):
-        linked_design.link_pin("s1", "in", "vel")
-        linked_design.unlink_pin("s1", "in")
-        assert linked_design.blocks["s1"].pins["in"].signal.is_dummy
-
-    def test_unlink_input_removes_from_readers(self, linked_design):
-        linked_design.link_pin("s1", "in", "vel")
-        linked_design.unlink_pin("s1", "in")
-        assert linked_design.blocks["s1"].pins["in"] not in linked_design.signals["vel"].readers
-
-    def test_unlink_output_pin(self, linked_design):
-        linked_design.link_pin("src", "out", "vel")
-        linked_design.unlink_pin("src", "out")
-        assert linked_design.blocks["src"].pins["out"].signal.is_dummy
-
-    def test_unlink_output_clears_driver(self, linked_design):
-        linked_design.link_pin("src", "out", "vel")
-        linked_design.unlink_pin("src", "out")
-        assert linked_design.signals["vel"].driver is None
-
-    def test_unlink_unconnected_is_noop(self, linked_design):
-        linked_design.unlink_pin("s1", "in")
-        assert linked_design.blocks["s1"].pins["in"].signal.is_dummy
-
-    def test_unlink_preserves_value(self, linked_design):
-        linked_design.link_pin("src", "out", "vel")
-        linked_design.signals["vel"].value = 3.14
-        linked_design.unlink_pin("src", "out")
-        dummy = linked_design.dummy_signals["__src__out"]
-        assert dummy.value == 3.14
-
-    def test_unlink_restores_dummy(self, linked_design):
-        linked_design.link_pin("s1", "in", "vel")
-        linked_design.unlink_pin("s1", "in")
-        assert linked_design.blocks["s1"].pins["in"].signal.is_dummy
-
-    def test_unknown_block_raises(self, linked_design):
-        with pytest.raises(EmblocsError) as exc:
-            linked_design.unlink_pin("nonexistent", "in")
-        assert str(exc.value) == "unknown block 'nonexistent'"
-
-    def test_unknown_pin_raises(self, linked_design):
-        with pytest.raises(EmblocsError) as exc:
-            linked_design.unlink_pin("s1", "nonexistent")
-        assert str(exc.value) == "unknown pin 's1.nonexistent'"
-
-
-# ---------------------------------------------------------------------------
-# set_pin_value tests
-# ---------------------------------------------------------------------------
-
-class TestSetPinValue:
-
-    def test_set_unconnected_pin(self, linked_design):
-        linked_design.set_pin_value("s1", "in", 1.5)
-        dummy = linked_design.dummy_signals["__s1__in"]
-        assert dummy.value == 1.5
-
-    def test_set_connected_pin_raises(self, linked_design):
-        linked_design.link_pin("s1", "in", "vel")
-        with pytest.raises(EmblocsError) as exc:
-            linked_design.set_pin_value("s1", "in", 1.5)
-        assert str(exc.value) == "pin 's1.in' is connected to signal 'vel'; cannot set value directly"
-
-    def test_unknown_block_raises(self, linked_design):
-        with pytest.raises(EmblocsError) as exc:
-            linked_design.set_pin_value("nonexistent", "in", 1.5)
-        assert str(exc.value) == "unknown block 'nonexistent'"
-
-    def test_unknown_pin_raises(self, linked_design):
-        with pytest.raises(EmblocsError) as exc:
-            linked_design.set_pin_value("s1", "nonexistent", 1.5)
-        assert str(exc.value) == "unknown pin 's1.nonexistent'"
-
-    def test_type_validation(self, linked_design):
-        """set_pin_value rejects values incompatible with the pin type."""
-        with pytest.raises(EmblocsError):
-            linked_design.set_pin_value("s1", "in", "not_a_number")
-
-
-# ---------------------------------------------------------------------------
-# Fixtures for link_function / unlink_function tests
-# ---------------------------------------------------------------------------
-
-@pytest.fixture
-def function_design(empty_design, block_def_with_pins):
-    """
-    A Design with:
-      - 'simple' BlockDef (has function 'update')
-      - instances 's1' and 's2'
-      - threads 'fast' (1kHz) and 'slow' (10Hz)
-    """
-    empty_design.add_block_def(block_def_with_pins)
-    empty_design.add_block_instance("s1", "simple")
     empty_design.add_block_instance("s2", "simple")
+    empty_design.add_signal("vel", PinType.FLOAT)
+    empty_design.add_signal("b", PinType.BOOL)
     empty_design.add_thread("fast", 1000000)
     empty_design.add_thread("slow", 100000000)
     return empty_design
 
 
 # ---------------------------------------------------------------------------
-# link_function tests
+# link_by_name tests
 # ---------------------------------------------------------------------------
+
+class TestLinkPin:
+
+    def test_link_input_pin(self, linked_design):
+        linked_design.link_by_name("s1.in", "vel")
+        assert linked_design.blocks["s1"].pins["in"].signal is linked_design.signals["vel"]
+
+    def test_link_input_adds_to_readers(self, linked_design):
+        linked_design.link_by_name("s1.in", "vel")
+        assert linked_design.blocks["s1"].pins["in"] in linked_design.signals["vel"].readers
+
+    def test_link_input_no_driver(self, linked_design):
+        linked_design.link_by_name("s1.in", "vel")
+        assert linked_design.signals["vel"].driver is None
+
+    def test_link_output_pin(self, linked_design):
+        linked_design.link_by_name("src.out", "vel")
+        assert linked_design.blocks["src"].pins["out"].signal is linked_design.signals["vel"]
+
+    def test_link_output_sets_driver(self, linked_design):
+        linked_design.link_by_name("src.out", "vel")
+        assert linked_design.signals["vel"].driver is linked_design.blocks["src"].pins["out"]
+
+    def test_link_output_no_readers(self, linked_design):
+        linked_design.link_by_name("src.out", "vel")
+        assert linked_design.signals["vel"].readers == []
+
+    def test_link_reversed_pin_signal(self, linked_design):
+        linked_design.link_by_name("vel", "s1.in")
+        assert linked_design.blocks["s1"].pins["in"].signal is linked_design.signals["vel"]
+
+    def test_link_input_and_output(self, linked_design):
+        linked_design.link_by_name("src.out", "vel")
+        linked_design.link_by_name("s1.in", "vel")
+        assert linked_design.signals["vel"].driver is linked_design.blocks["src"].pins["out"]
+        assert linked_design.blocks["s1"].pins["in"] in linked_design.signals["vel"].readers
+
+    def test_multiple_inputs(self, linked_design, block_def_with_pins):
+        linked_design.link_by_name("s1.in", "vel")
+        linked_design.link_by_name("s2.in", "vel")
+        assert len(linked_design.signals["vel"].readers) == 2
+
+    def test_raw_pin_accepts_any_type(self, empty_design, block_def_with_raw):
+        empty_design.add_block_def(block_def_with_raw)
+        empty_design.add_block_instance("p1", "passthrough")
+        empty_design.add_signal("u", PinType.U32)
+        empty_design.link_by_name("p1.raw_in", "u")
+        assert empty_design.blocks["p1"].pins["raw_in"].signal is empty_design.signals["u"]
+
+    def test_unknown_block_raises(self, linked_design):
+        with pytest.raises(EmblocsError) as exc:
+            linked_design.link_by_name("nonexistent.in", "vel")
+        assert str(exc.value) == "block 'nonexistent' not found"
+
+    def test_unknown_pin_raises(self, linked_design):
+        with pytest.raises(EmblocsError) as exc:
+            linked_design.link_by_name("s1.nonexistent", "vel")
+        assert str(exc.value) == "'nonexistent' not found in block 's1'"
+
+    def test_unknown_signal_raises(self, linked_design):
+        with pytest.raises(EmblocsError) as exc:
+            linked_design.link_by_name("s1.in", "nonexistent")
+        assert str(exc.value) == "'nonexistent' not found in design 'test.blocs'"
+
+    def test_already_connected_raises(self, linked_design):
+        linked_design.link_by_name("s1.in", "vel")
+        with pytest.raises(EmblocsError) as exc:
+            linked_design.link_by_name("s1.in", "vel")
+        assert str(exc.value) == "cannot link 's1.in' to 'vel': pin 's1.in' is already connected to signal 'vel'"
+
+    def test_type_mismatch_raises(self, linked_design):
+        with pytest.raises(EmblocsError) as exc:
+            linked_design.link_by_name("s1.in", "b")
+        assert str(exc.value) == "cannot link 's1.in' to 'b': type mismatch: pin 's1.in' is FLOAT but signal 'b' is BOOL"
+
+    def test_second_driver_raises(self, linked_design, block_def_with_output):
+        linked_design.add_block_instance("src2", "source")
+        linked_design.link_by_name("src.out", "vel")
+        with pytest.raises(EmblocsError) as exc:
+            linked_design.link_by_name("src2.out", "vel")
+        assert str(exc.value) == "cannot link 'src2.out' to 'vel': signal 'vel' already has driver 'src.out'"
 
 class TestLinkFunction:
 
-    def test_link_function(self, function_design):
-        function_design.link_function("s1", "update", "fast")
-        func = function_design.blocks["s1"].functions["update"]
-        assert func.thread is function_design.threads["fast"]
+    def test_link_function(self, linked_design):
+        linked_design.link_by_name("s1.update", "fast")
+        func = linked_design.blocks["s1"].functions["update"]
+        assert func.thread is linked_design.threads["fast"]
 
-    def test_link_adds_to_thread(self, function_design):
-        function_design.link_function("s1", "update", "fast")
-        func = function_design.blocks["s1"].functions["update"]
-        assert func in function_design.threads["fast"].functions
+    def test_link_adds_to_thread(self, linked_design):
+        linked_design.link_by_name("s1.update", "fast")
+        func = linked_design.blocks["s1"].functions["update"]
+        assert func in linked_design.threads["fast"].functions
 
-    def test_link_preserves_order(self, function_design):
-        function_design.link_function("s1", "update", "fast")
-        function_design.link_function("s2", "update", "fast")
-        funcs = function_design.threads["fast"].functions
-        assert funcs[0] is function_design.blocks["s1"].functions["update"]
-        assert funcs[1] is function_design.blocks["s2"].functions["update"]
+    def test_link_preserves_order(self, linked_design):
+        linked_design.link_by_name("s1.update", "fast")
+        linked_design.link_by_name("s2.update", "fast")
+        funcs = linked_design.threads["fast"].functions
+        assert funcs[0] is linked_design.blocks["s1"].functions["update"]
+        assert funcs[1] is linked_design.blocks["s2"].functions["update"]
 
-    def test_two_functions_different_threads(self, function_design):
-        function_design.link_function("s1", "update", "fast")
-        function_design.link_function("s2", "update", "slow")
-        assert function_design.blocks["s1"].functions["update"].thread is function_design.threads["fast"]
-        assert function_design.blocks["s2"].functions["update"].thread is function_design.threads["slow"]
+    def test_link_reversed_function_thread(self, linked_design):
+        linked_design.link_by_name("fast", "s1.update")
+        func = linked_design.blocks["s1"].functions["update"]
+        assert func.thread is linked_design.threads["fast"]
 
-    def test_unknown_block_raises(self, function_design):
+    def test_two_functions_different_threads(self, linked_design):
+        linked_design.link_by_name("s1.update", "fast")
+        linked_design.link_by_name("s2.update", "slow")
+        assert linked_design.blocks["s1"].functions["update"].thread is linked_design.threads["fast"]
+        assert linked_design.blocks["s2"].functions["update"].thread is linked_design.threads["slow"]
+
+    def test_unknown_block_raises(self, linked_design):
         with pytest.raises(EmblocsError) as exc:
-            function_design.link_function("nonexistent", "update", "fast")
-        assert str(exc.value) == "unknown block 'nonexistent'"
+            linked_design.link_by_name("nonexistent.update", "fast")
+        assert str(exc.value) == "block 'nonexistent' not found"
 
-    def test_unknown_function_raises(self, function_design):
+    def test_unknown_function_raises(self, linked_design):
         with pytest.raises(EmblocsError) as exc:
-            function_design.link_function("s1", "nonexistent", "fast")
-        assert str(exc.value) == "unknown function 's1.nonexistent'"
+            linked_design.link_by_name("s1.nonexistent", "fast")
+        assert str(exc.value) == "'nonexistent' not found in block 's1'"
 
-    def test_unknown_thread_raises(self, function_design):
+    def test_unknown_thread_raises(self, linked_design):
         with pytest.raises(EmblocsError) as exc:
-            function_design.link_function("s1", "update", "nonexistent")
-        assert str(exc.value) == "unknown thread 'nonexistent'"
+            linked_design.link_by_name("s1.update", "nonexistent")
+        assert str(exc.value) == "'nonexistent' not found in design 'test.blocs'"
 
-    def test_already_assigned_raises(self, function_design):
-        function_design.link_function("s1", "update", "fast")
+    def test_already_assigned_raises(self, linked_design):
+        linked_design.link_by_name("s1.update", "fast")
         with pytest.raises(EmblocsError) as exc:
-            function_design.link_function("s1", "update", "slow")
-        assert str(exc.value) == "function 's1.update' is already assigned to thread 'fast'"
+            linked_design.link_by_name("s1.update", "slow")
+        assert str(exc.value) == "cannot link 's1.update' to 'slow': function 's1.update' is already assigned to thread 'fast'"
+
+    def test_link_incompatible_raises(self, linked_design):
+        with pytest.raises(EmblocsError) as exc:
+            linked_design.link_by_name("s1.update", "vel")
+        assert str(exc.value) == "cannot link 's1.update' to 'vel': cannot link FunctInstance to Signal"
+
+    def test_link_unknown_second_arg_raises(self, linked_design):
+        with pytest.raises(EmblocsError) as exc:
+            linked_design.link_by_name("s1.in", "nonexistent")
+        assert str(exc.value) == "'nonexistent' not found in design 'test.blocs'"
 
 
 # ---------------------------------------------------------------------------
-# unlink_function tests
+# unlink_by_name tests
 # ---------------------------------------------------------------------------
+
+class TestUnlinkPin:
+
+    def test_unlink_input_pin(self, linked_design):
+        linked_design.link_by_name("s1.in", "vel")
+        linked_design.unlink_by_name("s1.in")
+        assert linked_design.blocks["s1"].pins["in"].signal.is_dummy
+
+    def test_unlink_input_removes_from_readers(self, linked_design):
+        linked_design.link_by_name("s1.in", "vel")
+        linked_design.unlink_by_name("s1.in")
+        assert linked_design.blocks["s1"].pins["in"] not in linked_design.signals["vel"].readers
+
+    def test_unlink_output_pin(self, linked_design):
+        linked_design.link_by_name("src.out", "vel")
+        linked_design.unlink_by_name("src.out")
+        assert linked_design.blocks["src"].pins["out"].signal.is_dummy
+
+    def test_unlink_output_clears_driver(self, linked_design):
+        linked_design.link_by_name("src.out", "vel")
+        linked_design.unlink_by_name("src.out")
+        assert linked_design.signals["vel"].driver is None
+
+    def test_unlink_unconnected_is_noop(self, linked_design):
+        linked_design.unlink_by_name("s1.in")
+        assert linked_design.blocks["s1"].pins["in"].signal.is_dummy
+
+    def test_unlink_preserves_value(self, linked_design):
+        linked_design.link_by_name("src.out", "vel")
+        linked_design.signals["vel"].value = 3.14
+        linked_design.unlink_by_name("src.out")
+        dummy = linked_design.dummy_signals["__src__out"]
+        assert dummy.value == 3.14
+
+    def test_unlink_restores_dummy(self, linked_design):
+        linked_design.link_by_name("s1.in", "vel")
+        linked_design.unlink_by_name("s1.in")
+        assert linked_design.blocks["s1"].pins["in"].signal.is_dummy
+
+    def test_unknown_block_raises(self, linked_design):
+        with pytest.raises(EmblocsError) as exc:
+            linked_design.unlink_by_name("nonexistent.in")
+        assert str(exc.value) == "block 'nonexistent' not found"
+
+    def test_unknown_pin_raises(self, linked_design):
+        with pytest.raises(EmblocsError) as exc:
+            linked_design.unlink_by_name("s1.nonexistent")
+        assert str(exc.value) == "'nonexistent' not found in block 's1'"
 
 class TestUnlinkFunction:
 
-    def test_unlink_function(self, function_design):
-        function_design.link_function("s1", "update", "fast")
-        function_design.unlink_function("s1", "update")
-        assert function_design.blocks["s1"].functions["update"].thread is None
+    def test_unlink_function(self, linked_design):
+        linked_design.link_by_name("s1.update", "fast")
+        linked_design.unlink_by_name("s1.update")
+        assert linked_design.blocks["s1"].functions["update"].thread is None
 
-    def test_unlink_removes_from_thread(self, function_design):
-        function_design.link_function("s1", "update", "fast")
-        function_design.unlink_function("s1", "update")
-        assert function_design.blocks["s1"].functions["update"] not in \
-               function_design.threads["fast"].functions
+    def test_unlink_removes_from_thread(self, linked_design):
+        linked_design.link_by_name("s1.update", "fast")
+        linked_design.unlink_by_name("s1.update")
+        assert linked_design.blocks["s1"].functions["update"] not in \
+               linked_design.threads["fast"].functions
 
-    def test_unlink_unassigned_is_noop(self, function_design):
-        function_design.unlink_function("s1", "update")
-        assert function_design.blocks["s1"].functions["update"].thread is None
+    def test_unlink_unassigned_is_noop(self, linked_design):
+        linked_design.unlink_by_name("s1.update")
+        assert linked_design.blocks["s1"].functions["update"].thread is None
 
-    def test_unlink_middle_of_thread(self, function_design):
-        function_design.link_function("s1", "update", "fast")
-        function_design.link_function("s2", "update", "fast")
-        function_design.unlink_function("s1", "update")
-        funcs = function_design.threads["fast"].functions
+    def test_unlink_middle_of_thread(self, linked_design):
+        linked_design.link_by_name("s1.update", "fast")
+        linked_design.link_by_name("s2.update", "fast")
+        linked_design.unlink_by_name("s1.update")
+        funcs = linked_design.threads["fast"].functions
         assert len(funcs) == 1
-        assert funcs[0] is function_design.blocks["s2"].functions["update"]
+        assert funcs[0] is linked_design.blocks["s2"].functions["update"]
 
-    def test_unknown_block_raises(self, function_design):
+    def test_unknown_block_raises(self, linked_design):
         with pytest.raises(EmblocsError) as exc:
-            function_design.unlink_function("nonexistent", "update")
-        assert str(exc.value) == "unknown block 'nonexistent'"
+            linked_design.unlink_by_name("nonexistent.update")
+        assert str(exc.value) == "block 'nonexistent' not found"
 
-    def test_unknown_function_raises(self, function_design):
+    def test_unknown_function_raises(self, linked_design):
         with pytest.raises(EmblocsError) as exc:
-            function_design.unlink_function("s1", "nonexistent")
-        assert str(exc.value) == "unknown function 's1.nonexistent'"
+            linked_design.unlink_by_name("s1.nonexistent")
+        assert str(exc.value) == "'nonexistent' not found in block 's1'"
+
+    def test_unlink_signal_raises(self, linked_design):
+        with pytest.raises(EmblocsError) as exc:
+            linked_design.unlink_by_name("vel")
+        assert str(exc.value) == "cannot unlink 'vel': cannot unlink Signal"
+
+    def test_unlink_block_raises(self, linked_design):
+        with pytest.raises(EmblocsError) as exc:
+            linked_design.unlink_by_name("s1")
+        assert str(exc.value) == "cannot unlink 's1': cannot unlink BlockInstance"
+
+# ---------------------------------------------------------------------------
+# set_value_by_name tests
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def design_with_signals(empty_design):
+    empty_design.add_signal("b", PinType.BOOL)
+    empty_design.add_signal("u", PinType.U32)
+    empty_design.add_signal("s", PinType.S32)
+    empty_design.add_signal("f", PinType.FLOAT)
+    return empty_design
+
+
+class TestSetSignalValue:
+
+    def test_set_bool_zero(self, design_with_signals):
+        design_with_signals.set_value_by_name("b", 0)
+        assert design_with_signals.signals["b"].value == 0
+
+    def test_set_bool_one(self, design_with_signals):
+        design_with_signals.set_value_by_name("b", 1)
+        assert design_with_signals.signals["b"].value == 1
+
+    def test_set_bool_nonzero_normalizes_to_one(self, design_with_signals):
+        design_with_signals.set_value_by_name("b", 2)
+        assert design_with_signals.signals["b"].value == 1
+
+    def test_set_bool_true_converts_to_int(self, design_with_signals):
+        design_with_signals.set_value_by_name("b", True)
+        assert design_with_signals.signals["b"].value == 1
+        assert isinstance(design_with_signals.signals["b"].value, int)
+
+    def test_set_bool_invalid_raises(self, design_with_signals):
+        with pytest.raises(EmblocsError) as exc:
+            design_with_signals.set_value_by_name("b", 1.5)
+        assert str(exc.value) == "cannot set value of 'b': value 1.5 is not valid for bool"
+
+    def test_set_u32_zero(self, design_with_signals):
+        design_with_signals.set_value_by_name("u", 0)
+        assert design_with_signals.signals["u"].value == 0
+
+    def test_set_u32_max(self, design_with_signals):
+        design_with_signals.set_value_by_name("u", 0xFFFFFFFF)
+        assert design_with_signals.signals["u"].value == 0xFFFFFFFF
+
+    def test_set_u32_negative_raises(self, design_with_signals):
+        with pytest.raises(EmblocsError) as exc:
+            design_with_signals.set_value_by_name("u", -1)
+        assert str(exc.value) == "cannot set value of 'u': value -1 is out of range for u32"
+
+    def test_set_u32_overflow_raises(self, design_with_signals):
+        with pytest.raises(EmblocsError) as exc:
+            design_with_signals.set_value_by_name("u", 0x100000000)
+        assert str(exc.value) == "cannot set value of 'u': value 4294967296 is out of range for u32"
+
+    def test_set_s32_zero(self, design_with_signals):
+        design_with_signals.set_value_by_name("s", 0)
+        assert design_with_signals.signals["s"].value == 0
+
+    def test_set_s32_min(self, design_with_signals):
+        design_with_signals.set_value_by_name("s", -0x80000000)
+        assert design_with_signals.signals["s"].value == -0x80000000
+
+    def test_set_s32_max(self, design_with_signals):
+        design_with_signals.set_value_by_name("s", 0x7FFFFFFF)
+        assert design_with_signals.signals["s"].value == 0x7FFFFFFF
+
+    def test_set_s32_overflow_raises(self, design_with_signals):
+        with pytest.raises(EmblocsError) as exc:
+            design_with_signals.set_value_by_name("s", 0x80000000)
+        assert str(exc.value) == "cannot set value of 's': value 2147483648 is out of range for s32"
+
+    def test_set_s32_underflow_raises(self, design_with_signals):
+        with pytest.raises(EmblocsError) as exc:
+            design_with_signals.set_value_by_name("s", -0x80000001)
+        assert str(exc.value) == "cannot set value of 's': value -2147483649 is out of range for s32"
+
+    def test_set_float(self, design_with_signals):
+        design_with_signals.set_value_by_name("f", 1.5)
+        assert design_with_signals.signals["f"].value == 1.5
+
+    def test_set_float_from_int(self, design_with_signals):
+        design_with_signals.set_value_by_name("f", 1)
+        assert design_with_signals.signals["f"].value == 1.0
+        assert isinstance(design_with_signals.signals["f"].value, float)
+
+    def test_set_float_invalid_raises(self, design_with_signals):
+        with pytest.raises(EmblocsError) as exc:
+            design_with_signals.set_value_by_name("f", "oops")
+        assert str(exc.value) == "cannot set value of 'f': value 'oops' is not valid for float"
+
+    def test_unknown_signal_raises(self, design_with_signals):
+        with pytest.raises(EmblocsError) as exc:
+            design_with_signals.set_value_by_name("nonexistent", 0)
+        assert str(exc.value) == "'nonexistent' not found in design 'test.blocs'"
+
+    def test_driven_signal_raises(self, design_with_signals, block_def_with_pins):
+        design_with_signals.add_block_def(block_def_with_pins)
+        design_with_signals.add_block_instance("s1", "simple")
+        instance = design_with_signals.blocks["s1"]
+        design_with_signals.signals["f"].driver = instance.pins["in"]
+        with pytest.raises(EmblocsError) as exc:
+            design_with_signals.set_value_by_name("f", 1.0)
+        assert str(exc.value) == "cannot set value of 'f': signal 'f' is driven by 's1.in'; cannot set value directly"
+
+class TestSetPinValue:
+
+    def test_set_unconnected_pin(self, linked_design):
+        linked_design.set_value_by_name("s1.in", 1.5)
+        dummy = linked_design.dummy_signals["__s1__in"]
+        assert dummy.value == 1.5
+
+    def test_set_connected_pin_raises(self, linked_design):
+        linked_design.link_by_name("s1.in", "vel")
+        with pytest.raises(EmblocsError) as exc:
+            linked_design.set_value_by_name("s1.in", 1.5)
+        assert str(exc.value) == "cannot set value of 's1.in': pin 's1.in' is connected to signal 'vel'; cannot set value directly"
+
+    def test_unknown_block_raises(self, linked_design):
+        with pytest.raises(EmblocsError) as exc:
+            linked_design.set_value_by_name("nonexistent.in", 1.5)
+        assert str(exc.value) == "block 'nonexistent' not found"
+
+    def test_unknown_pin_raises(self, linked_design):
+        with pytest.raises(EmblocsError) as exc:
+            linked_design.set_value_by_name("s1.nonexistent", 1.5)
+        assert str(exc.value) == "'nonexistent' not found in block 's1'"
+
+    def test_type_validation(self, linked_design):
+        """set_pin_value rejects values incompatible with the pin type."""
+        with pytest.raises(EmblocsError):
+            linked_design.set_value_by_name("s1.in", "not_a_number")
