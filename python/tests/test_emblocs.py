@@ -6,7 +6,7 @@
 import pytest
 from emblocs import (
     Design, BlockDef, BlockInstance, Signal, Thread,
-    PinDef, FunctDef, VarDef,
+    FieldDef, PinDef, FunctDef, VarDef,
     PinType, PinDir,
     EmblocsError,
 )
@@ -32,7 +32,7 @@ def minimal_block_def():
         pins                 = {},
         functions            = {},
         namespace            = {},
-        ordered_declarations = [],
+        ordered_fields       = [],
     )
 
 
@@ -47,7 +47,7 @@ def another_block_def():
         pins                 = {},
         functions            = {},
         namespace            = {},
-        ordered_declarations = [],
+        ordered_fields       = [],
     )
 
 
@@ -113,11 +113,17 @@ def design_with_limit1(empty_design, minimal_block_def):
 @pytest.fixture
 def block_def_with_pins():
     """A BlockDef with one input pin and one function."""
+    in_field = FieldDef(
+        name      = "in_",
+        dims      = (),
+        pin_type  = PinType.FLOAT,
+        direction = PinDir.INPUT,
+        c_decl    = None,
+    )
     in_pin = PinDef(
         name         = "in",
-        field_name   = "in_",
-        pin_type     = PinType.FLOAT,
-        direction    = PinDir.INPUT,
+        field        = in_field,
+        field_indices = (),
     )
     update_func = FunctDef(
         name        = "update",
@@ -131,7 +137,7 @@ def block_def_with_pins():
         pins                 = {"in": in_pin},
         functions            = {"update": update_func},
         namespace            = {"in": in_pin, "update": update_func},
-        ordered_declarations = [in_pin, update_func],
+        ordered_fields       = [in_field],
     )
 
 
@@ -360,11 +366,17 @@ class TestAddThread:
 @pytest.fixture
 def block_def_with_output():
     """A BlockDef with one output float pin."""
+    out_field = FieldDef(
+        name      = "out_",
+        dims      = (),
+        pin_type  = PinType.FLOAT,
+        direction = PinDir.OUTPUT,
+        c_decl    = None,
+    )
     out_pin = PinDef(
         name         = "out",
-        field_name   = "out_",
-        pin_type     = PinType.FLOAT,
-        direction    = PinDir.OUTPUT,
+        field        = out_field,
+        field_indices = (),
     )
     return BlockDef(
         name                 = "source",
@@ -374,18 +386,24 @@ def block_def_with_output():
         pins                 = {"out": out_pin},
         functions            = {},
         namespace            = {"out": out_pin},
-        ordered_declarations = [out_pin],
+        ordered_fields       = [out_field],
     )
 
 
 @pytest.fixture
 def block_def_with_raw():
     """A BlockDef with one raw input pin."""
+    raw_field = FieldDef(
+        name      = "raw_in_",
+        dims      = (),
+        pin_type  = PinType.RAW,
+        direction = PinDir.INPUT,
+        c_decl    = None,
+    )
     raw_pin = PinDef(
         name         = "raw_in",
-        field_name   = "raw_in_",
-        pin_type     = PinType.RAW,
-        direction    = PinDir.INPUT,
+        field        = raw_field,
+        field_indices = (),
     )
     return BlockDef(
         name                 = "passthrough",
@@ -395,7 +413,7 @@ def block_def_with_raw():
         pins                 = {"raw_in": raw_pin},
         functions            = {},
         namespace            = {"raw_in": raw_pin},
-        ordered_declarations = [raw_pin],
+        ordered_fields       = [raw_field],
     )
 
 

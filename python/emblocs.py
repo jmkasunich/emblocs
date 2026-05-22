@@ -327,22 +327,47 @@ class BlockSpec:
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
+class FieldDef:
+    """
+    A single C struct field in a block instance struct, child of a BlockDef.
+    Represents either a pin field (one or more EMBLOCS pins sharing one C array)
+    or a private var field (no EMBLOCS pins).
+
+    Fields:
+        field_name  -- C struct member name (e.g. "ch00_out_")
+        field_dims  -- concrete array dimensions as a tuple of ints;
+                       () for scalar fields
+        pin_type    -- PinType enum value for pin fields; None for var fields
+        direction   -- PinDir enum value for pin fields; None for var fields
+        c_decl      -- full C declaration string for var fields (e.g.
+                       "float accumulated;"); None for pin fields
+    """
+    name:       str
+    dims:       tuple[int, ...]
+    pin_type:   PinType | None
+    direction:  PinDir | None
+    c_decl:     str | None
+
+    def describe(self) -> str:
+        if self.c_decl is not None:
+            return f"field  var   {self.c_decl}"
+        dims_str = "".join(f"[{d}]" for d in self.dims)
+        return (f"field  {self.pin_type.name:<6} {self.direction.name:<7} "
+                f"{self.name}{dims_str}")
+
+@dataclass(frozen=True)
 class PinDef:
     """
     A fully resolved pin definition, child of a BlockDef.
 
     Fields:
         name         -- EMBLOCS-visible pin name (e.g. "ch00_out")
-        field_name   -- C struct field name (e.g. "ch00_out_")
-        field_indices -- for array pins, the list of concrete indices for this slot
-        pin_type     -- PinType enum value
-        direction    -- PinDir enum value
+        field        -- FieldDef for the C struct member
+        field_indices -- the actual array indices for this pin, () for scalar
         description  -- /// annotation text, or empty string if none
     """
     name:         str
-    field_name:   str
-    pin_type:     PinType
-    direction:    PinDir
+    field:        FieldDef
     field_indices: tuple[int, ...] = ()
     description:  str = ""
 
@@ -350,12 +375,19 @@ class PinDef:
         desc = _format_descr(self.description)
         if self.field_indices:
             indices = "".join(f"[{i}]" for i in self.field_indices)
-            field_str = f"{self.field_name}{indices}"
+            field_str = f"{self.field.name}{indices}"
         else:
-            field_str = self.field_name
-        return (f"pin  {self.pin_type.name:<6} {self.direction.name:<7} "
+            field_str = self.field.name
+        return (f"pin  {self.field.pin_type.name:<6} {self.field.direction.name:<7} "
                 f"{self.name} -> {field_str}{desc}")
 
+    @property
+    def pin_type(self) -> PinType:
+        return self.field.pin_type
+
+    @property
+    def direction(self) -> PinDir:
+        return self.field.direction
 
 @dataclass(frozen=True)
 class FunctDef:
@@ -393,11 +425,9 @@ class BlockDef:
                        PinDef or FunctDef objects; populated at resolution
                        time, catches pin/function name collisions
         params      -- dict of param name -> concrete integer value
-        ordered_declarations -- complete ordered list of PinDef, VarDef,
-                               and FunctDef objects, preserving declaration
-                               order from the .bloc file.  Used for C struct
-                               generation and for function/pin ordering
-                               analysis.
+        ordered_fields -- ordered list of FieldDef objects in declaration
+                          order from the .bloc file; used for C struct
+                          generation in variant mode
     """
     name:        str
     source_path: str
@@ -406,7 +436,7 @@ class BlockDef:
     functions:   dict[str, FunctDef]
     namespace:   dict[str, BlockDefChild]
     params:      dict[str, int]
-    ordered_declarations: list[PinDef | VarDef | FunctDef]
+    ordered_fields: list[FieldDef]
 
     def describe(self) -> str:
         lines = []
@@ -414,8 +444,12 @@ class BlockDef:
         lines.append(f"BlockDef: {self.name}  ({self.source_path}){desc}")
         for p, v in self.params.items():
             lines.append(_indent_child(f"param  {p} = {v}"))
-        for decl in self.ordered_declarations:
-            lines.append(_indent_child(decl.describe()))
+        for f in self.ordered_fields:
+            lines.append(_indent_child(f.describe()))
+        for p in self.pins.values():
+            lines.append(_indent_child(p.describe()))
+        for f in self.functions.values():
+            lines.append(_indent_child(f.describe()))
         return "\n".join(lines)
 
 # ---------------------------------------------------------------------------
@@ -495,6 +529,13 @@ class PinInstance:
         sig = self.signal.name if self.signal else "dummy"
         return f"pin  {self.full_name} -> {sig}"
 
+    @property
+    def pin_type(self) -> PinType:
+        return self.pin_def.pin_type
+
+    @property
+    def direction(self) -> PinDir:
+        return self.pin_def.direction
 
 @dataclass
 class FunctInstance:
@@ -677,7 +718,7 @@ class Design:
             dummy_name = f"__{instance_name}__{pin_name}"
             dummy = Signal(
                 name     = dummy_name,
-                sig_type = pin.pin_def.pin_type if pin.pin_def.pin_type != PinType.RAW
+                sig_type = pin.pin_type if pin.pin_type != PinType.RAW
                         else PinType.U32,
                 is_dummy = True,
             )
@@ -816,14 +857,14 @@ class Design:
             raise EmblocsError(f"pin '{pin.full_name}' is already connected"
                                f" to signal {pin.signal.name!r}")
         # validate type: raw pins connect to any signal type
-        if pin.pin_def.pin_type != PinType.RAW:
-            if pin.pin_def.pin_type != signal.sig_type:
+        if pin.pin_type != PinType.RAW:
+            if pin.pin_type != signal.sig_type:
                 raise EmblocsError(
                     f"type mismatch: pin '{pin.full_name}' is "
-                    f"{pin.pin_def.pin_type.name} but signal {signal.name!r} is "
+                    f"{pin.pin_type.name} but signal {signal.name!r} is "
                     f"{signal.sig_type.name}")
         # check for driver conflicts, then connect
-        if pin.pin_def.direction == PinDir.OUTPUT:
+        if pin.direction == PinDir.OUTPUT:
             if signal.driver is not None:
                 raise EmblocsError(
                     f"signal {signal.name!r} already has driver "
@@ -845,7 +886,7 @@ class Design:
         signal = pin.signal
         dummy = self.dummy_signals[f"__{pin.block.name}__{pin.pin_def.name}"]
         dummy.value = signal.value
-        if pin.pin_def.direction == PinDir.OUTPUT:
+        if pin.direction == PinDir.OUTPUT:
             signal.driver = None
         else:
             signal.readers.remove(pin)

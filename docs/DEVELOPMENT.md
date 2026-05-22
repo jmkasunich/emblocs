@@ -221,3 +221,10 @@ python/tests/
 - Code generation (Tool 1 template mode, Tool 1 variant mode, Tool 2) not yet started
 - Runtime monitor not yet started
 - CMake integration not yet started
+- `full_name` member in PinInstance and FunctInstance should be implemented
+  as a property instead of another data member.
+```
+@property
+def full_name(self) -> str:
+    return f"{self.block.name}.{self.pin_def.name}"
+```

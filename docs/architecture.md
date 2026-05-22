@@ -181,10 +181,10 @@ line are abandoned; subcommands that already completed are not rolled back.
 | Subcommand | Meaning |
 |------------|---------|
 | `=value`   | Set the value of a signal or unconnected pin |
-| `+target`  | Connect: link a pin to a signal, add a function to a thread, or vice versa |
-| `-target`  | Disconnect: unlink a named pin or function from this object |
+| `+name`    | Connect: link a pin to a signal, add a function to a thread, or vice versa |
+| `-name`    | Disconnect: unlink a named pin or function from target object |
 | `-`        | Disconnect: unlink this pin or function from whatever it is connected to |
-| `-+target` | Rebind: disconnect current target, then connect to new target |
+| `-+name` | Rebind: disconnect current target, then connect to new target |
 
 When a pin is disconnected, its current value is preserved by copying it into
 the pin's dummy signal.

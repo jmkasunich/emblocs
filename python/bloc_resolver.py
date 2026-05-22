@@ -9,7 +9,7 @@ import sys
 from emblocs import (
     BlockSpec, BlockDef,
     ParamSpec,
-    PinSpec, PinDef, DimSpec,
+    PinSpec, FieldDef, PinDef, DimSpec,
     VarDef,
     FunctSpec, FunctDef,
     Statement,
@@ -56,7 +56,7 @@ def _build_variables(spec: BlockSpec,
 # ---------------------------------------------------------------------------
 
 def _recurse_pin(pin_spec: PinSpec, dims: list[DimSpec],
-                variables: dict[str, int]) -> list[PinDef]:
+                variables: dict[str, int], field: FieldDef) -> list[PinDef]:
     """
     Recursively expand a PinSpec into PinDef objects.
      dims is the list of remaining dimensions to expand; variables contains
@@ -82,66 +82,82 @@ def _recurse_pin(pin_spec: PinSpec, dims: list[DimSpec],
                 return []
         return [PinDef(
             name         = name,
-            field_name   = pin_spec.field_name,
-            pin_type     = pin_spec.pin_type,
-            direction    = pin_spec.direction,
+            field        = field,
             field_indices = tuple(variables[dim.index_var] for dim in pin_spec.dims),
             description  = pin_spec.description,
         )]
     else:
         # recursive case: expand the next dimension
         dim = dims[0]
-        try:
-            size = evaluate(dim.size_expr, variables)
-        except ExpressionError as e:
-            ctx.error(f"dimension size error in pin "
-                      f"{pin_spec.name_template!r}: {e}")
-            return []
+        dim_index = len(pin_spec.dims) - len(dims)
+        size = field.dims[dim_index]
         results = []
         for idx in range(size):
             slot_vars = {**variables, dim.index_var: idx}
-            results.extend(_recurse_pin(pin_spec, dims[1:], slot_vars))
+            results.extend(_recurse_pin(pin_spec, dims[1:], slot_vars, field))
         return results
 
 
 def _expand_pin(pin_spec: PinSpec,
-                variables: dict[str, int]) -> list[PinDef]:
+                variables: dict[str, int]) -> tuple[FieldDef, list[PinDef]]:
     """
-    Expand a PinSpec into one or more PinDef objects.
+    Expand a PinSpec into a FieldDef and one or more PinDef objects.
 
     For scalar pins, returns a single PinDef.
     For array pins, iterates all dimension index variables and returns
     one PinDef per slot for which the export condition is true.
     """
-    return _recurse_pin(pin_spec, pin_spec.dims, variables)
+    # evaluate concrete dimension sizes for the FieldDef
+    dims = []
+    for d in pin_spec.dims:
+        try:
+            dims.append(evaluate(d.size_expr, variables))
+        except ExpressionError as e:
+            ctx.error(f"dimension size error in pin {pin_spec.name_template!r}: {e}")
+            return None, []
+    field = FieldDef(
+        name      = pin_spec.field_name,
+        dims      = tuple(dims),
+        pin_type  = pin_spec.pin_type,
+        direction = pin_spec.direction,
+        c_decl    = None,
+    )
+    return field, _recurse_pin(pin_spec, pin_spec.dims, variables, field)
 
 
 def _expand_var(var_def: VarDef,
-                variables: dict[str, int]) -> list[VarDef]:
+                variables: dict[str, int]) -> tuple[FieldDef, list[VarDef]]:
     """
-    Pass a VarDef through unchanged.
+    Expand a VarDef into a FieldDef and a list containing the VarDef.
     Variables dict is unused but present for dispatcher symmetry.
     """
-    return [var_def]
+    field = FieldDef(
+        name      = var_def.field_name,
+        dims      = (),
+        pin_type  = None,
+        direction = None,
+        c_decl    = var_def.c_decl,
+    )
+    return field, [var_def]
 
 
 def _expand_funct(funct_spec: FunctSpec,
-                  variables: dict[str, int]) -> list[FunctDef]:
+                  variables: dict[str, int]) -> tuple[None, list[FunctDef]]:
     """
     Convert a FunctSpec to a FunctDef.
     Variables dict is unused but present for dispatcher symmetry.
     """
-    return [FunctDef(
+    return None, [FunctDef(
         name        = funct_spec.name,
         description = funct_spec.description,
     )]
 
 
 def _expand_statement(statement: Statement,
-                      variables: dict[str, int]) -> list:
+                      variables: dict[str, int]) -> tuple[FieldDef | None, list]:
     """
     Evaluate #if conditions for a statement, then dispatch to the
-    appropriate expander.  Returns an empty list if any condition
+    appropriate expander.  Returns (None, []) if any condition
     is false or if an error occurs.
     """
     # evaluate all active #if conditions
@@ -150,9 +166,9 @@ def _expand_statement(statement: Statement,
             result = evaluate(cond, variables)
         except ExpressionError as e:
             ctx.error(f"condition expression error {cond!r}: {e}")
-            return []
+            return None, []
         if not result:
-            return []
+            return None, []
 
     obj = statement.statement
     if isinstance(obj, PinSpec):
@@ -163,7 +179,7 @@ def _expand_statement(statement: Statement,
         return _expand_funct(obj, variables)
     else:
         ctx.error(f"unknown statement type: {type(obj).__name__}")
-        return []
+        return None, []
 
 
 # ---------------------------------------------------------------------------
@@ -238,16 +254,17 @@ def resolve(spec: BlockSpec, variant_name: str,
     if not ctx.no_errors():
         return None
 
-    ordered_declarations = []
+    ordered_fields = []
     namespace = {}
     pins      = {}
     functions = {}
     type_to_dict = { PinDef: pins, FunctDef: functions }
 
     for statement in spec.statements:
-        expanded = _expand_statement(statement, variables)
+        field, expanded = _expand_statement(statement, variables)
+        if field is not None:
+            ordered_fields.append(field)
         for obj in expanded:
-            ordered_declarations.append(obj)
             if not isinstance(obj, VarDef):
                 if obj.name in namespace:
                     ctx.error(f"duplicate name {obj.name!r} after resolution")
@@ -267,7 +284,7 @@ def resolve(spec: BlockSpec, variant_name: str,
         pins                 = pins,
         functions            = functions,
         namespace            = namespace,
-        ordered_declarations = ordered_declarations,
+        ordered_fields       = ordered_fields,
     )
 
 
