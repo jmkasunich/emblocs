@@ -22,6 +22,7 @@ modules are peers in the same directory.
 | `bloc_parser.py` | Parser for .bloc block template files → BlockSpec |
 | `bloc_resolver.py` | Resolver: BlockSpec + params → BlockDef |
 | `blocs_parser.py` | Parser for .blocs system definition files → Design |
+| `blocs_output.py` | Serializer: Design → .blocs format output |
 
 ### 1.2 Three-Stage Parsing Pipeline
 
@@ -46,16 +47,24 @@ Public entry points follow the pattern:
 
 ### 1.3 Error Reporting
 
-All error reporting goes through `parse_common.report()`. Key rules:
+All error reporting goes through the module-level `ctx` instance of
+`ErrorContext` in `parse_common.py`. Key rules:
 
-- `report()` reads source/line/column from the current `ErrorContext` by default
-- Pass `token=tok` to use a token's line/column
-- Pass `lineno=OMIT` or `column=OMIT` to suppress those fields
-- `Severity.FATAL` calls `sys.exit(1)` — use only for truly unrecoverable
-  situations (file not found, wrong encoding). Parser syntax errors use ERROR.
-- Each parser pushes an `ErrorContext` at the start and pops at the end
-- The resolver uses `push_context()` / `pop_context()` called by its caller;
-  the caller sets line/column to point at the triggering command
+- `ctx.set(token=tok)` updates the current source location before processing
+  each token; subsequent error calls use this location automatically
+- `ctx.error()`, `ctx.warning()`, `ctx.info()`, `ctx.fatal()` report
+  diagnostics using the current location from the context stack
+- Context location can be overridden by passing `source=str`, `token=tok`,
+  `lineno=n`, or `column=n` to any reporting call.
+- Passing `source=OMIT`, `lineno=OMIT` or `column=OMIT` explicitly
+  suppresses that field from the output regardless of the context value.
+- `ctx.fatal()` calls `sys.exit(1)` — use only for truly unrecoverable
+  situations (file not found, wrong encoding). Parser syntax errors use
+  `ctx.error()`
+- Each parser pushes a new context frame at the start via `ctx.push()` and
+  pops it at the end via `ctx.pop()`; `ctx.summarize()` is called before
+  popping to print error/warning/info counts
+
 
 ### 1.4 Bloc Spec Cache
 
@@ -92,7 +101,10 @@ Design-level (from .blocs parser):
 `Design` in `emblocs.py` provides methods for all system-building operations.
 Parsers call these methods; the methods validate and execute the operation.
 Errors are raised as `EmblocsError` exceptions; parsers catch them and call
-`report()` with the appropriate token for location information.
+`ctx.error()` with the appropriate message.
+
+The public API provides object-based primary methods and name-based convenience
+wrappers:
 
 | Method | Description |
 |--------|-------------|
@@ -100,12 +112,14 @@ Errors are raised as `EmblocsError` exceptions; parsers catch them and call
 | `add_block_instance(name, block_def_name)` | Create a named block instance |
 | `add_signal(name, sig_type)` | Create a named signal |
 | `add_thread(name, period_ns)` | Create a named thread |
-| `set_signal_value(name, value)` | Set value of an undriven signal |
-| `set_pin_value(block, pin, value)` | Set value of an unconnected pin |
-| `link_pin(block, pin, signal)` | Connect a pin to a signal |
-| `unlink_pin(block, pin)` | Disconnect a pin, preserving value in dummy signal |
-| `link_function(block, func, thread)` | Add a function to a thread |
-| `unlink_function(block, func)` | Remove a function from its thread |
+| `set_value(obj, value)` | Set value of a signal or unconnected pin |
+| `link(obj1, obj2)` | Connect a pin to a signal, or a function to a thread |
+| `unlink(obj)` | Disconnect a pin or function |
+| `set_value_by_name(name, value)` | Name-based wrapper for set_value |
+| `link_by_name(name1, name2)` | Name-based wrapper for link |
+| `unlink_by_name(name)` | Name-based wrapper for unlink |
+| `find_child_by_name(name)` | Look up a direct child of Design by name |
+| `find_object_by_name(name)` | Look up any object including block.pin dotted names |
 
 ### 2.3 Dummy Signals
 
@@ -119,9 +133,12 @@ cases, and preserves pin values across connect/disconnect cycles.
 ### 2.4 Namespace
 
 All block definitions, block instances, signals, and threads share one flat
-namespace enforced by `Design.namespace` (a `set[str]`). Dummy signal names
-are not in the namespace — their `__block__pin` naming convention ensures
-uniqueness without namespace pollution.
+namespace enforced by `Design.namespace` (a `dict[str, object]`). In addition
+to ensuring name uniqueness, the namespace allows O(1) lookup of an object
+by name even if its type is unknown; the type can then be checked after
+lookup.
+Dummy signal names are not in the namespace — their `__block__pin` naming
+convention ensures uniqueness without namespace pollution.
 
 ---
 
@@ -185,31 +202,22 @@ python/tests/
 ### 4.1 Completed and Tested
 
 - `expressions.py` — expression evaluator with full test coverage
-- `parse_common.py` — shared infrastructure with full test coverage
-- `bloc_parser.py` — .bloc file parser, refactored to use parse_common
-- `bloc_resolver.py` — BlockSpec → BlockDef resolver (no dedicated test suite yet)
-- `emblecs.py` — Design object model with full test coverage of all methods
-- `blocs_parser.py` — lexer complete and tested; `cmd_blockdef` complete and tested
+- `parse_common.py` — shared infrastructure with full test coverage;
+  `ErrorContext` class with module-level `ctx` instance
+- `bloc_parser.py` — .bloc file parser with full test coverage
+- `bloc_resolver.py` — BlockSpec → BlockDef resolver; no dedicated test suite
+- `emblocs.py` — Design object model with full test coverage of all methods
+- `blocs_parser.py` — complete: lexer, all creation commands, all subcommand
+  handlers (`=`, `+`, `-`, `-+`), full test coverage
+- `blocs_output.py` — Design → .blocs serializer; manually tested
 
-### 4.2 In Progress
-
-- `blocs_parser.py` — `cmd_block`, `cmd_signal`, `cmd_thread` not yet written
-- Subcommand handlers (`=`, `+`, `-`, `-+`) not yet written
-
-### 4.3 Not Yet Started
-
-- `bloc_resolver.py` dedicated test suite
-- `test_bloc_parser.py` — only a few initial tests written
-- Code generation (Tool 1 template mode, Tool 1 variant mode, Tool 2)
-- Runtime monitor
-- CMake integration
-
-### 4.4 Known Gaps and Deferred Items
+### 4.2 Known Gaps and Deferred Items
 
 - `bloc_resolver.py` has no dedicated test suite
-- `test_bloc_parser.py` needs significantly more coverage
-- `parse_blocs_string()` still calls `summarize()` — may want to make optional
-- `parse_bloc_file()` calls `summarize()` only on errors — consistent behavior
-  for `parse_blocs_file()` should be verified
-- Include mechanism for `.blocs` files not yet designed or implemented
-- Search path for `.bloc` files (`resolve_bloc_path()` has a stub comment)
+- `blocs_output.py` has no automated test suite
+- `.bloc` file path handling in `blockdef` commands currently stores the
+  original relative path; a tag-based library path system is planned but
+  deferred until real project experience informs the design
+- Code generation (Tool 1 template mode, Tool 1 variant mode, Tool 2) not yet started
+- Runtime monitor not yet started
+- CMake integration not yet started

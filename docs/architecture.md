@@ -290,13 +290,14 @@ Build-time and runtime Python tools (see Section 7).
 All Python tools import `emblocs.py`, which defines the complete EMBLOCS
 object model as Python classes. This single source of truth covers both
 block-level objects (Block, Pin, Function, Parameter) and system-level
-objects (Signal, Thread, BlockInstance). Each class owns its own JSON
-serialization and deserialization.
+objects (Signal, Thread, BlockInstance).
 
 By sharing the object model across tools, consistency is guaranteed: Tool 1,
-Tool 2, and the runtime monitor all work with the same class hierarchy. The
-JSON schema version is embedded in each serialized file so tools can detect
-and reject incompatible versions gracefully.
+Tool 2, and the runtime monitor all work with the same class hierarchy.
+
+Parsers for the .bloc and .blocs languages are implemented as modules;
+any tool that needs to parse a file imports the appropriate parser and
+gets the object level model directly.
 
 ### 7.2 Runtime Monitor
 
@@ -382,16 +383,14 @@ without requiring a variant build to have been run first.
 
 #### 7.3.2 Tool 2: System Compiler (`blocs_compiler.py`)
 
-Tool 2 reads a `.blocs` system definition file and builds a complete
-in-memory model of the system using the classes from `emblocs.py`. For each
-`blockdef` command it invokes Tool 1 in variant mode to obtain the variant
-artifacts, then deserializes `<variant>.json` into the object model. For
-each `signal` and `thread` command it constructs the corresponding objects,
+Tool 2 uses `blocs_parser.py` to read a `.blocs` system definition file
+and build a complete in-memory model of the system using the classes
+from `emblocs.py`.
+For each `blockdef` command it invokes `bloc_parser.py` to parse the .bloc
+file, then `bloc_resolver.py` to generate the specific variant.
+For each `signal` and `thread` command it constructs the corresponding objects,
 tracking connections, values, and thread ordering. The resulting in-memory
 model is fully inspectable and is used to drive all output generation.
-
-Tool 2 never parses `.bloc` files directly; the JSON file is the clean
-interface between the two tools.
 
 Tool 2 produces:
 

@@ -47,9 +47,9 @@ thread, pin, or function.
   imposes no significant identifier length constraint for the supported targets)
 - Case-sensitive: `MySignal` and `mysignal` are distinct names
 
-### 2.2 Qualified Names
+### 2.2 Full Names
 
-A qualified name refers to a pin or function within a specific block instance:
+A full name refers to a pin or function within a specific block instance:
 
     <block-instance-name>.<pin-or-func-name>
 
@@ -72,25 +72,32 @@ characters have special meaning as token-initial characters:
 
 ### 2.4 Values
 
-A value token is used with the `=` subcommand. Interpretation depends on
-the type of the target signal or pin:
+Values are used with the `=` subcommand to set the contents of a signal or
+unconnected pin. The stored representation depends on the signal or pin type:
 
-| Signal/pin type | Accepted value format |
+| Signal/pin type | Stored representation |
 |-----------------|-----------------------|
-| `bool`          | `0`, `1`, `true`, `false` |
-| `u32`           | Decimal integer in range [0, 2³²−1], or hexadecimal with `0x` prefix |
-| `s32`           | Signed decimal integer in range [−2³¹, 2³¹−1] |
-| `float`         | Decimal floating-point, optionally with exponent (e.g. `1.5e-3`) |
+| `bool`          | Integer 0 or 1 only; any non-zero value normalizes to 1 |
+| `u32`           | Unsigned 32-bit integer in range [0, 2³²−1] |
+| `s32`           | Signed 32-bit integer in range [−2³¹, 2³¹−1] |
+| `float`         | 32-bit IEEE 754 floating-point |
 
-Values are validated against the target type at parse time. Out-of-range or
-malformed values are errors. The hexadecimal format for `u32` uses C
-conventions: `0x` prefix, digits `0-9` and `a-f`/`A-F`, case insensitive.
-This is particularly useful for bitmask values (e.g. `0xFF00`). Additional
-numeric formats may be added if compelling use cases arise.
+Values are supplied in the `.blocs` language as expressions. Integer
+expressions support decimal and hexadecimal literals (e.g. `42`, `0xFF`),
+arithmetic and bitwise operators (e.g. `48*200`, `MASK&0xF`), and the
+keywords `true` and `false` (for bool targets only). Float expressions
+support decimal floating-point with optional exponent (e.g. `1.5`, `1.5e-3`,
+`25.4/4`). Expression syntax and operator precedence follow the rules of
+`expressions.py`; because values are single tokens, expressions must be
+written without internal whitespace. Out-of-range results are errors.
 
 ### 2.5 Period Values
 
-The thread period is specified as an unsigned decimal integer in nanoseconds.
+The thread period is specified in nanoseconds as an integer expression,
+following the same rules as integer value expressions in Section 2.4.
+The result must be a positive integer in the range [1, 2³²−1].
+Common forms include decimal literals (`1000000`), hexadecimal (`0xF4240`),
+and arithmetic expressions (`1000*1000`).
 
 ### 2.6 Paths
 
@@ -457,8 +464,8 @@ command         ::= blockdef-cmd
                   | pin-mod-cmd
                   | func-mod-cmd
 
-blockdef-cmd    ::= 'blockdef' identifier path { option }
-option          ::= identifier [ '=' token ]
+blockdef-cmd    ::= 'blockdef' identifier path { param }
+param           ::= identifier '=' expression
 
 block-cmd       ::= 'block' identifier identifier
 
@@ -467,35 +474,35 @@ type            ::= 'bool' | 'bit' | 'u32' | 's32' | 'float'
                                                        (* 'bool'/'bit' TBD *)
 
 thread-cmd      ::= 'thread' identifier period-ns { thread-subcmd }
-period-ns       ::= unsigned-integer
+period-ns       ::= expression
 
 signal-mod-cmd  ::= identifier { signal-subcmd }
-signal-subcmd   ::= '=' value
-                  | '+' qualified
-                  | '-' qualified
-                  | '-+' qualified
+signal-subcmd   ::= '=' expression
+                  | '+' fullname
+                  | '-' fullname
+                  | '-+' fullname
 
 thread-mod-cmd  ::= identifier { thread-subcmd }
-thread-subcmd   ::= '+' qualified
-                  | '-' qualified
-                  | '-+' qualified
+thread-subcmd   ::= '+' fullname
+                  | '-' fullname
+                  | '-+' fullname
 
-pin-mod-cmd     ::= qualified { pin-subcmd }
-pin-subcmd      ::= '=' value
+pin-mod-cmd     ::= fullname { pin-subcmd }
+pin-subcmd      ::= '=' expression
                   | '+' identifier
                   | '-'
                   | '-+' identifier
 
-func-mod-cmd    ::= qualified { func-subcmd }
+func-mod-cmd    ::= fullname { func-subcmd }
 func-subcmd     ::= '+' identifier
                   | '-'
                   | '-+' identifier
 
-qualified       ::= identifier '.' identifier
+fullname        ::= identifier '.' identifier
 
 identifier      ::= [A-Za-z_][A-Za-z0-9_]*            (* max 31 chars *)
-value           ::= token                              (* validated against target type *)
-path            ::= token                              (* forward slashes; relative to .blocs file *)
+expression      ::= token  (* integer or float expression; no internal whitespace *)
+path            ::= token  (* see Section 2.6 for path conventions *)
 token           ::= <any non-whitespace ASCII sequence>
 ```
 

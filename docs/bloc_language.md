@@ -221,7 +221,7 @@ language's identifier rules.
 
 ### 2.4 Keywords
 
-Reserved keywords: `block`, `param`, `pin`, `var`, `function`, `init`,
+Reserved keywords: `block`, `param`, `pin`, `var`, `function`,
 `if`, `input`, `output`, `bool`, `u32`, `s32`, `float`, `raw`,
 `default`, `min`, `max`, `true`, `false`.
 
@@ -446,7 +446,7 @@ A maximum of two dimensions is supported.
 
 ```
 // scalar pin, no template specifiers, no dimensions
-// EMBLOCS name: "in_",  field name: "in_"
+// EMBLOCS name: "in",  field name: "in_"
 pin float  input   in   /// value to be processed
 
 // 1D array
