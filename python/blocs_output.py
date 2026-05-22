@@ -39,6 +39,10 @@ def canonical_block(lines: list[str], block: BlockInstance ) -> None:
     fields.append(f"{block.name}")
     fields.append(f"{block.block_def.name}")
     lines.append(" ".join(fields))
+    for key in sorted(block.pins):
+        pin = block.pins[key]
+        if pin.signal.is_dummy and pin.signal.value != 0:
+            lines.append(f"{pin.full_name} ={pin.signal.value}")
 
 def canonical_signal(lines: list[str], signal: Signal ) -> None:
     fields = []
