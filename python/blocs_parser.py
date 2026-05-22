@@ -158,6 +158,7 @@ def cmd_blockdef(tokens: list[Token], design: Design) -> tuple[BlockDef | None, 
         if spec is None:
             ctx.error(f"failed to parse {path_tok.text!r}", token=path_tok)
             return None, 0
+        spec.source_path = path_tok.text  #store original relative path, not absolute
         _bloc_spec_cache[resolved_path] = spec
     spec = _bloc_spec_cache[resolved_path]
     # parse PARAM=value tokens
