@@ -88,12 +88,16 @@ def design_as_blocs(lines: list[str], design: Design) -> None:
 
 
 PIN_C_TYPES = {
-    PinType.BOOL:  "pin_bool_t",
-    PinType.U32:   "pin_u32_t",
-    PinType.S32:   "pin_s32_t",
-    PinType.FLOAT: "pin_float_t",
-    PinType.RAW:   "pin_raw_t",
+    PinType.BOOL:  "bl_pin_bit_t",
+    PinType.U32:   "bl_pin_u32_t",
+    PinType.S32:   "bl_pin_s32_t",
+    PinType.FLOAT: "bl_pin_float_t",
+    PinType.RAW:   "bl_pin_raw_t",
 }
+
+def _make_index_vars(n: int) -> tuple[str, ...]:
+    """Generate index variable names i, j, k, ... for n dimensions."""
+    return tuple(chr(ord('i') + k) for k in range(n))
 
 def paramspec_as_template_h(lines: list[str], param: ParamSpec) -> None:
     lines.append(f"#ifndef {param.name}")
@@ -104,19 +108,23 @@ def pinspec_as_instance_member(lines: list[str], pinspec: PinSpec) -> None:
     c_type = PIN_C_TYPES[pinspec.pin_type]
     if pinspec.dims:
         dim_sizes = "".join(f"[{d.size_expr}]" for d in pinspec.dims)
-        lines.append(f"    {c_type} *{pinspec.field_name}{dim_sizes};")
+        lines.append(f"    {c_type} {pinspec.field_name}{dim_sizes};")
     else:
-        lines.append(f"    {c_type} *{pinspec.field_name};")
+        lines.append(f"    {c_type} {pinspec.field_name};")
 
 def vardef_as_instance_member(lines: list[str], vardef: VarDef) -> None:
-    lines.append(f"    {VarDef.c_decl}")
+    lines.append(f"    {vardef.c_decl}")
 
 def pinspec_as_macro(lines: list[str], pinspec: PinSpec) -> None:
     macro_name = pinspec.field_name.upper()
-    if pinspec.dims:
-        lines.append(f"#define {macro_name}  (self->{pinspec.field_name})")
-    else:
+    lines.append(f"#define p{macro_name}  (self->{pinspec.field_name})")
+    if not pinspec.dims:
         lines.append(f"#define {macro_name}  (*self->{pinspec.field_name})")
+    else:
+        vars = _make_index_vars(len(pinspec.dims))
+        args = ", ".join(vars)
+        indices = "".join(f"[{v}]" for v in vars)
+        lines.append(f"#define {macro_name}({args})  (*(self->{pinspec.field_name}{indices}))")
 
 def update_conditions(lines: list[str], active_conditions: list[str], new_conditions: list[str]) -> None:
     # find where the two lists first diverge
@@ -133,6 +141,12 @@ def update_conditions(lines: list[str], active_conditions: list[str], new_condit
     for cond in new_conditions[common:]:
         lines.append(f"#if ({cond})")
         active_conditions.append(cond)
+
+def bl_mangle_as_macro(lines: list[str]) -> None:
+    lines.append(f"#define BL_CONCAT(a, b)   a##b")
+    lines.append(f"#define BL_CONCAT2(a, b)  BL_CONCAT(a,b)")
+    lines.append(f"#define BL_MANGLE(name)   BL_CONCAT2(BL_BLOCK_NAME, _##name)")
+    lines.append(f"")
 
 def blockspec_as_template_h(lines: list[str], blockspec: BlockSpec) -> None:
     block_name = blockspec.name
@@ -156,9 +170,7 @@ def blockspec_as_template_h(lines: list[str], blockspec: BlockSpec) -> None:
             paramspec_as_template_h(lines, param)
         lines.append(f"")
     # mangling macros
-    lines.append(f"#define BL_CONCAT(a, b)  a##b")
-    lines.append(f"#define BL_MANGLE(name)  BL_CONCAT(BL_BLOCK_NAME, _##name)")
-    lines.append(f"")
+    bl_mangle_as_macro(lines);
     # instance struct
     lines.append(f"// define instance structure")
     lines.append(f"typedef struct {{")
@@ -194,11 +206,14 @@ def blockspec_as_template_h(lines: list[str], blockspec: BlockSpec) -> None:
 
 def pinspec_as_inventory_comment(lines: list[str], pinspec: PinSpec) -> None:
     macro_name = pinspec.field_name.upper()
-    if pinspec.dims:
-        dim_sizes = "".join(f"[{d.size_expr}]" for d in pinspec.dims)
-        lines.append(f"    //   {macro_name}{dim_sizes}")
+    if not pinspec.dims:
+        lines.append(f"    //   {macro_name} or *p{macro_name}")
     else:
-        lines.append(f"    //   {macro_name}")
+        vars = _make_index_vars(len(pinspec.dims))
+        args = ", ".join(vars)
+        indices = "".join(f"[{v}]" for v in vars)
+        ranges = ", ".join(f"{v}=0..{d.size_expr}" for v, d in zip(vars, pinspec.dims))
+        lines.append(f"    //   {macro_name}({args})  or  *p{macro_name}{indices}  for {ranges}")
 
 def functspec_as_stub(lines: list[str], functspec: FunctSpec, blockspec: BlockSpec) -> None:
     lines.append(f"void BL_MANGLE({functspec.name})(void *instance_data, uint32_t periodns) {{")
@@ -206,7 +221,7 @@ def functspec_as_stub(lines: list[str], functspec: FunctSpec, blockspec: BlockSp
     lines.append(f"    (void)periodns;  // delete this line if periodns is used")
     lines.append(f"")
     lines.append(f"    // TODO: implement {functspec.name}")
-    lines.append(f"    // Pins available:")
+    lines.append(f"    // Pin macros available:")
     active_conditions = []
     for stmt in blockspec.statements:
         s = stmt.statement
@@ -247,14 +262,18 @@ def fielddef_as_instance_member(lines: list[str], field: FieldDef) -> None:
     else:
         c_type = PIN_C_TYPES[field.pin_type]
         dim_str = "".join(f"[{d}]" for d in field.dims)
-        lines.append(f"    {c_type} *{field.name}{dim_str};")
+        lines.append(f"    {c_type} {field.name}{dim_str};")
 
 def fielddef_as_macro(lines: list[str], field: FieldDef) -> None:
     macro_name = field.name.upper()
-    if field.dims:
-        lines.append(f"#define {macro_name}  (self->{field.name})")
-    else:
+    lines.append(f"#define p{macro_name}  (self->{field.name})")
+    if not field.dims:
         lines.append(f"#define {macro_name}  (*self->{field.name})")
+    else:
+        vars = _make_index_vars(len(field.dims))
+        args = ", ".join(vars)
+        indices = "".join(f"[{v}]" for v in vars)
+        lines.append(f"#define {macro_name}({args})  (*(self->{field.name}{indices}))")
 
 def blockdef_as_variant_h(lines: list[str], blockdef: BlockDef) -> None:
     block_name = blockdef.name
@@ -296,9 +315,7 @@ def blockdef_as_variant_c_preamble(lines: list[str], blockdef: BlockDef) -> None
     lines.append(f"")
     # BL_ macros for name mangling
     lines.append(f"#define BL_BLOCK_NAME {block_name}")
-    lines.append(f"#define BL_CONCAT(a, b)  a##b")
-    lines.append(f"#define BL_MANGLE(name)  BL_CONCAT(BL_BLOCK_NAME, _##name)")
-    lines.append(f"")
+    bl_mangle_as_macro(lines);
     # concrete parameter values
     if blockdef.params:
         for name, value in blockdef.params.items():
@@ -314,7 +331,7 @@ def blockdef_as_variant_c(lines: list[str], blockdef: BlockDef) -> None:
             del lines[0:i+1]
             preamble = []
             blockdef_as_variant_c_preamble(preamble, blockdef)
-            preamble.append(f'#line {i+2} "{Path(blockdef.abs_path).with_suffix(".c")}"')
+            preamble.append(f'#line {i+2} "{Path(blockdef.abs_path).with_suffix(".c").as_posix()}"')
             lines[0:0] = preamble
             return
     raise EmblocsError(f"sentinel line not found in {Path(blockdef.abs_path).with_suffix(".c")}")
@@ -322,12 +339,13 @@ def blockdef_as_variant_c(lines: list[str], blockdef: BlockDef) -> None:
 def write_file_if_changed(path: Path, lines: list[str]) -> bool:
     """Write lines to path only if content has changed.
     Returns True if the file was written, False if unchanged."""
-    new_content = "\n".join(lines)
-    existing = path.read_text() if path.exists() else None
-    if new_content != existing:
-        path.write_text(new_content)
-        return True
-    return False
+    new_content = "\n".join(lines) + "\n"
+    if path.exists():
+        existing = path.read_text().replace("\r\n", "\n")
+        if new_content == existing:
+            return False
+    path.write_text(new_content, newline="\n")
+    return True
 
 # ---------------------------------------------------------------------------
 # Test driver
@@ -338,18 +356,21 @@ if __name__ == "__main__":
     if len(sys.argv) >= 3 and sys.argv[1] == "-b":
         design = parse_blocs_file(sys.argv[2])
         if design is not None:
+            print("\n-----------------------------------------------------\n")
             print(design.describe())
+            print("\n-----------------------------------------------------\n")
             lines = []
             design_as_blocs(lines, design)
             print("\n".join(lines))
+            print("\n-----------------------------------------------------\n")
         else:
             print("Parsing failed due to errors.", file=sys.stderr)
 
     elif len(sys.argv) >= 3 and sys.argv[1] == "-t":
         block_spec = parse_bloc_file(sys.argv[2])
         if block_spec is not None:
-            #print("\n-----------------------------------------------------\n")
-            #print(block_spec.describe())
+            print("\n-----------------------------------------------------\n")
+            print(block_spec.describe())
             print("\n-----------------------------------------------------\n")
             header=[]
             blockspec_as_template_h(header, block_spec)

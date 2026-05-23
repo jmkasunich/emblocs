@@ -1,8 +1,8 @@
 // Generated once by the EMBLOCS block compiler.
 // Edit freely - this file will not be overwritten.
-// Source: limit1.bloc
+// Source: mux.bloc
 
-#include "limit1.h"
+#include "mux.h"
 
 // EMBLOCS:  DO NOT REMOVE OR EDIT ABOVE THIS LINE
 
@@ -10,12 +10,13 @@ void BL_MANGLE(update)(void *instance_data, uint32_t periodns) {
     BL_MANGLE(t) *self = (BL_MANGLE(t) *)instance_data;
     (void)periodns;  // delete this line if periodns is used
 
-    float val = IN_;
-    if ( val < MIN_) {
-        val = MIN_;
-    }
-    if ( val > MAX_ ) {
-        val = MAX_;
-    }
-    OUT_ = val;
+    #if (NUM_CHAN==1)
+        OUT_ = IN0_(SELECT_);
+    #endif
+    #if (NUM_CHAN>1)
+        int s = SELECT_;
+        for ( int n = 0 ; n < NUM_CHAN ; n++ ) {
+            CH00_OUT_(n) = CH00_IN0_(s, n);
+        }
+    #endif
 }

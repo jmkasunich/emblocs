@@ -7,14 +7,12 @@ block stm32_gpio /// STM32 GPIO port driver with per-pin EMBLOCS interface.
                  /// selecting which GPIO pins to export.  For example,
                  /// INPUTS=0x0003 exports pins 0 and 1 as inputs.
 
-param INPUTS   u32  default=0x0000 /// bitmask: selects pins to export as inputs
-param OUTPUTS  u32  default=0x0000 /// bitmask: selects pins to export as outputs
-param ENABLES  u32  default=0x0000 /// bitmask: selects pins to export as output-enables
+param INPUTS   u32  default=0x00FF /// bitmask: selects pins to export as inputs
+param OUTPUTS  u32  default=0xFF00 /// bitmask: selects pins to export as outputs
+param ENABLES  u32  default=0xFF00 /// bitmask: selects pins to export as output-enables
 
-var GPIO_TypeDef *base_addr;    // hardware register base address
-var uint16_t input_bitmask;     // runtime copy of INPUTS param
-var uint16_t output_bitmask;    // runtime copy of OUTPUTS param
-var uint16_t enable_bitmask;    // runtime copy of ENABLES param
+//var GPIO_TypeDef *base_addr;    // hardware register base address
+var void *base_addr;    // hardware register base address
 
 // Each array is conditionally allocated; if no pins of a given direction are
 // needed, the array is omitted from the struct entirely.
@@ -32,8 +30,12 @@ pin bool  input   pin{i:2}_out[i=16]  if (OUTPUTS>>i)&1 /// GPIO output bit valu
 pin bool  input   pin{i:2}_oe[i=16]   if (ENABLES>>i)&1 /// GPIO output enable bit
 #endif
 
+#if (INPUTS!=0)
 function read  /// sample GPIO input register and update input pins
                /// call early in thread, before any blocks that consume input pins
+#endif
 
+#if (OUTPUTS!=0)
 function write /// read output and enable pins, drive GPIO output register
                /// call late in thread, after all blocks that produce output values
+#endif

@@ -12,13 +12,12 @@ pin raw  output  out                  /// mux output
 #endif
 
 #if NUM_CHAN>1
-// storage order [NUM_INPUT][NUM_CHAN] for cache efficiency:
+// 2D array of inputs
 // all channels for one select value are contiguous in memory.
-// EMBLOCS name order is channel-first: ch00_in0, ch00_in1, ch01_in0, ...
 pin raw  input   ch{c:2}_in{i:1}[i=NUM_INPUT][c=NUM_CHAN] /// mux input
 pin raw  output  ch{c:2}_out[c=NUM_CHAN]                  /// mux output
 #endif
 
-pin u32  input   select                       /// selects active input (0-based)
+pin u32  input   select  /// selects active input (0-based)
 
-function update /// copy in[select][ch] to out[ch] for all channels
+function update /// copy selected input to output for all channels

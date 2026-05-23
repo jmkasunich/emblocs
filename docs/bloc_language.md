@@ -814,10 +814,32 @@ avoid losing track of them and to provide context for future decisions.
 
 ### 6.1 Convenience Macro Consistency
 
-Scalar pin macros include the pointer dereference (`*self->name`); array pin
-macros do not (`self->name`). This inconsistency is acknowledged. A resolution
-— possibly a naming convention that makes the distinction explicit — is
-deferred.
+For every pin field, two convenience macros are generated:
+
+**Value macros** — evaluate to the signal value directly:
+
+```c
+FOO_          // scalar pin value
+BAR_(i)       // 1D array element value at index i
+BAZ_(i, j)    // 2D array element value at indices i, j
+```
+
+**Pointer macros** (`pNAME_`) — evaluate to the pointer or array base:
+
+```c
+ pFOO_         // address of scalar pin data
+*pFOO_         // value of scalar pin data (same as FOO_)
+ pBAR_         // base address of 1D array
+ pBAR_[i]      // address of element i
+*pBAR_[i]      // value of element i (same as BAR_(i))
+ pBAZ_         // base address of 2D array
+ pBAZ_[i][j]   // address of element [i][j]
+*pBAZ_[i][j]   // value of element [i][j] (same as BAZ_(i, j))
+```
+
+Block authors should use the value macro for normal signal access and
+the pointer macro only when pointer-level access is needed (NULL checks,
+passing pin pointers to helper functions).
 
 ### 6.2 Pin Field Name Collision
 

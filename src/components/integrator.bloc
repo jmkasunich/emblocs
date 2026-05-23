@@ -15,6 +15,6 @@ pin bool   input   enable  /// when false, resets out to zero and halts integrat
 pin bool   input   hold    /// when true, holds out constant without resetting
 #endif
 
-var float accumulated;     // integration state
+var float accumulator;     // integration state
 
 function update  /// periodic integration step

@@ -217,7 +217,7 @@ class VarDef:
     c_decl:     str
 
     def describe(self) -> str:
-        return f"var  {self.c_decl}"
+        return f"var {self.field_name}:  {self.c_decl}"
 
 
 @dataclass(frozen=True)

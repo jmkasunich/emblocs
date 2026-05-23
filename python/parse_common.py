@@ -302,6 +302,16 @@ class ErrorContext:
 
 ctx = ErrorContext()
 
+# ---------------------------------------------------------------------------
+# paths in error messages idealy aren't long
+# ---------------------------------------------------------------------------
+
+def short_path(path: str | Path) -> str:
+    """Return path relative to cwd if possible, otherwise absolute POSIX path."""
+    try:
+        return Path(path).resolve().relative_to(Path.cwd()).as_posix()
+    except ValueError:
+        return Path(path).as_posix()
 
 # ---------------------------------------------------------------------------
 # Parser input processing
@@ -338,8 +348,7 @@ def read_source_file(path: str) -> list[str] | None:
     Returns the list of lines, or None if the file could
     not be read or contains encoding errors.
     """
-    posix_path = Path(path).as_posix()
-    ctx.push(source=posix_path)
+    ctx.push(source=short_path(path))
     try:
         with open(path, "r", encoding="utf-8") as f:
             lines = f.readlines()

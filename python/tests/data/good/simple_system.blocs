@@ -1,0 +1,5 @@
+blockdef limit1 COMPONENTS:/limit1.bloc
+blockdef mux_2ch_3in COMPONENTS:/mux.bloc NUM_CHAN=2 NUM_INPUT=3
+blockdef mux_default COMPONENTS:/mux.bloc
+blockdef integ_w_hold COMPONENTS:/integrator.bloc HAS_HOLD=1
+blockdef integ COMPONENTS:/integrator.bloc
