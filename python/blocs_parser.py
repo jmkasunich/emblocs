@@ -100,22 +100,43 @@ def get_value(text: str, value_type: PinType) -> int | float | None:
 # Path resolution
 # ---------------------------------------------------------------------------
 
+_tags: dict[str, str] = {}
+
+def set_tags(tags: dict[str, str]) -> None:
+    """Set the tag-to-path mapping for resolving tagged bloc file paths.
+    Call this before parse_blocs_file() or parse_blocs_string().
+    Tag values must be absolute POSIX path strings."""
+    global _tags
+    _tags = tags
+
+
+
 def resolve_bloc_path(path: str) -> str | None:
     """
     Resolve a .bloc file path as written in a blockdef command.
 
-    Relative paths are interpreted relative to the directory containing
-    the .blocs file currently being parsed (from current_context().source).
-    Absolute paths are used as-is.
+    Tagged paths (TAGNAME:/rest/of/path.bloc) are resolved relative to
+    the tag's registered path.  Tags are registered via set_tags().
+
+    Untagged absolute paths (starting with /) are used as-is.
+    Untagged relative paths are resolved relative to the directory
+    containing the .blocs file currently being parsed.
 
     Returns the resolved path as a POSIX string, or None if the file
-    does not exist.
-
-    Future enhancement: search path support could be added here by
-    checking additional directories if the relative resolution fails.
+    does not exist or the tag is unknown.
     """
-    blocs_dir = Path(ctx.source).parent
-    resolved = (blocs_dir / path).resolve()
+    tag, sep, remainder = path.partition(":")
+    if sep == ":":
+        if not tag.isidentifier():
+            ctx.error(f"invalid tag name {tag!r} in path {path!r}")
+            return None
+        if tag not in _tags:
+            ctx.error(f"unknown tag {tag!r} in path {path!r}")
+            return None
+        resolved = (Path(_tags[tag]) / remainder.lstrip("/")).resolve()
+    else:
+        blocs_dir = Path(ctx.source).parent
+        resolved = (blocs_dir / path).resolve()
     if not resolved.exists():
         return None
     return resolved.as_posix()
@@ -158,7 +179,7 @@ def cmd_blockdef(tokens: list[Token], design: Design) -> tuple[BlockDef | None, 
         if spec is None:
             ctx.error(f"failed to parse {path_tok.text!r}", token=path_tok)
             return None, 0
-        spec.source_path = path_tok.text  #store original relative path, not absolute
+        spec.abs_path = resolved_path
         _bloc_spec_cache[resolved_path] = spec
     spec = _bloc_spec_cache[resolved_path]
     # parse PARAM=value tokens
@@ -189,7 +210,7 @@ def cmd_blockdef(tokens: list[Token], design: Design) -> tuple[BlockDef | None, 
                      f"using default value {param.default}", column=OMIT)
     # resolve BlockSpec to BlockDef - set context for resolve() errors
     ctx.set(token=name_tok)
-    block_def = resolve(spec, name_tok.text, supplied_params)
+    block_def = resolve(spec, name_tok.text, path_tok.text, supplied_params)
     if block_def is None:
         ctx.error(f"failed to resolve {path_tok.text!r} as {name_tok.text!r}",
                   column=OMIT)

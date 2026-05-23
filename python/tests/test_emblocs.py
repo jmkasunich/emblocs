@@ -26,7 +26,8 @@ def minimal_block_def():
     """A BlockDef with no pins, vars, or functions."""
     return BlockDef(
         name                 = "limit1",
-        source_path          = "limit1.bloc",
+        abs_path             = "limit1.bloc",
+        orig_path            = "limit1.bloc",
         description          = "test block",
         params               = {},
         pins                 = {},
@@ -41,7 +42,8 @@ def another_block_def():
     """A second BlockDef for testing namespace conflicts."""
     return BlockDef(
         name                 = "mux",
-        source_path          = "mux.bloc",
+        abs_path             = "mux.bloc",
+        orig_path            = "mux.bloc",
         description          = "another test block",
         params               = {},
         pins                 = {},
@@ -131,7 +133,8 @@ def block_def_with_pins():
     )
     return BlockDef(
         name                 = "simple",
-        source_path          = "simple.bloc",
+        abs_path             = "simple.bloc",
+        orig_path            = "simple.bloc",
         description          = "block with pins",
         params               = {},
         pins                 = {"in": in_pin},
@@ -380,7 +383,8 @@ def block_def_with_output():
     )
     return BlockDef(
         name                 = "source",
-        source_path          = "source.bloc",
+        abs_path             = "source.bloc",
+        orig_path            = "source.bloc",
         description          = "block with output pin",
         params               = {},
         pins                 = {"out": out_pin},
@@ -407,7 +411,8 @@ def block_def_with_raw():
     )
     return BlockDef(
         name                 = "passthrough",
-        source_path          = "passthrough.bloc",
+        abs_path             = "passthrough.bloc",
+        orig_path            = "passthrough.bloc",
         description          = "block with raw pin",
         params               = {},
         pins                 = {"raw_in": raw_pin},

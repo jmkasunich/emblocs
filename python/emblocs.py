@@ -284,7 +284,7 @@ class BlockSpec:
     BlockDef (defined elsewhere, once resolution is implemented).
 
     Fields:
-        source_path  -- path to the .bloc file this was parsed from
+        abs_path     -- absolute path to the .bloc file this was parsed from
         name         -- block name from the 'block' declaration
         description  -- /// text from the 'block' declaration
         params       -- ordered list of ParamSpec objects; all parameters
@@ -300,7 +300,7 @@ class BlockSpec:
         namespace    -- set of dedup_names for all statements added so far;
                         used for O(1) collision detection at parse time
     """
-    source_path: str
+    abs_path:    str
     name:        str               = ""
     description: str               = ""
     params:      list[ParamSpec]   = field(default_factory=list)
@@ -312,7 +312,7 @@ class BlockSpec:
         """Return a human-readable multi-line description for debugging."""
         lines = []
         desc = _format_descr(self.description)
-        lines.append(f"BlockSpec: {self.name}  ({self.source_path}){desc}")
+        lines.append(f"BlockSpec: {self.name}  ({self.abs_path}){desc}")
         for p in self.params:
             lines.append(_indent_child(p.describe()))
         for s in self.statements:
@@ -417,7 +417,8 @@ class BlockDef:
 
     Fields:
         name        -- variant name (e.g. "pid_controller")
-        source_path -- path to the source .bloc file
+        abs_path    -- absolute path to the source .bloc file on this system
+        orig_path   -- path to the .bloc file as given in the blockdef command
         description -- block description text
         pins        -- dict of PinDef keyed by emblocs pin name
         functions   -- dict of FunctDef keyed by function name
@@ -430,7 +431,8 @@ class BlockDef:
                           generation in variant mode
     """
     name:        str
-    source_path: str
+    abs_path:    str
+    orig_path:   str
     description: str
     pins:        dict[str, PinDef]
     functions:   dict[str, FunctDef]
@@ -441,7 +443,9 @@ class BlockDef:
     def describe(self) -> str:
         lines = []
         desc = _format_descr(self.description)
-        lines.append(f"BlockDef: {self.name}  ({self.source_path}){desc}")
+        lines.append(f"BlockDef: {self.name}  {desc}")
+        lines.append(f"  abs_path:  {self.abs_path}")
+        lines.append(f"  orig_path: {self.orig_path}")
         for p, v in self.params.items():
             lines.append(_indent_child(f"param  {p} = {v}"))
         for f in self.ordered_fields:

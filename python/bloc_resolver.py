@@ -225,7 +225,7 @@ def _evaluate_template(template: str,
 # Top-level resolver
 # ---------------------------------------------------------------------------
 
-def resolve(spec: BlockSpec, variant_name: str,
+def resolve(spec: BlockSpec, variant_name: str, orig_path: str,
             supplied_params: dict[str, int] | None = None) -> BlockDef | None:
     """
     Resolve a BlockSpec against concrete parameter values to produce a BlockDef.
@@ -278,7 +278,8 @@ def resolve(spec: BlockSpec, variant_name: str,
 
     return BlockDef(
         name                 = variant_name,
-        source_path          = spec.source_path,
+        abs_path             = spec.abs_path,
+        orig_path            = orig_path,
         description          = spec.description,
         params               = variables,
         pins                 = pins,
@@ -333,7 +334,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     push_context(source=variant_name)
-    block_def = resolve(spec, variant_name, supplied)
+    block_def = resolve(spec, variant_name, path, supplied)
     ctx.summarize()
     ctx = pop_context()
     if block_def is None:

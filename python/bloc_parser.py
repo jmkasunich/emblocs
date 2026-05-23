@@ -4,6 +4,7 @@
 #
 import sys
 import re
+from pathlib import Path
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from emblocs import (BlockSpec, ParamSpec, Statement, PinSpec,
@@ -515,7 +516,7 @@ def parse_bloc(lines: list[str]) -> BlockSpec | None:
     Expects an active ErrorContext (pushed by parse_bloc_file or
     parse_bloc_string).
     """
-    spec  = BlockSpec(source_path=ctx.source)
+    spec  = BlockSpec(abs_path=Path(ctx.source).resolve().as_posix())
     state = ParseState()
     pending_tokens:      list[Token] = []
     pending_description: str         = ""
