@@ -7,10 +7,6 @@
 # caller will do "\n".join(lines) to create a single string for
 # output or other processing.
 
-import sys
-#from collections import namedtuple
-#from pathlib import Path
-#from expressions import evaluate, ExpressionError
 
 from emblocs import (
     EmblocsError,
@@ -25,6 +21,8 @@ from bloc_resolver import resolve
 from blocs_parser import parse_blocs_file
 from parse_common import ctx
 
+import sys
+from pathlib import Path
 from operator import attrgetter
 
 
@@ -218,17 +216,19 @@ def functspec_as_stub(lines: list[str], functspec: FunctSpec, blockspec: BlockSp
     update_conditions(lines, active_conditions, [])
     lines.append(f"}}")
 
+C_SENTINEL = "// EMBLOCS:  DO NOT REMOVE OR EDIT ABOVE THIS LINE"
+
 def blockspec_as_template_c(lines: list[str], blockspec: BlockSpec) -> None:
     block_name = blockspec.name
     # header comment
     lines.append(f"// Generated once by the EMBLOCS block compiler.")
-    lines.append(f"// Edit freely — this file will not be overwritten.")
+    lines.append(f"// Edit freely - this file will not be overwritten.")
     lines.append(f"// Source: {blockspec.source_path}")
     lines.append(f"")
     # include
     lines.append(f'#include "{block_name}.h"')
     lines.append(f"")
-    lines.append(f"// EMBLOCS:  DO NOT REMOVE OR EDIT ABOVE THIS LINE")
+    lines.append(C_SENTINEL)
     lines.append(f"")
     # one stub per function, in declaration order, respecting conditions
     active_conditions = []
@@ -308,6 +308,26 @@ def blockdef_as_variant_c_preamble(lines: list[str], blockdef: BlockDef) -> None
     # variant header include
     lines.append(f'#include "{block_name}.h"')
 
+def blockdef_as_variant_c(lines: list[str], blockdef: BlockDef) -> None:
+    for i, line in enumerate(lines):
+        if line.rstrip() == C_SENTINEL:
+            del lines[0:i+1]
+            preamble = []
+            blockdef_as_variant_c_preamble(preamble, blockdef)
+            preamble.append(f'#line {i+2} "{blockdef.source_path}"')
+            lines[0:0] = preamble
+            return
+    raise EmblocsError(f"sentinel line not found in {blockdef.source_path}")
+
+def write_file_if_changed(path: Path, lines: list[str]) -> bool:
+    """Write lines to path only if content has changed.
+    Returns True if the file was written, False if unchanged."""
+    new_content = "\n".join(lines)
+    existing = path.read_text() if path.exists() else None
+    if new_content != existing:
+        path.write_text(new_content)
+        return True
+    return False
 
 # ---------------------------------------------------------------------------
 # Test driver

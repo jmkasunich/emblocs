@@ -228,3 +228,46 @@ python/tests/
 def full_name(self) -> str:
     return f"{self.block.name}.{self.pin_def.name}"
 ```
+
+## 5. Planned Features
+
+### 5.1 Support for platform-specific includes in block definitions
+
+Block authors who need platform-specific types in their instance struct
+(e.g. `GPIO_TypeDef *` from a STM32 SDK header) currently have no way to
+include the required header inside `<block>.h` and `<variant>.h`, where it
+must appear for the struct to be fully defined when `system.c` includes the
+variant header.
+
+The planned solution is a new `include` keyword in the `.bloc` language,
+allowed in the PARAMS section (where conditionals are not permitted).
+Order relative to `param` declarations does not matter.
+
+Example:
+
+    include "stm32g4xx.h"
+
+Multiple `include` statements are allowed.
+
+#### 5.1.1 Impact on the object model
+
+- `BlockSpec` gains `includes: list[str]`
+- `BlockDef` gains `includes: list[str]`
+- `bloc_resolver.py`: copy `spec.includes` to `BlockDef` unchanged —
+  no expression evaluation, no conditionals
+- `test_emblocs.py`: fixture updates to add `includes=[]`
+
+#### 5.1.2 Impact on the parsers
+
+- `bloc_parser.py`: add `"include"` to `_ALLOWED[Section.PARAMS]` and
+  add a handler that appends the quoted path to `block_spec.includes`
+
+#### 5.1.3 Impact on the output generators
+
+- `blockspec_as_template_h`: emit includes between
+  `#include "emblocs_comp.h"` and the struct definition
+- `blockdef_as_variant_h`: same
+
+#### 5.1.4 Impact on the `.bloc` language reference
+
+- Document the new `include` keyword in `bloc_language.md`
