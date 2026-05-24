@@ -7,17 +7,6 @@
 
 #include "emblocs_comp.h"
 
-// set default parameter values if not supplied
-#ifndef HAS_ENABLE
-#define HAS_ENABLE (0)
-#endif
-#ifndef HAS_HOLD
-#define HAS_HOLD (0)
-#endif
-
-#define BL_CONCAT(a, b)  a##b
-#define BL_MANGLE(name)  BL_CONCAT(BL_BLOCK_NAME, _##name)
-
 // define instance structure
 typedef struct {
     bl_pin_float_t in_;
@@ -31,12 +20,16 @@ typedef struct {
     float accumulator;
 } BL_MANGLE(t);
 
+#define pIN_  (self->in_)
 #define IN_  (*self->in_)
+#define pOUT_  (self->out_)
 #define OUT_  (*self->out_)
 #if (HAS_ENABLE)
+#define pENABLE_  (self->enable_)
 #define ENABLE_  (*self->enable_)
 #endif
 #if (HAS_HOLD)
+#define pHOLD_  (self->hold_)
 #define HOLD_  (*self->hold_)
 #endif
 

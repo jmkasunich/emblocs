@@ -2,6 +2,10 @@
 // Edit freely - this file will not be overwritten.
 // Source: limit1.bloc
 
+#include "emblocs_comp.h"
+
+#define BL_BLOCK_NAME limit1
+
 #include "limit1.h"
 
 // EMBLOCS:  DO NOT REMOVE OR EDIT ABOVE THIS LINE

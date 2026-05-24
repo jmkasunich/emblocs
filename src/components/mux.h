@@ -7,17 +7,6 @@
 
 #include "emblocs_comp.h"
 
-// set default parameter values if not supplied
-#ifndef NUM_CHAN
-#define NUM_CHAN (1)
-#endif
-#ifndef NUM_INPUT
-#define NUM_INPUT (2)
-#endif
-
-#define BL_CONCAT(a, b)  a##b
-#define BL_MANGLE(name)  BL_CONCAT(BL_BLOCK_NAME, _##name)
-
 // define instance structure
 typedef struct {
 #if (NUM_CHAN==1)

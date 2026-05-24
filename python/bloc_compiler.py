@@ -13,8 +13,8 @@ import sys
 from bloc_parser import parse_bloc_file
 from emblocs_output import (
     write_file_if_changed,
-    blockspec_as_template_h,
-    blockspec_as_template_c,
+    blockspec_as_h_template,
+    blockspec_as_c_template,
 )
 
 
@@ -39,7 +39,7 @@ def main():
     # generate and write <block>.h
     h_path = bloc_path.with_suffix(".h")
     h_lines = []
-    blockspec_as_template_h(h_lines, block_spec)
+    blockspec_as_h_template(h_lines, block_spec)
     if write_file_if_changed(h_path, h_lines):
         print(f"wrote {h_path}")
     else:
@@ -51,7 +51,7 @@ def main():
         print(f"exists, not overwriting: {c_path}")
     else:
         c_lines = []
-        blockspec_as_template_c(c_lines, block_spec)
+        blockspec_as_c_template(c_lines, block_spec)
         c_path.write_text("\n".join(c_lines))
         print(f"wrote {c_path}")
 

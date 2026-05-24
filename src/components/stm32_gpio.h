@@ -7,20 +7,6 @@
 
 #include "emblocs_comp.h"
 
-// set default parameter values if not supplied
-#ifndef INPUTS
-#define INPUTS (255)
-#endif
-#ifndef OUTPUTS
-#define OUTPUTS (65280)
-#endif
-#ifndef ENABLES
-#define ENABLES (65280)
-#endif
-
-#define BL_CONCAT(a, b)  a##b
-#define BL_MANGLE(name)  BL_CONCAT(BL_BLOCK_NAME, _##name)
-
 // define instance structure
 typedef struct {
     void *base_addr;

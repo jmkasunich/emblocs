@@ -18,6 +18,19 @@
 #endif
 
 /***********************************************
+ * name mangling macro
+ *
+ * Block specific structure types and function names
+ * use this macro to generate unique names based
+ * on the blockspec or blockdef name
+ *
+ */
+#define BL_CONCAT(a, b)   a##b
+#define BL_CONCAT2(a, b)  BL_CONCAT(a,b)
+#define BL_MANGLE(name)   BL_CONCAT2(BL_BLOCK_NAME, _##name)
+
+
+/***********************************************
  * error handling macros
  *
  * ERROR_RETURN(errno) sets bl_errno to 'errno'

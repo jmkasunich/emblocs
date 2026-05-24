@@ -2,6 +2,18 @@
 // Edit freely - this file will not be overwritten.
 // Source: integrator.bloc
 
+#include "emblocs_comp.h"
+
+#define BL_BLOCK_NAME integrator
+
+// set default parameter values if not supplied
+#ifndef HAS_ENABLE
+#define HAS_ENABLE (0)
+#endif
+#ifndef HAS_HOLD
+#define HAS_HOLD (0)
+#endif
+
 #include "integrator.h"
 
 // EMBLOCS:  DO NOT REMOVE OR EDIT ABOVE THIS LINE

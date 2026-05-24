@@ -7,9 +7,6 @@
 
 #include "emblocs_comp.h"
 
-#define BL_CONCAT(a, b)  a##b
-#define BL_MANGLE(name)  BL_CONCAT(BL_BLOCK_NAME, _##name)
-
 // define instance structure
 typedef struct {
     bl_pin_float_t in_;
@@ -18,9 +15,13 @@ typedef struct {
     bl_pin_float_t out_;
 } BL_MANGLE(t);
 
+#define pIN_  (self->in_)
 #define IN_  (*self->in_)
+#define pMIN_  (self->min_)
 #define MIN_  (*self->min_)
+#define pMAX_  (self->max_)
 #define MAX_  (*self->max_)
+#define pOUT_  (self->out_)
 #define OUT_  (*self->out_)
 
 #endif // LIMIT1_H
