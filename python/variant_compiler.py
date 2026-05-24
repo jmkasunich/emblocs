@@ -13,8 +13,9 @@ from blocs_parser import parse_blocs_file, set_tags
 from emblocs import Design, BlockDef
 from emblocs_output import (
     write_file_if_changed,
-    blockdef_as_variant_h,
-    blockdef_as_variant_c,
+    blockdef_as_h_variant,
+    blockdef_as_c_variant,
+    design_as_cmake,
 )
 
 
@@ -64,13 +65,6 @@ def load_config(config_path: Path) -> dict:
     ctx.summarize()
     ctx.pop()
     return config
-
-
-def design_as_cmake(lines: list[str], design: Design) -> None:
-    lines.append(f"# Auto-generated from {Path(design.source_path).name}. Do not edit.")
-    lines.append(f"")
-    for name in design.block_defs:
-        lines.append(f"add_library({name} OBJECT ${{CMAKE_BINARY_DIR}}/{name}.c)")
 
 
 def main():
@@ -125,7 +119,7 @@ def main():
             continue
         # generate <variant>.h
         h_lines = []
-        blockdef_as_variant_h(h_lines, block_def)
+        blockdef_as_h_variant(h_lines, block_def)
         h_path = build_dir / f"{name}.h"
         if write_file_if_changed(h_path, h_lines):
             ctx.info(f"wrote {short_path(h_path)}", lineno=OMIT, column=OMIT)
@@ -133,7 +127,7 @@ def main():
             ctx.info(f"no change: {short_path(h_path)}", lineno=OMIT, column=OMIT)
         # generate <variant>.c
         c_lines = block_c.read_text().splitlines()
-        blockdef_as_variant_c(c_lines, block_def)
+        blockdef_as_c_variant(c_lines, block_def)
         c_path = build_dir / f"{name}.c"
         if write_file_if_changed(c_path, c_lines):
             ctx.info(f"wrote {short_path(c_path)}", lineno=OMIT, column=OMIT)
