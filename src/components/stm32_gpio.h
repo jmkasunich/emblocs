@@ -7,9 +7,11 @@
 
 #include "emblocs_comp.h"
 
+#include "platform_g431.h"
+
 // define instance structure
 typedef struct {
-    void *base_addr;
+    GPIO_TypeDef *base_addr;
 #if (INPUTS!=0)
     bl_pin_bit_t pin00_in_[16];
 #endif
