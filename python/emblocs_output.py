@@ -95,6 +95,13 @@ PIN_C_TYPES = {
     PinType.RAW:   "bl_pin_raw_t",
 }
 
+SIG_C_TYPES = {
+    PinType.BOOL:  "bl_bit_t",
+    PinType.U32:   "bl_u32_t",
+    PinType.S32:   "bl_s32_t",
+    PinType.FLOAT: "bl_float_t",
+}
+
 def _make_index_vars(n: int) -> tuple[str, ...]:
     """Generate index variable names i, j, k, ... for n dimensions."""
     return tuple(chr(ord('i') + k) for k in range(n))
@@ -337,10 +344,153 @@ def blockdef_as_c_variant(lines: list[str], blockdef: BlockDef) -> None:
     raise EmblocsError(f"sentinel line not found in {Path(blockdef.abs_path).with_suffix(".c")}")
 
 def design_as_cmake(lines: list[str], design: Design) -> None:
-    lines.append(f"# Auto-generated from {Path(design.source_path).name}. Do not edit.")
+    stem = Path(design.source_path).stem
+    lines.append(f"# Auto-generated from {stem}.blocs - Do not edit.")
     lines.append(f"")
     for name in design.block_defs:
         lines.append(f"add_library({name} OBJECT ${{CMAKE_BINARY_DIR}}/{name}.c)")
+    lines.append(f"add_library({stem} OBJECT ${{CMAKE_BINARY_DIR}}/{stem}.c)")
+
+
+def signal_as_c_system(lines: list[str], signal: Signal) -> None:
+    c_type = SIG_C_TYPES[signal.sig_type]
+    lines.append(f"{c_type} sig_{signal.name} = {signal.value};")
+
+
+def pin_as_c_system_dummy(lines: list[str], pin: PinInstance) -> None:
+    c_type = SIG_C_TYPES[pin.signal.sig_type]
+    lines.append(f"static {c_type} {pin.dummy_name} = {pin.signal.value};")
+
+
+def pin_as_c_system_initializer(lines: list[str], pin: PinInstance) -> None:
+    if pin.signal.is_dummy:
+        target = f"&{pin.dummy_name}"
+    else:
+        target = f"&sig_{pin.signal.name}"
+    field_name = pin.pin_def.field.name
+    if not pin.pin_def.field_indices:
+        lines.append(f"    .{field_name} = {target},")
+    else:
+        # array pin — will be handled by block_as_c_system
+        pass
+
+
+def block_as_c_system(lines: list[str], block: BlockInstance) -> None:
+    lines.append(f"")
+    # dummy signals for unconnected pins
+    for pin in block.pins.values():
+        if pin.signal.is_dummy:
+            pin_as_c_system_dummy(lines, pin)
+    # instance struct initializer
+    lines.append(f"{block.block_def.name}_t blk_{block.name} = {{")
+    # group pins by field for array handling
+    fields: dict[str, list[PinInstance]] = {}
+    for pin in block.pins.values():
+        fname = pin.pin_def.field.name
+        if fname not in fields:
+            fields[fname] = []
+        fields[fname].append(pin)
+    # emit initializers in ordered_fields order
+    for field in block.block_def.ordered_fields:
+        if field.pin_type is None:
+            continue  # var field, not initialized here
+        pins = fields.get(field.name, [])
+        if not field.dims:
+            # scalar pin
+            if pins:
+                pin = pins[0]
+                target = f"&{pin.dummy_name}" if pin.signal.is_dummy else f"&sig_{pin.signal.name}"
+                lines.append(f"    .{field.name} = {target},")
+        else:
+            # array pin — emit nested initializer
+            lines.append(f"    .{field.name} = {{")
+            _emit_array_initializer(lines, field, pins)
+            lines.append(f"    }},")
+    lines.append(f"}};")
+
+
+def _emit_array_initializer(lines: list[str], field: FieldDef,
+                             pins: list[PinInstance]) -> None:
+    # build lookup from field_indices tuple to pin
+    pin_map = {pin.pin_def.field_indices: pin for pin in pins}
+    if len(field.dims) == 1:
+        for i in range(field.dims[0]):
+            pin = pin_map.get((i,))
+            target = _pin_target(pin)
+            lines.append(f"        {target},")
+    elif len(field.dims) == 2:
+        for i in range(field.dims[0]):
+            lines.append(f"        {{")
+            for j in range(field.dims[1]):
+                pin = pin_map.get((i, j))
+                target = _pin_target(pin)
+                lines.append(f"            {target},")
+            lines.append(f"        }},")
+
+
+def _pin_target(pin: PinInstance | None) -> str:
+    if pin is None:
+        return "NULL"
+    if pin.signal.is_dummy:
+        return f"&{pin.dummy_name}"
+    return f"&sig_{pin.signal.name}"
+
+
+def thread_as_c_system(lines: list[str], thread: Thread) -> None:
+    lines.append(f"")
+    lines.append(f"void {thread.name}(uint32_t periodns) {{")
+    for func in thread.functions:
+        lines.append(f"    {func.block.block_def.name}_{func.funct_def.name}(&blk_{func.block.name}, periodns);")
+    lines.append(f"}}")
+
+
+def design_as_c_system(lines: list[str], design: Design) -> None:
+    # header comment
+    lines.append(f"// Auto-generated from {Path(design.source_path).name} - Do not edit.")
+    lines.append(f"")
+    lines.append(f'#include "emblocs_common.h"')
+    lines.append(f'#include "{Path(design.source_path).stem}.h"')
+    lines.append(f"")
+    # includes — one per blockdef
+    for name in design.block_defs:
+        lines.append(f'#include "{name}.h"')
+    lines.append(f"")
+    # real signals
+    if design.signals:
+        lines.append(f"// signals")
+        for signal in design.signals.values():
+            signal_as_c_system(lines, signal)
+        lines.append(f"")
+    # block instances with their dummy signals
+    lines.append(f"// block instances")
+    for block in design.blocks.values():
+        block_as_c_system(lines, block)
+    lines.append(f"")
+    # thread functions
+    if design.threads:
+        lines.append(f"// threads")
+        for thread in design.threads.values():
+            thread_as_c_system(lines, thread)
+
+def design_as_h_system(lines: list[str], design: Design) -> None:
+    stem = Path(design.source_path).stem
+    guard = stem.upper() + "_H"
+    # header comment
+    lines.append(f"// Auto-generated from {Path(design.source_path).name} - Do not edit.")
+    lines.append(f"")
+    # include guard
+    lines.append(f"#ifndef {guard}")
+    lines.append(f"#define {guard}")
+    lines.append(f"")
+    lines.append(f"#include <stdint.h>")
+    lines.append(f"")
+    # thread function prototypes
+    if design.threads:
+        for thread in design.threads.values():
+            lines.append(f"void {thread.name}(uint32_t periodns);")
+        lines.append(f"")
+    # close include guard
+    lines.append(f"#endif // {guard}")
 
 
 def write_file_if_changed(path: Path, lines: list[str]) -> bool:
@@ -369,6 +519,23 @@ if __name__ == "__main__":
             lines = []
             design_as_blocs(lines, design)
             print("\n".join(lines))
+            print("\n-----------------------------------------------------\n")
+        else:
+            print("Parsing failed due to errors.", file=sys.stderr)
+
+    elif len(sys.argv) >= 3 and sys.argv[1] == "-s":
+        design = parse_blocs_file(sys.argv[2])
+        if design is not None:
+            print("\n-----------------------------------------------------\n")
+            print(design.describe())
+            print("\n-----------------------------------------------------\n")
+            header = []
+            design_as_h_system(header, design)
+            print("\n".join(header))
+            print("\n-----------------------------------------------------\n")
+            source = []
+            design_as_c_system(source, design)
+            print("\n".join(source))
             print("\n-----------------------------------------------------\n")
         else:
             print("Parsing failed due to errors.", file=sys.stderr)

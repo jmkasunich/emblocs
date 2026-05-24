@@ -16,6 +16,8 @@ from emblocs_output import (
     blockdef_as_h_variant,
     blockdef_as_c_variant,
     design_as_cmake,
+    design_as_c_system,
+    design_as_h_system,
 )
 
 
@@ -133,6 +135,25 @@ def main():
             ctx.info(f"wrote {short_path(c_path)}", lineno=OMIT, column=OMIT)
         else:
             ctx.info(f"no change: {short_path(c_path)}", lineno=OMIT, column=OMIT)
+
+    # generate system header
+    h_lines = []
+    design_as_h_system(h_lines, design)
+    h_path = build_dir / f"{blocs_path.stem}.h"
+    if write_file_if_changed(h_path, h_lines):
+        ctx.info(f"wrote {short_path(h_path)}", lineno=OMIT, column=OMIT)
+    else:
+        ctx.info(f"no change: {short_path(h_path)}", lineno=OMIT, column=OMIT)
+
+    # generate system C file
+    c_lines = []
+    design_as_c_system(c_lines, design)
+    c_path = build_dir / f"{blocs_path.stem}.c"
+    if write_file_if_changed(c_path, c_lines):
+        ctx.info(f"wrote {short_path(c_path)}", lineno=OMIT, column=OMIT)
+    else:
+        ctx.info(f"no change: {short_path(c_path)}", lineno=OMIT, column=OMIT)
+
     # generate system.cmake
     cmake_lines = []
     design_as_cmake(cmake_lines, design)

@@ -3,3 +3,21 @@ blockdef mux_2ch_3in COMPONENTS:/mux.bloc NUM_CHAN=2 NUM_INPUT=3
 blockdef mux_default COMPONENTS:/mux.bloc
 blockdef integ_w_hold COMPONENTS:/integrator.bloc HAS_HOLD=1
 blockdef integ COMPONENTS:/integrator.bloc
+#blockdef limit1 ../../../../src/components/limit1.bloc
+#blockdef mux_2ch_3in ../../../../src/components/mux.bloc NUM_CHAN=2 NUM_INPUT=3
+#blockdef mux_default ../../../../src/components/mux.bloc
+#blockdef integ_w_hold ../../../../src/components/integrator.bloc HAS_HOLD=1
+#blockdef integ ../../../../src/components/integrator.bloc
+block int_w_hold integ_w_hold
+block int_plain integ_w_hold
+block lim1 limit1
+lim1.min =-3
+lim1.max =7
+block mux mux_2ch_3in
+signal f1 float +lim1.out +int_w_hold.in +int_plain.in
+signal f2 float =1.0 +int_w_hold.out +mux.ch00_in0
+signal f3 float =3.0 +int_plain.out +mux.ch00_in1
+signal f4 float +lim1.in +mux.ch00_out
+signal sel u32 +mux.select
+signal hold bool +int_w_hold.hold
+thread fast 1000000 +int_plain.update +int_w_hold.update +mux.update +lim1.update
