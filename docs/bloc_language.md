@@ -221,9 +221,9 @@ language's identifier rules.
 
 ### 2.4 Keywords
 
-Reserved keywords: `block`, `param`, `pin`, `var`, `function`,
-`if`, `input`, `output`, `bool`, `u32`, `s32`, `float`, `raw`,
-`default`, `min`, `max`, `true`, `false`.
+Reserved keywords: `block`, `param`, `include`, `pin`, `var`,
+`function`, `if`, `endif`, `true`, `false`, `input`, `output`,
+`bool`, `u32`, `s32`, `float`, `raw`, `default`, `min`, `max`.
 
 ### 2.5 Whitespace
 
@@ -283,8 +283,10 @@ unambiguous.
 A .bloc file consists of three sections, in order: header, parameters, and
 body.  The header contains exactly one `block` statement that describes
 the block. The parameters section contains zero or more `param` declarations
-which can be used to generate customized variants of the block.  The body
-contains the rest of the block definition: `pin`, `var`, and `function`
+which can be used to generate customized variants of the block, and may also
+contain optional `include` statements that allow exteral files to be included
+before a block instance data structure is defined.
+The body contains the rest of the block definition: `pin`, `var`, and `function`
 declarations optionally grouped within `#if`/`#endif` blocks.
 
 The order in which `pin` and `var` declarations appear in the body determines
@@ -333,10 +335,20 @@ Examples:
     param HAS_ENABLE  bool  default=0   /// if true, export the enable pin
     param NCHANNELS   u32   default=1  min=1  max=16  /// number of independent channels
 
-### 3.3 Pin Declaration
+### 3.3 Include Declaration
+
+    include <NAME>  or  include "NAME"
+
+Allows external files to be included in the C source before the instance
+data block structure is declared.  This is necessary if any `var` declaration
+uses a data type that is declared in a header as opposed to part of standard
+C.  Multiple `include` statements are allowed, and the files will be included
+in the order in which the `include` statements appear.  The token following
+the `include` keyword will be copied verbatim into the source file(s).
+
+### 3.4 Pin Declaration
 
     pin <type> <direction> <name-spec> [if <expr>]  /// description
-
 
 Declares a pin exported by the block. Pins appear in the generated instance
 struct as pointers to the appropriate signal type.
@@ -360,7 +372,7 @@ form is the natural choice. For array pins, the two mechanisms compose
 naturally: the outer `#if` gates whether the array exists at all, and the
 trailing `if` gates which slots within it are exported.
 
-#### 3.3.1 Pin Type
+#### 3.4.1 Pin Type
 
 One of: `bool`, `u32`, `s32`, `float`, `raw`.
 
@@ -371,11 +383,11 @@ In generated C code, pin fields use the corresponding typedef from
 `emblocs_comp.h`: `pin_bool_t`, `pin_u32_t`, `pin_s32_t`, `pin_float_t`,
 `pin_raw_t`.
 
-#### 3.3.2 Pin Direction
+#### 3.4.2 Pin Direction
 
 One of: `input`, `output`.
 
-#### 3.3.3 Name and Dimensions
+#### 3.4.3 Name and Dimensions
 
 The third token in a `pin` declaration specifies the pin's EMBLOCS-visible
 name and optional array dimensions. This token is written without internal
@@ -383,7 +395,7 @@ whitespace; dimension specifiers are attached directly to the name. The C
 struct field name is derived automatically from this token and is not
 specified by the block author.
 
-##### 3.3.3.1 Name Template
+##### 3.4.3.1 Name Template
 
 The name portion of the token is a string that becomes the EMBLOCS-visible
 pin name for scalar pins, or a template for generating indexed pin names for
@@ -417,7 +429,7 @@ The derived field name is used for namespace collision detection at parse
 time. All pins, vars, and functions in a block share one namespace; duplicate
 derived field names are an error.
 
-##### 3.3.3.2 Array Dimensions
+##### 3.4.3.2 Array Dimensions
 
 Array dimensions are appended directly to the name template, one per dimension,
 using the form:
@@ -442,7 +454,7 @@ on the same pin.
 
 A maximum of two dimensions is supported.
 
-##### 3.3.3.3 Examples
+##### 3.4.3.3 Examples
 
 ```
 // scalar pin, no template specifiers, no dimensions
@@ -458,7 +470,7 @@ pin raw    output  ch{i:2}_out[i=NCHAN]   /// mux output
 pin raw    input   ch{i:2}_in{j:1}[i=NCHAN][j=NINPUT]   /// mux input
 ```
 
-#### 3.3.4 Trailing Export Condition
+#### 3.4.4 Trailing Export Condition
 
     pin <type> <direction> <name-spec> if <expr>
 
@@ -483,7 +495,7 @@ enabling sparse export from a dense array. Unexported slots are set to
 `NULL` and must be checked before dereferencing in the block's C
 implementation.
 
-##### 3.3.4.1 Examples
+##### 3.4.4.1 Examples
 
 ```
 // 1D array with sparse export using a trailing if clause
@@ -500,13 +512,13 @@ pin raw    output  ch{i:2}_out[i=3]  if i!=1   /// dont' export channel 1
 pin bool   input   pin{i:2}_in[i=16]  if (MASK>>i)&1   /// GPIO input pins
 ```
 
-#### 3.3.5 Pin Description
+#### 3.4.5 Pin Description
 
 A `///` annotation on a `pin` declaration should describe the pin's behavior
 and semantics. This metadata is stored in the JSON output and may be
 displayed by the runtime monitor as help text.
 
-### 3.4 Private Variable Declaration
+### 3.5 Private Variable Declaration
 
     var <C-declaration>;
 
@@ -536,7 +548,7 @@ Examples:
 `var` declarations may appear inside `#if`/`#endif` blocks if they are
 conditionally needed.
 
-### 3.5 Function Declaration
+### 3.6 Function Declaration
 
     function <name>  /// description
 
@@ -789,6 +801,8 @@ add_library(integrator_with_hold OBJECT ${CMAKE_BINARY_DIR}/integrator_with_hold
 
 ### 5.7 JSON Metadata (`<variant>.json`)
 
+** Currently not defined, and may be deleted **
+
 Generated by Tool 1 in variant mode. Lives in the project build directory.
 Contains a full serialization of the block's object model for consumption
 by Tool 2. The schema is versioned. At minimum, the JSON represents:
@@ -860,20 +874,13 @@ The `bool` pin and signal type may be renamed `bit` for consistency with
 the `.blocs` language, where this keyword is also unresolved. The `.bloc`
 language will follow whatever decision is made for `.blocs`.
 
-### 6.5 Typedef Strategy
-
-Whether pin fields in the instance struct should use `pin_float_t *`,
-`pin_bool_t *` etc. (typedefs from `emblocs_comp.h`) or raw C types
-(`float *`, `bool *` etc.) is deferred. Using typedefs is encouraged for
-readability and to allow future changes to the underlying representation.
-
-### 6.6 Function Calls in Expressions
+### 6.5 Function Calls in Expressions
 
 The expression language supports arithmetic operators but not function
 calls. If a use case requires expressions like `count_one_bits(BITMASK)`,
 the expression language will need to be extended.
 
-### 6.7 NULL Handling for Unexported Array Slots
+### 6.6 NULL Handling for Unexported Array Slots
 
 When a `pin` declaration with a trailing `if` clause produces unexported
 slots, those slots are initialized to `NULL` in `system.c`. The block author
@@ -881,7 +888,7 @@ is responsible for checking for `NULL` before dereferencing. Whether the
 framework should provide a helper macro or assertion for this check is
 deferred.
 
-### 6.8 Namespace Collision in Mutually Exclusive `#if` Blocks
+### 6.7 Namespace Collision in Mutually Exclusive `#if` Blocks
 
 The parser performs namespace collision detection at parse time, before
 parameter values are known. As a result, two declarations with the same

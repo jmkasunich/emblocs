@@ -80,6 +80,16 @@ class TestParseBlocString:
         assert spec.params[0].min_val == 1
         assert spec.params[0].max_val == 8
 
+    def test_include_declaration(self):
+        spec = parse_bloc_string(
+            "block foo /// test\n"
+            "include <mylib.h>\n"
+            "function update\n"
+        )
+        assert spec is not None
+        assert len(spec.includes) == 1
+        assert spec.includes[0] == "<mylib.h>"
+
     def test_var_declaration(self):
         spec = parse_bloc_string(
             "block foo /// test\n"

@@ -291,6 +291,8 @@ class BlockSpec:
                         must be declared before any statements in the source
                         file and must be supplied with concrete values before
                         resolution can proceed
+        includes     -- ordered list of include files that should be included
+                        before defining the block instance data structure
         defaults     -- dict of {param_name: default_value} for all params;
                         populated when the first body statement is encountered,
                         used to validate expressions at parse time
@@ -304,6 +306,7 @@ class BlockSpec:
     name:        str               = ""
     description: str               = ""
     params:      list[ParamSpec]   = field(default_factory=list)
+    includes:    list[str]         = field(default_factory=list)
     defaults:    dict[str, int]    = field(default_factory=dict)
     statements:  list[Statement]   = field(default_factory=list)
     namespace:   set[str]          = field(default_factory=set)
@@ -315,6 +318,8 @@ class BlockSpec:
         lines.append(f"BlockSpec: {self.name}  ({self.abs_path}){desc}")
         for p in self.params:
             lines.append(_indent_child(p.describe()))
+        for i in self.includes:
+            lines.append(_indent_child(f"include {i}"))
         for s in self.statements:
             lines.append(_indent_child(s.describe()))
         return "\n".join(lines)
@@ -426,6 +431,8 @@ class BlockDef:
                        PinDef or FunctDef objects; populated at resolution
                        time, catches pin/function name collisions
         params      -- dict of param name -> concrete integer value
+        includes    -- ordered list of include files that should be included
+                       before defining the block instance data structure
         ordered_fields -- ordered list of FieldDef objects in declaration
                           order from the .bloc file; used for C struct
                           generation in variant mode
@@ -438,6 +445,7 @@ class BlockDef:
     functions:   dict[str, FunctDef]
     namespace:   dict[str, BlockDefChild]
     params:      dict[str, int]
+    includes:    list[str]
     ordered_fields: list[FieldDef]
 
     def describe(self) -> str:
@@ -448,6 +456,8 @@ class BlockDef:
         lines.append(f"  orig_path: {self.orig_path}")
         for p, v in self.params.items():
             lines.append(_indent_child(f"param  {p} = {v}"))
+        for i in self.includes:
+            lines.append(_indent_child(f"include {i}"))
         for f in self.ordered_fields:
             lines.append(_indent_child(f.describe()))
         for p in self.pins.values():

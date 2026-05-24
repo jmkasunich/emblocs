@@ -42,7 +42,7 @@ class Section(Enum):
 
 _ALLOWED = {
     Section.BLOCK:  {"block"},
-    Section.PARAMS: {"param"},
+    Section.PARAMS: {"param", "include"},
     Section.BODY:   {"pin", "var", "function", "#if", "#endif"},
 }
 
@@ -194,6 +194,36 @@ def parse_param(spec: BlockSpec, tokens: list[Token], description: str) -> None:
         description = description,
     ))
 
+
+def _is_valid_include_path(text: str) -> bool:
+    if len(text) < 3:
+        return False
+    if text[0] == '"' and text[-1] == '"':
+        return True
+    if text[0] == '<' and text[-1] == '>':
+        return True
+    return False
+
+def parse_include(spec: BlockSpec, tokens: list[Token], description: str) -> None:
+    """
+    Handle the 'include' declaration.
+    Syntax: include <NAME> or include "NAME"
+    Appends full name token to spec.includes, or reports errors and returns.
+    """
+    keyword = tokens[0]
+
+    if len(tokens) < 2:
+        ctx.error("'include' requires include filename",
+                  token=keyword)
+        return
+
+    name_tok = tokens[1]
+    name = name_tok.text
+    if not _is_valid_include_path(name):
+        ctx.error(f"invalid include path: {name!r}",
+                  token=name_tok)
+        return
+    spec.includes.append(name)
 
 _TEMPLATE_SPEC_RE = re.compile(r"""
     \{              # opening brace
@@ -474,6 +504,8 @@ def parse_statement(spec: BlockSpec, state: ParseState,
         parse_block(spec, tokens, description)
     elif keyword.text == "param":
         parse_param(spec, tokens, description)
+    elif keyword.text == "include":
+        parse_include(spec, tokens, description)
     elif keyword.text == "pin":
         _wrap(spec, state, parse_pin(spec, tokens, description))
     elif keyword.text == "var":

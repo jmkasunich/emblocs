@@ -164,6 +164,10 @@ def blockspec_as_h_template(lines: list[str], blockspec: BlockSpec) -> None:
     # fixed include for emblocs types in struct
     lines.append(f'#include "emblocs_comp.h"')
     lines.append(f"")
+    # custom includes
+    for include in blockspec.includes:
+        lines.append(f'#include {include}')
+    lines.append(f"")
     # instance struct
     lines.append(f"// define instance structure")
     lines.append(f"typedef struct {{")
@@ -295,6 +299,10 @@ def blockdef_as_h_variant(lines: list[str], blockdef: BlockDef) -> None:
     lines.append(f"")
     # fixed include
     lines.append(f'#include "emblocs_common.h"')
+    lines.append(f"")
+    # custom includes
+    for include in blockdef.includes:
+        lines.append(f'#include {include}')
     lines.append(f"")
     # instance struct — no #if blocks, no BL_ symbols, all concrete
     lines.append(f"typedef struct {{")
