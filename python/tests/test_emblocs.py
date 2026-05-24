@@ -196,11 +196,11 @@ class TestAddBlockInstance:
 
     def test_dummy_signal_created_for_pin(self, design_with_simple):
         design_with_simple.add_block_instance("s1", "simple")
-        assert "__s1__in" in design_with_simple.dummy_signals
+        assert "dsig_s1_in" in design_with_simple.dummy_signals
 
     def test_dummy_signal_correct_type(self, design_with_simple):
         design_with_simple.add_block_instance("s1", "simple")
-        dummy = design_with_simple.dummy_signals["__s1__in"]
+        dummy = design_with_simple.dummy_signals["dsig_s1_in"]
         assert dummy.sig_type == PinType.FLOAT
 
     def test_pin_back_reference(self, design_with_simple):
@@ -625,7 +625,7 @@ class TestUnlinkPin:
         linked_design.link_by_name("src.out", "vel")
         linked_design.signals["vel"].value = 3.14
         linked_design.unlink_by_name("src.out")
-        dummy = linked_design.dummy_signals["__src__out"]
+        dummy = linked_design.dummy_signals["dsig_src_out"]
         assert dummy.value == 3.14
 
     def test_unlink_restores_dummy(self, linked_design):
@@ -797,7 +797,7 @@ class TestSetPinValue:
 
     def test_set_unconnected_pin(self, linked_design):
         linked_design.set_value_by_name("s1.in", 1.5)
-        dummy = linked_design.dummy_signals["__s1__in"]
+        dummy = linked_design.dummy_signals["dsig_s1_in"]
         assert dummy.value == 1.5
 
     def test_set_connected_pin_raises(self, linked_design):

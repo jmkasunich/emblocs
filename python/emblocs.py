@@ -522,12 +522,10 @@ class PinInstance:
         pin_def -- PinDef metadata (type, direction, names)
         signal  -- connected Signal, or None if unconnected (dummy signal)
         block   -- back-reference to parent block
-        full_name -- "{block.name}.{pin_def.name}"
     """
     pin_def: PinDef
     signal:  Signal | None = None
     block:   BlockInstance | None = None
-    full_name: str = ""
 
     def describe(self) -> str:
         sig = self.signal.name if self.signal else "dummy"
@@ -541,6 +539,14 @@ class PinInstance:
     def direction(self) -> PinDir:
         return self.pin_def.direction
 
+    @property
+    def dummy_name(self) -> str:
+        return f"dsig_{self.block.name}_{self.pin_def.name}"
+
+    @property
+    def full_name(self) -> str:
+        return f"{self.block.name}.{self.pin_def.name}"
+
 @dataclass
 class FunctInstance:
     """
@@ -551,16 +557,18 @@ class FunctInstance:
         funct_def -- FunctDef metadata (name, description)
         thread    -- Thread this function is assigned to, or None
         block     -- back-reference to parent block
-        full_name -- "{block.name}.{funct_def.name}"
     """
     funct_def: FunctDef
     thread:    Thread | None = None
     block:     BlockInstance | None = None
-    full_name: str = ""
 
     def describe(self) -> str:
         thr = self.thread.name if self.thread else "unassigned"
         return f"function  {self.full_name} -> {thr}"
+
+    @property
+    def full_name(self) -> str:
+        return f"{self.block.name}.{self.funct_def.name}"
 
 BlockInstChild = PinInstance | FunctInstance
 
@@ -715,11 +723,10 @@ class Design:
             functions = functions,
             namespace  = namespace,
         )
-        # set back-reference, full name, and dummy signal for each pin
+        # set back-reference and dummy signal for each pin
         for pin_name, pin in instance.pins.items():
             pin.block = instance
-            pin.full_name = f"{instance_name}.{pin_name}"
-            dummy_name = f"__{instance_name}__{pin_name}"
+            dummy_name = pin.dummy_name
             dummy = Signal(
                 name     = dummy_name,
                 sig_type = pin.pin_type if pin.pin_type != PinType.RAW
@@ -728,10 +735,9 @@ class Design:
             )
             self.dummy_signals[dummy_name] = dummy
             pin.signal = dummy
-        # set back reference and full name for each function
+        # set back reference for each function
         for func_name, func in instance.functions.items():
             func.block = instance
-            func.full_name = f"{instance_name}.{func_name}"
         # add to design
         self.blocks[instance_name] = instance
         self.namespace[instance_name] = instance
@@ -888,7 +894,7 @@ class Design:
             return
         # disconnect pin from signal
         signal = pin.signal
-        dummy = self.dummy_signals[f"__{pin.block.name}__{pin.pin_def.name}"]
+        dummy = self.dummy_signals[pin.dummy_name]
         dummy.value = signal.value
         if pin.direction == PinDir.OUTPUT:
             signal.driver = None
