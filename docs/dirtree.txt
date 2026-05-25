@@ -1,0 +1,75 @@
+emblocs/
+    .gitignore
+    emblocs.json
+    LICENSE
+    README.md
+    docs/
+        architecture.md
+        bloc_language.md
+        blocs_language.md
+        DEVELOPMENT.md
+        dirtree.txt  <-- this file
+    src/
+        components/
+            old, .c only components
+        components_new/
+            *.bloc
+            *.c
+            *.h
+        emblocs/
+            CMakeLists.txt  <-- not sure what's in here
+            emblocs_xxx.h   (total of five headers)
+            emblocs_core.c  <- roughly equivalent to emblocs.py - main structs
+            emblocs_parse.c <- parser for a very different dialect of what became .blocs
+            emblocs_show.c  <- roughly equivalent to the describe() methods
+        misc/
+            some utlilty libs used by emblocs/
+            linked_list.c & .h (linked list management code)
+            printing.c & .h    (stripped down printf-like for embedded)
+            serial.c & .h      (serial port buffers and a mixed text/binary protocol)
+            str_to_xx.c & .h   (conversion from string to float, u32, s32)
+        projects/              <- sample projects
+            STM32G431/         <-  using the G431 chip
+                header.mk
+                platform_g431.c & .h
+                startup_stm32g431kbtx.s
+                system_stm32g4xx.c
+                B-G431B-ESC1/   <-   on the B-G431B-ESC1 eval board
+                    header.mk
+                    main/       <-    one sample project
+                        emblocs.config.h
+                        main.c
+                        Makefile
+                        STM32G431KBTX_FLASH.ld
+                        openocd.cfg
+                        flash.bat
+                    print_test/  <-  another sample project (test of printing lib)
+                        printing-test.callMakefile
+                        STM32G431KBTX_FLASH.ld
+        header.mk
+        include.mk
+        platform.h
+    python/
+        bl_xxxx.py       <- four files related to my GUI efforts
+        emblocs_gui.py   <- also from my GUI efforts
+        testing.py       <- test script from before pytest
+        bloc_compiler.py
+        bloc_resolver.py
+        blocs_parser.py
+        emblocs.py
+        enbklocs_output.py
+        expressions.py
+        parse_common.py
+        variant_compiler.py
+        test-files/    <- old test infrastructure, going away
+            a few files
+        tests/          <- new test infrastructure using pytest
+            5-7 test files
+            data/
+                bad/
+                    sample files with various errors
+                good/
+                    sample files that work
+                tmp/        <- scratch directory
+                    some old test files
+                    build/  <- target directory for variant_compiler.py testing
