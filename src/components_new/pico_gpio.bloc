@@ -1,0 +1,37 @@
+block pico_gpio /// Raspberry Pi Pico GPIO driver with per-pin EMBLOCS interface.
+                /// Each bit set in a bitmask parameter exports one EMBLOCS pin.
+                /// Array slots for unselected pins are NULL and must not be
+                /// dereferenced.
+                ///
+                /// Usage: set INPUTS, OUTPUTS, and/or ENABLES to bitmasks
+                /// selecting which GPIO pins to export.  For example,
+                /// OUTPUTS=0x02000000 exports GP25 (the onboard LED) as an
+                /// output pin.
+
+param INPUTS   u32  default=0x02000000  /// bitmask: selects pins to export as inputs (GP0-GP29)
+param OUTPUTS  u32  default=0x02000000  /// bitmask: selects pins to export as outputs (GP0-GP29)
+param ENABLES  u32  default=0x02000000  /// bitmask: selects pins to export as output-enables (GP0-GP29)
+
+#if INPUTS!=0
+pin bool  output  pin{i:2}_in[i=30]   if (INPUTS>>i)&1   /// GPIO input bit value
+#endif
+
+#if OUTPUTS!=0
+pin bool  input   pin{i:2}_out[i=30]  if (OUTPUTS>>i)&1  /// GPIO output bit value
+#endif
+
+#if ENABLES!=0
+pin bool  input   pin{i:2}_oe[i=30]   if ((ENABLES&OUTPUTS)>>i)&1  /// GPIO output enable
+#endif
+
+function init  /// initialize GPIO pins; call once before starting threads
+
+#if INPUTS!=0
+function read  /// sample GPIO input pins and update input signals
+               /// call early in thread, before blocks that consume input values
+#endif
+
+#if OUTPUTS!=0
+function write /// read output signals and drive GPIO output pins
+               /// call late in thread, after blocks that produce output values
+#endif
