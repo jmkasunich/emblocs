@@ -1,18 +1,59 @@
-// Generated once by the EMBLOCS block compiler.
-// Edit freely - this file will not be overwritten.
-// Source: not.bloc
+/*************************************************************
+ * EMBLOCS component - inverter
+ */
 
 #include "emblocs_comp.h"
 
-#define BL_BLOCK_NAME not
+/* block data structure - one copy per block in realtime RAM */
+typedef struct bl_not_block_s {
+    bl_pin_bit_t in;
+    bl_pin_bit_t out;
+} bl_not_block_t;
 
-#include "not.h"
+_Static_assert((sizeof(bl_not_block_t) < BL_BLOCK_DATA_MAX_SIZE), "block structure too large");
 
-// EMBLOCS:  DO NOT REMOVE OR EDIT ABOVE THIS LINE
 
-void BL_MANGLE(update)(void *instance_data, uint32_t periodns) {
-    BL_MANGLE(t) *self = (BL_MANGLE(t) *)instance_data;
-    (void)periodns;  // delete this line if periodns is used
+/* array of pin definitions - one copy in FLASH */
+static bl_pin_def_t const bl_not_pins[] = {
+    { "in", BL_TYPE_BIT, BL_DIR_IN, offsetof(bl_not_block_t, in)},
+    { "out", BL_TYPE_BIT, BL_DIR_OUT, offsetof(bl_not_block_t, out)}
+};
 
-    OUT_ = ! IN_;
+_Static_assert((_countof(bl_not_pins) < BL_PIN_COUNT_MAX), "too many pins");
+
+
+static void bl_not_function(void *ptr, uint32_t period_ns);
+
+// array of function definitions - one copy in FLASH
+static bl_function_def_t const bl_not_functions[] = {
+    { "update", BL_NO_FP, &bl_not_function }
+};
+
+_Static_assert((_countof(bl_not_functions) < BL_FUNCTION_COUNT_MAX), "too many functions");
+
+
+// component definition - one copy in FLASH
+bl_comp_def_t const bl_not_def = {
+    "not",
+    NULL,
+    sizeof(bl_not_block_t),
+    BL_NO_PERSONALITY,
+    _countof(bl_not_pins),
+    _countof(bl_not_functions),
+    bl_not_pins,
+    bl_not_functions
+};
+
+// realtime code - one copy in FLASH
+static void bl_not_function(void *ptr, uint32_t period_ns)
+{
+    (void)period_ns;  // unused in this component
+
+    bl_not_block_t *p = (bl_not_block_t *)ptr;
+    if ( *(p->in) ) {
+        *(p->out) = 0;
+    } else {
+        *(p->out) = 1;
+    }
 }
+
