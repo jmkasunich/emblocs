@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-# variant_compiler.py
-# Generate variant .h, .c, and system.cmake from a .blocs system definition file.
+# blocs_compiler.py
+# Given foo.blocs, create complete system foo.c, foo.h and foo.cmake,
+# as well as *.c and *.c for each blockdef in the .blocs file
 #
-# Usage: variant_compiler.py file.blocs build_dir/ [-c path/to/emblocs.json]
+# Usage: blocs_compiler.py file.blocs build_dir/ [-c path/to/emblocs.json]
 
 from pathlib import Path
 import sys
