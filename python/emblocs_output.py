@@ -11,7 +11,7 @@
 from emblocs import (
     EmblocsError,
     Design, DesignObject,
-    BlockDef, FieldDef,Signal, Thread,
+    BlockDef, FieldDef, FunctDef, Signal, Thread,
     PinType,
     BlockInstance, PinInstance, FunctInstance,
     BlockSpec, ParamSpec, PinSpec, VarDef, FunctSpec,
@@ -209,7 +209,7 @@ def pinspec_as_inventory_comment(lines: list[str], pinspec: PinSpec) -> None:
         vars = _make_index_vars(len(pinspec.dims))
         args = ", ".join(vars)
         indices = "".join(f"[{v}]" for v in vars)
-        ranges = ", ".join(f"{v}=0..{d.size_expr}" for v, d in zip(vars, pinspec.dims))
+        ranges = ", ".join(f"{v}=0..({d.size_expr})-1" for v, d in zip(vars, pinspec.dims))
         lines.append(f"    //   {macro_name}({args})  or  *p{macro_name}{indices}  for {ranges}")
 
 def functspec_as_stub(lines: list[str], functspec: FunctSpec, blockspec: BlockSpec) -> None:
@@ -284,6 +284,9 @@ def fielddef_as_macro(lines: list[str], field: FieldDef) -> None:
         indices = "".join(f"[{v}]" for v in vars)
         lines.append(f"#define {macro_name}({args})  (*(self->{field.name}{indices}))")
 
+def functdef_as_prototype(lines: list[str], funct: FunctDef, prefix: str) -> None:
+    lines.append(f"void {prefix}_{funct.name}(void *instance_data, uint32_t periodns);")
+
 def blockdef_as_h_variant(lines: list[str], blockdef: BlockDef) -> None:
     block_name = blockdef.name
     guard = block_name.upper() + "_H"
@@ -314,6 +317,12 @@ def blockdef_as_h_variant(lines: list[str], blockdef: BlockDef) -> None:
     for field in blockdef.ordered_fields:
         if field.pin_type is not None:
             fielddef_as_macro(lines, field)
+    lines.append(f"")
+    # function prototypes
+    if blockdef.functions:
+        lines.append(f"")
+        for funct in blockdef.functions.values():
+            functdef_as_prototype(lines, funct, block_name)
     lines.append(f"")
     # close include guard
     lines.append(f"#endif // {guard}")
@@ -356,10 +365,11 @@ def design_as_cmake(lines: list[str], design: Design) -> None:
     stem = Path(design.source_path).stem
     lines.append(f"# Auto-generated from {stem}.blocs - Do not edit.")
     lines.append(f"")
+    lines.append(f"target_sources(main PRIVATE")
     for name in design.block_defs:
-        lines.append(f"add_library({name} OBJECT ${{CMAKE_BINARY_DIR}}/{name}.c)")
-    lines.append(f"add_library({stem} OBJECT ${{CMAKE_BINARY_DIR}}/{stem}.c)")
-
+        lines.append(f"    ${{CMAKE_BINARY_DIR}}/{name}.c")
+    lines.append(f"    ${{CMAKE_BINARY_DIR}}/{stem}.c")
+    lines.append(f")")
 
 def signal_as_c_system(lines: list[str], signal: Signal) -> None:
     c_type = SIG_C_TYPES[signal.sig_type]
@@ -445,9 +455,9 @@ def _pin_target(pin: PinInstance | None) -> str:
     return f"&sig_{pin.signal.name}"
 
 
-def thread_as_c_system(lines: list[str], thread: Thread) -> None:
+def thread_as_c_system(lines: list[str], thread: Thread, prefix: str) -> None:
     lines.append(f"")
-    lines.append(f"void {thread.name}(uint32_t periodns) {{")
+    lines.append(f"void {prefix}_{thread.name}(uint32_t periodns) {{")
     for func in thread.functions:
         lines.append(f"    {func.block.block_def.name}_{func.funct_def.name}(&blk_{func.block.name}, periodns);")
     lines.append(f"}}")
@@ -478,8 +488,9 @@ def design_as_c_system(lines: list[str], design: Design) -> None:
     # thread functions
     if design.threads:
         lines.append(f"// threads")
+        prefix = Path(design.source_path).stem
         for thread in design.threads.values():
-            thread_as_c_system(lines, thread)
+            thread_as_c_system(lines, thread, prefix)
 
 def design_as_h_system(lines: list[str], design: Design) -> None:
     stem = Path(design.source_path).stem
@@ -495,8 +506,9 @@ def design_as_h_system(lines: list[str], design: Design) -> None:
     lines.append(f"")
     # thread function prototypes
     if design.threads:
+        prefix = Path(design.source_path).stem
         for thread in design.threads.values():
-            lines.append(f"void {thread.name}(uint32_t periodns);")
+            lines.append(f"void {prefix}_{thread.name}(uint32_t periodns);")
         lines.append(f"")
     # close include guard
     lines.append(f"#endif // {guard}")
