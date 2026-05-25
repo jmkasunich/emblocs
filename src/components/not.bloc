@@ -1,0 +1,6 @@
+block not /// Single-bit logical inverter.
+
+pin bool input  in   /// boolean input
+pin bool output out  /// logical NOT of in
+
+function update  /// copy NOT in to out
