@@ -71,7 +71,7 @@ def load_config(config_path: Path) -> dict:
 
 
 def main():
-    ctx.push(source="variant_compiler.py")
+    ctx.push(source="blocs_compiler.py")
     # parse arguments
     if len(sys.argv) < 3:
         print(f"usage: {sys.argv[0]} file.blocs build_dir/ [-c path/to/emblocs.json]",
