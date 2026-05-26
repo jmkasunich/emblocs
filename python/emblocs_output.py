@@ -366,10 +366,22 @@ def design_as_cmake(lines: list[str], design: Design) -> None:
     lines.append(f"# Auto-generated from {stem}.blocs - Do not edit.")
     lines.append(f"")
     lines.append(f"target_sources({stem} PRIVATE")
-    for name in design.block_defs:
+    bloc_paths = set()
+    for name, block_def in design.block_defs.items():
         lines.append(f"    ${{CMAKE_BINARY_DIR}}/{name}.c")
+        bloc_paths.add(block_def.abs_path)
     lines.append(f"    ${{CMAKE_BINARY_DIR}}/{stem}.c")
     lines.append(f")")
+    lines.append(f"")
+    lines.append(f"set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS")
+    for bloc_path in sorted(bloc_paths):
+        p = Path(bloc_path)
+        lines.append(f"    {bloc_path}")
+        lines.append(f"    {p.with_suffix('.c').as_posix()}")
+        lines.append(f"    {p.with_suffix('.h').as_posix()}")
+    lines.append(f")")
+    lines.append(f"")
+
 
 def signal_as_c_system(lines: list[str], signal: Signal) -> None:
     c_type = SIG_C_TYPES[signal.sig_type]
