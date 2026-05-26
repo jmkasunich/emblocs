@@ -105,9 +105,11 @@ def main():
         config = load_config(config_path)
         if "tags" in config:
             set_tags(config["tags"])
+    # create an empty design
+    design = Design(abs_path=blocs_path.as_posix())
     # parse the .blocs file
-    design = parse_blocs_file(blocs_path.as_posix())
-    if design is None:
+    result = parse_blocs_file(blocs_path.as_posix(), design)
+    if result is False:
         ctx.fatal(f"parsing failed: {blocs_path}", lineno=OMIT, column=OMIT)
     # generate variant files
     for name, block_def in design.block_defs.items():

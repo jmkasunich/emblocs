@@ -630,7 +630,7 @@ class Design:
     cannot share a name.
 
     Fields:
-        source_path -- path to the .blocs file this was parsed from
+        abs_path    -- absolute path to the .blocs file this was parsed from
         block_defs  -- dict of BlockDef keyed by variant name
         blocks      -- dict of BlockInstance keyed by instance name
         signals     -- dict of Signal keyed by signal name
@@ -638,7 +638,7 @@ class Design:
         namespace   -- dict of all BlockDef, BlockInstance, Signal and Thread
                        objects in the design, O(1) search and uniqueness checks
     """
-    source_path:   str
+    abs_path:      str
     block_defs:    dict[str, BlockDef]      = field(default_factory=dict)
     blocks:        dict[str, BlockInstance] = field(default_factory=dict)
     signals:       dict[str, Signal]        = field(default_factory=dict)
@@ -647,7 +647,7 @@ class Design:
     namespace:     dict[str, DesignChild]   = field(default_factory=dict)
 
     def describe(self) -> str:
-        lines = [f"Design: {self.source_path}"]
+        lines = [f"Design: {self.abs_path}"]
         if recurse:
             for bd in self.block_defs.values():
                 lines.append(_indent_child(bd.describe()))
@@ -673,7 +673,7 @@ class Design:
             and returns matching object or None """
         child = self.namespace.get(name)
         if child is None:
-            raise EmblocsError(f"{name!r} not found in design {self.source_path!r}")
+            raise EmblocsError(f"{name!r} not found in design")
         return child
 
     def find_object_by_name(self, name: str) -> DesignObject:

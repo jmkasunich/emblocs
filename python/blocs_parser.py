@@ -522,24 +522,18 @@ def lex_lines(lines: list[str]) -> list[list[Token]]:
 # Top-level entry points
 # ---------------------------------------------------------------------------
 
-def parse_blocs(lines: list[str],
-                design: Design | None = None) -> Design | None:
+def parse_blocs(lines: list[str], design: Design) -> bool:
     """
     Parse a list of source lines and return a populated Design object.
     Expects an active ErrorContext (pushed by read_source_xxx()).
     Returns None if any errors were reported.
     """
-    if design is None:
-        design = Design(source_path=ctx.source)
-
     for tokens in lex_lines(lines):
         parse_command(tokens, design)
+    return True  if ctx.no_errors() else False
 
-    return design if ctx.no_errors() else None
 
-
-def parse_blocs_file(path: str,
-                     design: Design | None = None) -> Design | None:
+def parse_blocs_file(path: str, design: Design) -> bool:
     """
     Parse a .blocs file and return a populated Design object.
     Convenience wrapper around read_source_file() and parse_blocs().
@@ -550,14 +544,14 @@ def parse_blocs_file(path: str,
         ctx.summarize()
         ctx.pop()
         return None
-    design = parse_blocs(lines, design)
+    result = parse_blocs(lines, design)
     ctx.summarize()
     ctx.pop()
-    return design
+    return result
 
 
-def parse_blocs_string(text: str, source: str = "<string>",
-                       design: Design | None = None) -> Design | None:
+def parse_blocs_string(text: str, design: Design,
+                        source: str = "<string>") -> bool:
     """
     Parse a .blocs string and return a populated Design object.
     Convenience wrapper around read_source_string() and parse_blocs().
@@ -568,10 +562,10 @@ def parse_blocs_string(text: str, source: str = "<string>",
         ctx.summarize()
         ctx.pop()
         return None
-    design = parse_blocs(lines, design)
+    result = parse_blocs(lines, design)
     ctx.summarize()
     ctx.pop()
-    return design
+    return result
 
 
 # ---------------------------------------------------------------------------

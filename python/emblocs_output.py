@@ -76,7 +76,7 @@ def thread_as_blocs(lines: list[str], thread: Thread ) -> None:
     lines.append(" ".join(fields))
 
 def design_as_blocs(lines: list[str], design: Design) -> None:
-    lines.append(f"# Design source: {design.source_path}")
+    lines.append(f"# Design source: {design.abs_path}")
     for key in sorted(design.block_defs):
         blockdef_as_blocs(lines, design.block_defs[key])
     for key in sorted(design.blocks):
@@ -362,7 +362,7 @@ def blockdef_as_c_variant(lines: list[str], blockdef: BlockDef) -> None:
     raise EmblocsError(f"sentinel line not found in {Path(blockdef.abs_path).with_suffix(".c")}")
 
 def design_as_cmake(lines: list[str], design: Design) -> None:
-    stem = Path(design.source_path).stem
+    stem = Path(design.abs_path).stem
     lines.append(f"# Auto-generated from {stem}.blocs - Do not edit.")
     lines.append(f"")
     lines.append(f"target_sources({stem} PRIVATE")
@@ -465,10 +465,10 @@ def thread_as_c_system(lines: list[str], thread: Thread, prefix: str) -> None:
 
 def design_as_c_system(lines: list[str], design: Design) -> None:
     # header comment
-    lines.append(f"// Auto-generated from {Path(design.source_path).name} - Do not edit.")
+    lines.append(f"// Auto-generated from {Path(design.abs_path).name} - Do not edit.")
     lines.append(f"")
     lines.append(f'#include "emblocs_common.h"')
-    lines.append(f'#include "{Path(design.source_path).stem}.h"')
+    lines.append(f'#include "{Path(design.abs_path).stem}.h"')
     lines.append(f"")
     # includes — one per blockdef
     for name in design.block_defs:
@@ -488,15 +488,14 @@ def design_as_c_system(lines: list[str], design: Design) -> None:
     # thread functions
     if design.threads:
         lines.append(f"// threads")
-        prefix = Path(design.source_path).stem
+        prefix = Path(design.abs_path).stem
         for thread in design.threads.values():
             thread_as_c_system(lines, thread, prefix)
 
 def design_as_h_system(lines: list[str], design: Design) -> None:
-    stem = Path(design.source_path).stem
-    guard = stem.upper() + "_H"
+    guard = Path(design.abs_path).stem.upper() + "_H"
     # header comment
-    lines.append(f"// Auto-generated from {Path(design.source_path).name} - Do not edit.")
+    lines.append(f"// Auto-generated from {Path(design.abs_path).name} - Do not edit.")
     lines.append(f"")
     # include guard
     lines.append(f"#ifndef {guard}")
@@ -506,7 +505,7 @@ def design_as_h_system(lines: list[str], design: Design) -> None:
     lines.append(f"")
     # thread function prototypes
     if design.threads:
-        prefix = Path(design.source_path).stem
+        prefix = Path(design.abs_path).stem
         for thread in design.threads.values():
             lines.append(f"void {prefix}_{thread.name}(uint32_t periodns);")
         lines.append(f"")

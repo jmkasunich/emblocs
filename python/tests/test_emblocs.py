@@ -18,7 +18,7 @@ from emblocs import (
 
 @pytest.fixture
 def empty_design():
-    return Design(source_path="test.blocs")
+    return Design(abs_path="test.blocs")
 
 
 @pytest.fixture
@@ -514,7 +514,7 @@ class TestLinkPin:
     def test_unknown_signal_raises(self, linked_design):
         with pytest.raises(EmblocsError) as exc:
             linked_design.link_by_name("s1.in", "nonexistent")
-        assert str(exc.value) == "'nonexistent' not found in design 'test.blocs'"
+        assert str(exc.value) == "'nonexistent' not found in design"
 
     def test_already_connected_raises(self, linked_design):
         linked_design.link_by_name("s1.in", "vel")
@@ -577,7 +577,7 @@ class TestLinkFunction:
     def test_unknown_thread_raises(self, linked_design):
         with pytest.raises(EmblocsError) as exc:
             linked_design.link_by_name("s1.update", "nonexistent")
-        assert str(exc.value) == "'nonexistent' not found in design 'test.blocs'"
+        assert str(exc.value) == "'nonexistent' not found in design"
 
     def test_already_assigned_raises(self, linked_design):
         linked_design.link_by_name("s1.update", "fast")
@@ -593,7 +593,7 @@ class TestLinkFunction:
     def test_link_unknown_second_arg_raises(self, linked_design):
         with pytest.raises(EmblocsError) as exc:
             linked_design.link_by_name("s1.in", "nonexistent")
-        assert str(exc.value) == "'nonexistent' not found in design 'test.blocs'"
+        assert str(exc.value) == "'nonexistent' not found in design"
 
 
 # ---------------------------------------------------------------------------
@@ -787,7 +787,7 @@ class TestSetSignalValue:
     def test_unknown_signal_raises(self, design_with_signals):
         with pytest.raises(EmblocsError) as exc:
             design_with_signals.set_value_by_name("nonexistent", 0)
-        assert str(exc.value) == "'nonexistent' not found in design 'test.blocs'"
+        assert str(exc.value) == "'nonexistent' not found in design"
 
     def test_driven_signal_raises(self, design_with_signals, block_def_with_pins):
         design_with_signals.add_block_def(block_def_with_pins)
