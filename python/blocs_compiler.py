@@ -10,8 +10,9 @@ import sys
 import json
 
 from parse_common import ctx, OMIT, short_path
-from blocs_parser import parse_blocs_file, set_tags
-from emblocs import Design, BlockDef
+from blocs_parser import parse_blocs_file, set_tags, set_get_block_spec
+from bloc_parser import parse_bloc_file
+from emblocs import Design, BlockSpec
 from emblocs_output import (
     write_file_if_changed,
     blockdef_as_h_variant,
@@ -70,6 +71,55 @@ def load_config(config_path: Path) -> dict:
     return config
 
 
+_blockspec_cache: dict[str, BlockSpec] = {}
+
+def get_blockspec(path: str) -> BlockSpec | None:
+    '''
+    Callback for blockdef command in blocs_parser.py.
+    Verifies that the named .bloc file exists, and that the
+    corresponding .h and .c files exist and are newer than
+    the .bloc file, then calls parse_bloc_file to create a
+    valid BlockSpec.
+    Returns the BlockSpec, or None on error
+    '''
+    # get BlockSpec from cache if available
+    if path in _blockspec_cache:
+        return _blockspec_cache[path]
+    # not in cache, validate .bloc file
+    bloc_path = Path(path)
+    if not bloc_path.is_file():
+        ctx.error(f"bloc file not found: {bloc_path.name!r}")
+        return None
+    bloc_time = bloc_path.stat().st_mtime
+    # capture error count so we can check/report several errors at once
+    error_count = ctx.error_count
+    h_path = bloc_path.with_suffix(".h")
+    if not h_path.is_file():
+        ctx.error(f"block header not found: {h_path.name!r};")
+    else:
+        h_time = h_path.stat().st_mtime
+        if h_time < bloc_time:
+            ctx.error(f"{h_path.name!r} is older than {bloc_path.name!r}")
+    c_path = bloc_path.with_suffix(".c")
+    if not c_path.is_file():
+        ctx.error(f"block source not found: {c_path.name!r}")
+    else:
+        c_time = c_path.stat().st_mtime
+        if c_time < bloc_time:
+            ctx.error(f"{c_path.name!r} is older than {bloc_path.name!r}")
+    # check against captured error count
+    if ctx.error_count > error_count:
+        ctx.info(f"run bloc_compiler.py on {bloc_path.name} and/or edit {c_path.name} to bring block up to date")
+        return None
+    # parse the bloc
+    spec = parse_bloc_file(path)
+    if spec is None:
+        ctx.error(f"failed to parse {short_path(path)!r}")
+        return None
+    _blockspec_cache[path] = spec
+    return spec
+
+
 def main():
     ctx.push(source="blocs_compiler.py")
     # parse arguments
@@ -107,6 +157,8 @@ def main():
             set_tags(config["tags"])
     # create an empty design
     design = Design(abs_path=blocs_path.as_posix())
+    # register callback for blockdef commands
+    set_get_block_spec(get_blockspec)
     # parse the .blocs file
     result = parse_blocs_file(blocs_path.as_posix(), design)
     if result is False:

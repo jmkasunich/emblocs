@@ -36,14 +36,12 @@ def main():
         print("Parsing failed due to errors.", file=sys.stderr)
         sys.exit(1)
 
-    # generate and write <block>.h
+    # always generate and write <block>.h
     h_path = bloc_path.with_suffix(".h")
     h_lines = []
     blockspec_as_h_template(h_lines, block_spec)
-    if write_file_if_changed(h_path, h_lines):
-        print(f"wrote {h_path}")
-    else:
-        print(f"no change: {h_path}")
+    h_path.write_text("\n".join(h_lines) + "\n", newline="\n")
+    print(f"wrote {h_path}")
 
     # generate and write <block>.c only if it does not already exist
     c_path = bloc_path.with_suffix(".c")

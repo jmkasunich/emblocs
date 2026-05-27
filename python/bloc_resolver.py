@@ -238,11 +238,6 @@ def resolve(spec: BlockSpec, variant_name: str, orig_path: str,
     resolve() and pop_context() after). Reports errors into the current context.
     Returns a BlockDef if successful, None if any errors were reported.
     """
-    # ensure we have a clean context to work with
-    if not ctx.no_errors():
-        ctx.error("resolve() called with pre-existing errors in context")
-        return None
-
     if not variant_name.isidentifier():
         ctx.error(f"invalid variant name {variant_name!r}")
         return None
@@ -251,7 +246,7 @@ def resolve(spec: BlockSpec, variant_name: str, orig_path: str,
         supplied_params = {}
 
     variables = _build_variables(spec, supplied_params)
-    if not ctx.no_errors():
+    if variables is None:
         return None
 
     ordered_fields = []
@@ -260,6 +255,8 @@ def resolve(spec: BlockSpec, variant_name: str, orig_path: str,
     functions = {}
     type_to_dict = { PinDef: pins, FunctDef: functions }
 
+    # capture error count to detect any errors inside the loop
+    error_count = ctx.error_count
     for statement in spec.statements:
         field, expanded = _expand_statement(statement, variables)
         if field is not None:
@@ -273,7 +270,8 @@ def resolve(spec: BlockSpec, variant_name: str, orig_path: str,
                     target_dict = type_to_dict.get(type(obj))
                     if target_dict is not None:
                         target_dict[obj.name] = obj
-    if not ctx.no_errors():
+    # check for errors in loop
+    if ctx.error_count > error_count:
         return None
 
     return BlockDef(

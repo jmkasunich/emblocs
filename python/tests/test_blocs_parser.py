@@ -4,12 +4,12 @@ import pytest
 from pathlib import Path
 from parse_common import (Token, ctx)
 from blocs_parser import (
-    lex_lines,
+    lex_lines, set_get_block_spec,
     parse_blocs, parse_blocs_string, parse_blocs_file,
-    _bloc_spec_cache,
 )
+from bloc_parser import parse_bloc_file
 from emblocs import (
-    PinType, Design
+    PinType, Design, BlockSpec,
 )
 
 
@@ -27,14 +27,16 @@ def clean_context():
     yield
     ctx.clear()
 
+def block_spec_getter(path: str) -> BlockSpec | None:
+    if not Path(path).is_file():
+        ctx.error(f"bloc file not found: {Path(path).name!r}")
+        return None
+    return parse_bloc_file(path)
 
 @pytest.fixture(autouse=True)
-def clear_cache():
-    """Clear the bloc spec cache before each test."""
-    _bloc_spec_cache.clear()
+def set_block_spec_callback():
+    set_get_block_spec(block_spec_getter)
     yield
-    _bloc_spec_cache.clear()
-
 
 @pytest.fixture
 def simple_bloc(good_dir) -> Path:
@@ -253,19 +255,6 @@ class TestCmdBlockdef:
         assert "out" in design.block_defs["myblock"].pins
         assert "update" in design.block_defs["myblock"].functions
 
-    def test_blockdef_cached(self, simple_bloc, capsys):
-        blocs_str = (f"blockdef block1  {rtmp(simple_bloc)}\n"
-                     f"blockdef block2 {rtmp(simple_bloc)}\n")
-        design = Design(abs_path="test_design")
-        result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
-        actual = capsys.readouterr().err.strip()
-        expect = "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
-        assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
-        assert result is True
-        assert len(_bloc_spec_cache) == 1
-        assert "block1" in design.block_defs
-        assert "block2" in design.block_defs
-
     def test_blockdef_with_params(self, param_bloc, capsys):
         blocs_str = f"blockdef myblock {rtmp(param_bloc)} NCHAN=3 MASK=7 HAS_ENABLE=1\n"
         design = Design(abs_path="test_design")
@@ -348,7 +337,7 @@ class TestCmdBlockdef:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         expect = (
-            "tests/data/tmp/test.blocs:1:18: error: bloc file not found: 'NCHAN=3'\n"
+            "tests/data/tmp/test.blocs:1:18: error: blockdef path must be a .bloc file, got 'NCHAN=3'\n"
             "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
         assert result is False

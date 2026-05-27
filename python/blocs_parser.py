@@ -3,8 +3,8 @@
 # Reads a .blocs file and returns a Design object.
 
 import sys
-from collections import namedtuple
 from pathlib import Path
+from collections.abc import Callable
 from expressions import evaluate, ExpressionError
 
 from emblocs import (
@@ -110,7 +110,6 @@ def set_tags(tags: dict[str, str]) -> None:
     _tags = tags
 
 
-
 def resolve_bloc_path(path: str) -> str | None:
     """
     Resolve a .bloc file path as written in a blockdef command.
@@ -122,9 +121,11 @@ def resolve_bloc_path(path: str) -> str | None:
     Untagged relative paths are resolved relative to the directory
     containing the .blocs file currently being parsed.
 
-    Returns the resolved path as a POSIX string, or None if the file
-    does not exist or the tag is unknown.
+    Returns resolved path as a POSIX string, or None on error.
     """
+    if Path(path).suffix != '.bloc':
+        ctx.error(f"blockdef path must be a .bloc file, got {path!r}")
+        return None
     tag, sep, remainder = path.partition(":")
     if sep == ":":
         if not tag.isidentifier():
@@ -137,16 +138,21 @@ def resolve_bloc_path(path: str) -> str | None:
     else:
         blocs_dir = Path(ctx.source).parent
         resolved = (blocs_dir / path).resolve()
-    if not resolved.exists():
-        return None
     return resolved.as_posix()
 
 
 # ---------------------------------------------------------------------------
-# Bloc spec cache
+# Bloc spec callback
 # ---------------------------------------------------------------------------
 
-_bloc_spec_cache: dict[str, BlockSpec] = {}
+# when a blockdef command is encountered, we use a callback
+# to get the corresponding BlockSpec
+
+_get_block_spec: Callable[[str], BlockSpec | None] | None = None
+
+def set_get_block_spec(handler: Callable[[str], BlockSpec | None]) -> None:
+    global _get_block_spec
+    _get_block_spec = handler
 
 
 # ---------------------------------------------------------------------------
@@ -169,19 +175,16 @@ def cmd_blockdef(tokens: list[Token], design: Design) -> tuple[BlockDef | None, 
         ctx.error(f"invalid blockdef name {name_tok.text!r}", token=name_tok)
         return None, 0
     # resolve path to .bloc file
+    ctx.set(token=path_tok)
     resolved_path = resolve_bloc_path(path_tok.text)
     if resolved_path is None:
-        ctx.error(f"bloc file not found: {path_tok.text!r}", token=path_tok)
+        # error already reported by resolve_bloc_path
         return None, 0
-    # get BlockSpec from cache or create it by parsing the .bloc file
-    if resolved_path not in _bloc_spec_cache:
-        spec = parse_bloc_file(resolved_path)
-        if spec is None:
-            ctx.error(f"failed to parse {path_tok.text!r}", token=path_tok)
-            return None, 0
-        spec.abs_path = resolved_path
-        _bloc_spec_cache[resolved_path] = spec
-    spec = _bloc_spec_cache[resolved_path]
+    # callback to get BlockSpec
+    spec = _get_block_spec(resolved_path)
+    if spec is None:
+        # error already reported by _get_block_spec
+        return None, 0
     # parse PARAM=value tokens
     supplied_params = {}
     spec_param_names = {p.name for p in spec.params}
