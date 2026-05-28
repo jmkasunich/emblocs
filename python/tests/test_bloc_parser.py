@@ -70,7 +70,7 @@ class TestParseBlocString:
     def test_param_declaration(self):
         spec = parse_bloc_string(
             "block foo /// test\n"
-            "param NCHAN u32 default=1 min=1 max=8 /// channels\n"
+            "param u32 NCHAN default=1 min=1 max=8 /// channels\n"
             "function update\n"
         )
         assert spec is not None
@@ -113,7 +113,7 @@ class TestParseBlocString:
     def test_if_endif(self):
         spec = parse_bloc_string(
             "block foo /// test\n"
-            "param HAS_ENABLE bool default=0\n"
+            "param bool HAS_ENABLE default=0\n"
             "#if HAS_ENABLE\n"
             "pin bool input enable\n"
             "#endif\n"
@@ -126,7 +126,7 @@ class TestParseBlocString:
     def test_unterminated_if_fails_message(self, capsys):
         spec = parse_bloc_string(
             "block foo /// test\n"
-            "param HAS_ENABLE bool default=0\n"
+            "param bool HAS_ENABLE default=0\n"
             "#if HAS_ENABLE\n"
             "pin bool input enable\n"
         )

@@ -85,7 +85,7 @@ def parse_block(spec: BlockSpec,
 def parse_param(spec: BlockSpec, tokens: list[Token], description: str) -> None:
     """
     Handle the 'param' declaration.
-    Syntax: param <NAME> <type> default=<value> [min=<value>] [max=<value>]
+    Syntax: param <type> <NAME> default=<value> [min=<value>] [max=<value>]
     Appends a ParamSpec to spec.params, or reports errors and returns.
     """
     keyword = tokens[0]
@@ -95,8 +95,14 @@ def parse_param(spec: BlockSpec, tokens: list[Token], description: str) -> None:
                   token=keyword)
         return
 
-    name_tok = tokens[1]
-    type_tok = tokens[2]
+    type_tok = tokens[1]
+    name_tok = tokens[2]
+
+    if type_tok.text not in ("bool", "u32"):
+        ctx.error(f"invalid parameter type {type_tok.text!r}; "
+                  f"expected 'bool' or 'u32'", token=type_tok)
+        return
+    param_type = type_tok.text
 
     if not name_tok.text.isidentifier():
         ctx.error(f"invalid parameter name: {name_tok.text!r}",
@@ -107,13 +113,6 @@ def parse_param(spec: BlockSpec, tokens: list[Token], description: str) -> None:
         ctx.error(f"duplicate parameter name: {name_tok.text!r}",
                   token=name_tok)
         return
-
-    if type_tok.text not in ("bool", "u32"):
-        ctx.error(f"invalid parameter type {type_tok.text!r}; "
-                  f"expected 'bool' or 'u32'", token=type_tok)
-        return
-
-    param_type = type_tok.text
 
     # parse key=value tokens for default, min, max
     default = None

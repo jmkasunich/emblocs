@@ -1,8 +1,8 @@
 block integrator /// Integrates input over time.
 /// Optional enable and hold pins control integration behavior.
 
-param HAS_ENABLE  bool  default=0  /// if true, export the enable pin
-param HAS_HOLD    bool  default=0  /// if true, export the hold pin
+param bool HAS_ENABLE  default=0  /// if true, export the enable pin
+param bool HAS_HOLD    default=0  /// if true, export the hold pin
 
 pin float  input   in      /// value to integrate
 pin float  output  out     /// integral of in over time

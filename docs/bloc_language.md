@@ -309,16 +309,16 @@ descriptions should take advantage of the multi-line syntax:
 
 ### 3.2 Parameter Declaration
 
-    param <NAME> <type> default=<value> [min=<value>] [max=<value>]  /// descripton
+    param <type> <NAME> default=<value> [min=<value>] [max=<value>]  /// descripton
 
 Declares a variant parameter. Parameters are supplied on the `blockdef`
 command line in the `.blocs` system definition and are validated by the
 block compiler before any C compilation occurs.
 
+- `<type>` is one of `bool` or `u32`.
 - `<NAME>` is an identifier. By convention, parameter names are UPPERCASE,
   matching the `BL_<NAME>` preprocessor symbols they become in generated C
   code. For example, `param NCHANNELS` produces `BL_NCHANNELS`.
-- `<type>` is one of `bool` or `u32`.
 - `default=<value>` is required. It specifies the value used when the
   parameter is not supplied on the `blockdef` command line, and also the
   value provided in `<block>.h` under `#ifndef` guards for editor support.
@@ -332,8 +332,8 @@ block compiler before any C compilation occurs.
 
 Examples:
 
-    param HAS_ENABLE  bool  default=0   /// if true, export the enable pin
-    param NCHANNELS   u32   default=1  min=1  max=16  /// number of independent channels
+    param bool HAS_ENABLE  default=0   /// if true, export the enable pin
+    param u32  NCHANNELS   default=1  min=1  max=16  /// number of independent channels
 
 ### 3.3 Include Declaration
 
@@ -1001,8 +1001,8 @@ A block with two optional pins controlled by boolean parameters. Demonstrates
 block integrator  /// Integrates input over time.
                   /// Optional enable and hold pins control integration behavior.
 
-param HAS_ENABLE  bool  default=0  /// if true, export the enable pin
-param HAS_HOLD    bool  default=0  /// if true, export the hold pin
+param bool HAS_ENABLE  default=0  /// if true, export the enable pin
+param bool HAS_HOLD    default=0  /// if true, export the hold pin
 
 pin float  input   in      /// value to integrate
 pin float  output  out     /// integral of in over time
@@ -1101,8 +1101,8 @@ from name ordering.
 block mux /// N-channel M-to-1 multiplexor.
           /// All channels share a single select input.
 
-param NUM_CHAN   u32  default=1  min=1  max=16  /// number of independent channels
-param NUM_INPUT  u32  default=2  min=2  max=10  /// number of inputs per channel
+param u32 NUM_CHAN  default=1  min=1  max=16  /// number of independent channels
+param u32 NUM_INPUT default=2  min=2  max=10  /// number of inputs per channel
 
 // storage order [NUM_INPUT][NUM_CHAN] for cache efficiency:
 // all channels for one select value are contiguous in memory
@@ -1207,9 +1207,9 @@ block stm32_gpio /// STM32 GPIO port driver with per-pin EMBLOCS interface.
                  /// Array slots for unselected pins are NULL and must not be
                  /// dereferenced.
 
-param INPUTS   u32  default=0x0000  /// bitmask: bits selecting pins to export as inputs
-param OUTPUTS  u32  default=0x0000  /// bitmask: bits selecting pins to export as outputs
-param ENABLES  u32  default=0x0000  /// bitmask: bits selecting pins to export as output-enables
+param u32 INPUTS   default=0x0000  /// bitmask: bits selecting pins to export as inputs
+param u32 OUTPUTS  default=0x0000  /// bitmask: bits selecting pins to export as outputs
+param u32 ENABLES  default=0x0000  /// bitmask: bits selecting pins to export as output-enables
 
 var GPIO_TypeDef *base_addr;    // hardware register base address
 
@@ -1285,7 +1285,7 @@ void BL_MANGLE(read)(void *instance_data, uint32_t periodns) {
 | Statement | Syntax | Section |
 |-----------|--------|---------|
 | `block` | `block <name> /// description` | 3.1 |
-| `param` | `param <NAME> <type> default=<value> [min=<value>] [max=<value>]` | 3.2 |
+| `param` | `param <type> <NAME> default=<value> [min=<value>] [max=<value>]` | 3.2 |
 | `pin` | `pin <type> <direction> <name-spec> [if <expr>]` | 3.3 |
 | `var` | `var <C-declaration>;` | 3.4 |
 | `function` | `function <name>` | 3.5 |

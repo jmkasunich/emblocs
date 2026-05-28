@@ -5,13 +5,13 @@ block complex_example /// Test case for a variety of .bloc constructs.
 ///   pin templates referencing parameters, multiple functions with
 ///   multi-line descriptions, and trailing if conditions.
 
-param HAS_ENABLE   bool  default=0              /// if true, export the enable pin
-param HAS_HOLD     bool  default=0              /// if true, export the hold pin
-param STAGE_MASK   u32   default=0  min=0 max=7 /// bitmask: enable integration stages
-param NCHANNELS    u32   default=1  min=1 max=4 /// number of input channels
-param NROWS        u32   default=2  min=1 max=8 /// number of rows in 2D array
-param NCOLS        u32   default=2  min=1 max=8 /// number of cols in 2D array
-param BASE_STAGE   u32   default=0  min=0 max=7 /// base stage number for naming
+param bool HAS_ENABLE  default=0              /// if true, export the enable pin
+param bool HAS_HOLD    default=0              /// if true, export the hold pin
+param u32  STAGE_MASK  default=0  min=0 max=7 /// bitmask: enable integration stages
+param u32  NCHANNELS   default=1  min=1 max=4 /// number of input channels
+param u32  NROWS       default=2  min=1 max=8 /// number of rows in 2D array
+param u32  NCOLS       default=2  min=1 max=8 /// number of cols in 2D array
+param u32  BASE_STAGE  default=0  min=0 max=7 /// base stage number for naming
 
 // simple scalar pins
 pin float  input   in          /// primary float input

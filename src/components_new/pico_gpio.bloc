@@ -8,9 +8,9 @@ block pico_gpio /// Raspberry Pi Pico GPIO driver with per-pin EMBLOCS interface
                 /// OUTPUTS=0x02000000 exports GP25 (the onboard LED) as an
                 /// output pin.
 
-param INPUTS   u32  default=0x02000000  /// bitmask: selects pins to export as inputs (GP0-GP29)
-param OUTPUTS  u32  default=0x02000000  /// bitmask: selects pins to export as outputs (GP0-GP29)
-param ENABLES  u32  default=0x02000000  /// bitmask: selects pins to export as output-enables (GP0-GP29)
+param u32 INPUTS   default=0x02000000  /// bitmask: selects pins to export as inputs (GP0-GP29)
+param u32 OUTPUTS  default=0x02000000  /// bitmask: selects pins to export as outputs (GP0-GP29)
+param u32 ENABLES  default=0x02000000  /// bitmask: selects pins to export as output-enables (GP0-GP29)
 
 #if INPUTS!=0
 pin bool  output  pin{i:2}_in[i=30]   if (INPUTS>>i)&1   /// GPIO input bit value
