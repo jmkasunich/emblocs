@@ -53,11 +53,10 @@ into source control (see Section 1.3 and Section 8.2).
 Tool 1 is the single authority on block structure and pin layout. It operates
 in two modes.
 
-**Tool 1, template mode** — run by the block author when creating or updating
-a `.bloc` file:
+**Tool 1** — run by the block author when creating or updating a `.bloc` file:
 
 ```
-bloc_compiler.py mux.bloc --mode=template
+bloc_compiler.py mux.bloc
 ```
 
 Produces:
@@ -81,9 +80,9 @@ they must manually reconcile their implementation with the updated `<block>.h`.
 If the structural changes are large enough that starting from a fresh template
 is preferable, the author may delete `<block>.c` before re-running.
 
-Tool 1 applies stable-output detection in template mode: `<block>.h` is
-written to disk only if its content has changed, so unchanged files do not
-receive updated timestamps and do not trigger unnecessary recompilation.
+<details>
+<summary> DEPRECATED SECTION - was "variant mode" for Tool 1 - click to view
+</summary>
 
 **Tool 1, variant mode** — invoked by Tool 2 per `blockdef` command:
 
@@ -126,6 +125,8 @@ All three variant-mode output files use stable-output detection: Tool 1
 writes them only if their content has changed, avoiding unnecessary
 recompilation when only the wiring region of `system.blocs` changes.
 
+</details>
+
 **Tool 2: The system compiler** reads a `.blocs` system definition file and
 builds a complete in-memory model of the system using the shared object model
 from `emblocs.py`. For each `blockdef` command it invokes Tool 1 in variant
@@ -148,17 +149,11 @@ All Python tools — Tool 1, Tool 2, and the runtime monitor — import
 `emblocs.py`, which defines the complete EMBLOCS object model as Python
 classes. Block-level classes (Block, Pin, Function, Parameter) and
 system-level classes (Signal, Thread, BlockInstance) are all defined here.
-Each class owns its own JSON serialization and deserialization. This shared
-foundation guarantees consistency across tools and allows the runtime monitor
-to work with the same representations as the build tools.
-
-The JSON schema version is embedded in each serialized file so tools can
-detect and reject incompatible versions gracefully.
 
 ### 1.5 Relationship to Variants
 
 A single `.bloc` file may describe a family of related blocks parameterized
-by compile-time values supplied on the `blockdef` command in a `.blocs` file.
+by compile-time values supplied by the `blockdef` command in a `.blocs` file.
 Each distinct set of parameter values produces a **variant** — a block type
 with its own name, its own struct definition, and its own compiled object file.
 
@@ -222,7 +217,7 @@ language's identifier rules.
 ### 2.4 Keywords
 
 Reserved keywords: `block`, `param`, `include`, `pin`, `var`,
-`function`, `if`, `endif`, `true`, `false`, `input`, `output`,
+`function`, `if`, `#if`, `#endif`, `true`, `false`, `input`, `output`,
 `bool`, `u32`, `s32`, `float`, `raw`, `default`, `min`, `max`.
 
 ### 2.5 Whitespace
@@ -285,9 +280,9 @@ body.  The header contains exactly one `block` statement that describes
 the block. The parameters section contains zero or more `param` declarations
 which can be used to generate customized variants of the block, and may also
 contain optional `include` statements that allow exteral files to be included
-before a block instance data structure is defined.
-The body contains the rest of the block definition: `pin`, `var`, and `function`
-declarations optionally grouped within `#if`/`#endif` blocks.
+before a block instance data structure is defined. The body contains the rest
+of the block definition: `pin`, `var`, and `function` declarations optionally
+grouped within `#if`/`#endif` blocks.
 
 The order in which `pin` and `var` declarations appear in the body determines
 the order of fields in the generated C instance struct.  Block authors may
@@ -311,9 +306,9 @@ descriptions should take advantage of the multi-line syntax:
 
     param <type> <NAME> default=<value> [min=<value>] [max=<value>]  /// descripton
 
-Declares a variant parameter. Parameters are supplied on the `blockdef`
+Declares a variant parameter. Parameters values are supplied on the `blockdef`
 command line in the `.blocs` system definition and are validated by the
-block compiler before any C compilation occurs.
+.bloc compiler before any C compilation occurs.
 
 - `<type>` is one of `bool` or `u32`.
 - `<NAME>` is an identifier. By convention, parameter names are UPPERCASE,
@@ -380,8 +375,8 @@ The `raw` type is compatible with any signal type and is used for blocks that
 operate on values without interpreting them (e.g., a multiplexor).
 
 In generated C code, pin fields use the corresponding typedef from
-`emblocs_comp.h`: `pin_bool_t`, `pin_u32_t`, `pin_s32_t`, `pin_float_t`,
-`pin_raw_t`.
+`emblocs_comp.h`: `bl_pin_bit_t`, `bl_pin_u32_t`, `bl_pin_s32_t`,
+`nl_pin_float_t`, `bl_pin_raw_t`.
 
 #### 3.4.2 Pin Direction
 
@@ -576,6 +571,13 @@ Examples:
     function update  /// clamp in to [min, max] and copy to out
     function read    /// read IDR and drive input pins; call early in thread
     function write   /// read output pins and drive ODR/BSRR; call late in thread
+
+By convention, a function named `init` can be defined to do any one-time setup
+that the block requires.  Also by convention, a .blocs file can declare a
+thread named `init` and add all `init` functions to it; the main program would
+then run that thread once at startup.  Note the the .bloc and .blocs languages
+to not assign any special meaning to `init` functions or threads; this is simply
+a useful pattern for block and system authors.
 
 ---
 
