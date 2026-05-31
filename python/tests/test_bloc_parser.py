@@ -1,6 +1,7 @@
 # tests/test_bloc_parser.py
 # Tests for bloc_parser.py
 
+from __future__ import annotations
 import pytest
 from parse_common import ctx
 from bloc_parser import parse_bloc_string, parse_bloc_file

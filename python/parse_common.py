@@ -5,7 +5,6 @@
 # for breaking source lines into Tokens tagged with line and column.
 
 from __future__ import annotations
-
 import sys
 from collections import namedtuple
 from dataclasses import dataclass, field

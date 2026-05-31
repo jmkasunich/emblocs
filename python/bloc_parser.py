@@ -2,6 +2,7 @@
 # Parser for .bloc block template files.
 # Reads a .bloc file and returns a BlockSpec object.
 #
+from __future__ import annotations
 import sys
 import re
 from pathlib import Path

@@ -3,6 +3,7 @@
 # Focuses on Design methods: add_block_def, add_block_instance,
 # add_signal, add_thread, and link/unlink operations.
 
+from __future__ import annotations
 import pytest
 from emblocs import (
     Design, BlockDef, BlockInstance, Signal, Thread,

@@ -7,7 +7,7 @@
 # caller will do "\n".join(lines) to create a single string for
 # output or other processing.
 
-
+from __future__ import annotations
 from emblocs import (
     EmblocsError,
     Design, DesignObject,

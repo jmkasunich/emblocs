@@ -2,6 +2,7 @@
 # Parser for .blocs system definition files.
 # Reads a .blocs file and returns a Design object.
 
+from __future__ import annotations
 import sys
 from pathlib import Path
 from collections.abc import Callable

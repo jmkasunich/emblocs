@@ -2,6 +2,7 @@
 # Tests for parse_common.py: read_source_file(), read_source_string(),
 # ErrorContext, push/pop context, and report().
 
+from __future__ import annotations
 import pytest
 from pathlib import Path
 from parse_common import (

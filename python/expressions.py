@@ -10,6 +10,7 @@
 #
 # Raises ExpressionError on any syntax or semantic error.
 
+from __future__ import annotations
 import ast
 import operator
 import re

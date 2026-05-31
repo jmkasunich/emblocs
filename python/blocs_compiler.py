@@ -5,6 +5,7 @@
 #
 # Usage: blocs_compiler.py file.blocs build_dir/ [-c path/to/emblocs.json]
 
+from __future__ import annotations
 from pathlib import Path
 import sys
 import json

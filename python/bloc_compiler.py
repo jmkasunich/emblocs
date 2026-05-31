@@ -7,6 +7,7 @@
 # Always writes <block>.h alongside the .bloc file, but only if the content
 # has changed.  Writes <block>.c only if it does not already exist.
 
+from __future__ import annotations
 from pathlib import Path
 import sys
 

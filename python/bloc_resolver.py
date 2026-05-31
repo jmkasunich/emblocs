@@ -5,6 +5,7 @@
 # conditions, expands array pins, and produces a flat BlockDef with
 # concrete PinDef, VarDef, and FunctDef objects.
 
+from __future__ import annotations
 import sys
 from emblocs import (
     BlockSpec, BlockDef,
