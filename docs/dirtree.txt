@@ -10,9 +10,9 @@ emblocs/
         DEVELOPMENT.md
         dirtree.txt  <-- this file
     src/
-        components/
+        old_components/
             old, .c only components
-        components_new/
+        components/
             *.bloc
             *.c
             *.h

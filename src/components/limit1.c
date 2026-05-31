@@ -1,64 +1,25 @@
-// EMBLOCS component - position limiter
+// Generated once by the EMBLOCS block compiler.
+// Edit freely - this file will not be overwritten.
+// Source: limit1.bloc
 
 #include "emblocs_comp.h"
 
-// block data structure - one copy per block in RAM
-typedef struct bl_limit1_block_s {
-    bl_pin_float_t in;
-    bl_pin_float_t max;
-	bl_pin_float_t min;
-	bl_pin_float_t out;
-} bl_limit1_block_t;
+#define BL_BLOCK_NAME limit1
 
-_Static_assert((sizeof(bl_limit1_block_t) < BL_BLOCK_DATA_MAX_SIZE), "block structure too large");
+#include "limit1.h"
 
+// EMBLOCS:  DO NOT REMOVE OR EDIT ABOVE THIS LINE
 
-// array of pin definitions - one copy in FLASH
-static bl_pin_def_t const bl_limit1_pins[] = {
-    { "in", BL_TYPE_FLOAT, BL_DIR_IN, offsetof(bl_limit1_block_t, in)},
-    { "max", BL_TYPE_FLOAT, BL_DIR_IN, offsetof(bl_limit1_block_t, max)},
-    { "min", BL_TYPE_FLOAT, BL_DIR_IN, offsetof(bl_limit1_block_t, min)},
-    { "out", BL_TYPE_FLOAT, BL_DIR_OUT, offsetof(bl_limit1_block_t, out)}
-};
+void BL_MANGLE(update)(void *instance_data, uint32_t periodns) {
+    BL_MANGLE(t) *self = (BL_MANGLE(t) *)instance_data;
+    (void)periodns;  // delete this line if periodns is used
 
-_Static_assert((_countof(bl_limit1_pins) < BL_PIN_COUNT_MAX), "too many pins");
-
-
-static void bl_limit1_function(void *ptr, uint32_t period_ns);
-
-// array of function definitions - one copy in FLASH
-static bl_function_def_t const bl_limit1_functions[] = {
-    { "update", BL_HAS_FP, &bl_limit1_function }
-};
-
-_Static_assert((_countof(bl_limit1_functions) < BL_FUNCTION_COUNT_MAX), "too many functions");
-
-
-// component definition - one copy in FLASH
-bl_comp_def_t const bl_limit1_def = { 
-    "limit1",
-    NULL,
-    sizeof(bl_limit1_block_t),
-    BL_NO_PERSONALITY,
-    _countof(bl_limit1_pins),
-    _countof(bl_limit1_functions),
-    bl_limit1_pins,
-    bl_limit1_functions
-};
-
-// realtime code - one copy in FLASH
-static void bl_limit1_function(void *ptr, uint32_t period_ns)
-{
-    (void)period_ns;  // unused in this component
-    float tmp_in, tmp_lim;
-
-    bl_limit1_block_t *p = (bl_limit1_block_t *)ptr;
-    tmp_in = *(p->in);
-    if ( tmp_in > (tmp_lim = *(p->max)) ) {
-        tmp_in = tmp_lim;
-    } else if ( tmp_in < (tmp_lim = *(p->min)) ) {
-        tmp_in = tmp_lim;
+    float val = IN_;
+    if ( val < MIN_) {
+        val = MIN_;
     }
-    *(p->out) = tmp_in;
+    if ( val > MAX_ ) {
+        val = MAX_;
+    }
+    OUT_ = val;
 }
-
