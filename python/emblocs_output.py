@@ -365,7 +365,7 @@ def design_as_cmake(lines: list[str], design: Design) -> None:
     stem = Path(design.abs_path).stem
     lines.append(f"# Auto-generated from {stem}.blocs - Do not edit.")
     lines.append(f"")
-    lines.append(f"target_sources({stem} PRIVATE")
+    lines.append(f"target_sources(${{TARGET}} PRIVATE")
     bloc_paths = set()
     for name, block_def in design.block_defs.items():
         lines.append(f"    ${{CMAKE_BINARY_DIR}}/{name}.c")
