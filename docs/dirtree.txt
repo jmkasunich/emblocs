@@ -38,7 +38,7 @@ emblocs/
         blocs_compiler.py
         blocs_parser.py
         emblocs.py
-        enbklocs_output.py
+        enblocs_output.py
         expressions.py
         parse_common.py
         tests/          <- new test infrastructure using pytest

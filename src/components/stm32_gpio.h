@@ -7,7 +7,7 @@
 
 #include "emblocs_comp.h"
 
-#include "platform_g431.h"
+#include "platform.h"
 
 // define instance structure
 typedef struct {

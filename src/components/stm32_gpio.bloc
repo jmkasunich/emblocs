@@ -12,7 +12,7 @@ param u32 INPUTS    default=0x00FF /// bitmask: selects pins to export as inputs
 param u32 OUTPUTS   default=0xFF00 /// bitmask: selects pins to export as outputs
 param u32 ENABLES   default=0xFF00 /// bitmask: selects pins to export as output-enables
 
-include "platform_g431.h"
+include "platform.h"
 
 var GPIO_TypeDef *base_addr;    // hardware register base address
 

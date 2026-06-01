@@ -25,23 +25,29 @@
 // EMBLOCS:  DO NOT REMOVE OR EDIT ABOVE THIS LINE
 
 // used to convert PORT_NUM parameter to GPIOA...GPIOG
-#define _GPIO_FROM_NUM_0   GPIOA
-#define _GPIO_FROM_NUM_1   GPIOB
-#define _GPIO_FROM_NUM_2   GPIOC
-#define _GPIO_FROM_NUM_3   GPIOD
-#define _GPIO_FROM_NUM_4   GPIOE
-#define _GPIO_FROM_NUM_5   GPIOF
-#define _GPIO_FROM_NUM_6   GPIOG
-
-#define _GPIO_FROM_NUM(n)  _GPIO_FROM_NUM_##n
-#define GPIO_FROM_NUM(n)   _GPIO_FROM_NUM(n)
-
+#if PORT_NUM == 0
+#define PORT_ADDR GPIOA
+#elif PORT_NUM == 1
+#define PORT_ADDR GPIOB
+#elif PORT_NUM == 2
+#define PORT_ADDR GPIOC
+#elif PORT_NUM == 3
+#define PORT_ADDR GPIOD
+#elif PORT_NUM == 4
+#define PORT_ADDR GPIOE
+#elif PORT_NUM == 5
+#define PORT_ADDR GPIOF
+#elif PORT_NUM == 6
+#define PORT_ADDR GPIOG
+#else
+#error "PORT_NUM must be 0-6"
+#endif
 
 void BL_MANGLE(init)(void *instance_data, uint32_t periodns) {
     BL_MANGLE(t) *self = (BL_MANGLE(t) *)instance_data;
     (void)periodns;  // delete this line if periodns is used
 
-    self->base_addr = GPIO_FROM_NUM(PORT_NUM);
+    self->base_addr = PORT_ADDR;
     // configure the hardware
     uint32_t moder = self->base_addr->MODER;  // get existing modes
     for ( int n = 0 ; n < 16 ; n++ ) {
