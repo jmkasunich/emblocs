@@ -18,6 +18,7 @@ Currently supported targets:
 
 Planned targets:
 - STM32F103 ("blue pill")
+- ESP32
 - FreeRTOS variants of the above
 
 ---
@@ -75,8 +76,12 @@ the policy governing this check is compile-time configurable.
 
 Threads are periodic execution contexts. Each thread has a period (in
 nanoseconds) and an ordered list of block functions to call. On bare-metal
-systems, threads run in interrupt service routines (ISRs). On RTOS systems,
-threads run as OS threads.
+systems, threads typically run in interrupt service routines (ISRs). On
+RTOS systems, threads run as OS threads.  However, the core EMBLOCS system
+does not directly control how threads are invoked.  One convention is that
+a thread named `init` can be used for things that only need to run once
+at startup; a program's main() function can simply invoke the `init` thread
+once.
 
 ---
 
@@ -98,10 +103,9 @@ within a block instance and are addressed using qualified names of the form
 ## 4. The System Definition Language
 
 EMBLOCS systems are described using a scripting language. System descriptions
-use the `.blocs` file extension. (A related language for describing individual
-block templates uses the `.bloc` extension; see `bloc_language.md`.) The full
-lexical and syntactic specification of the `.blocs` language is in
-`blocs_language.md`; this section describes the language's structure and role.
+use the `.blocs` file extension.  The full lexical and syntactic specification
+of the `.blocs` language is in `blocs_language.md`; this section describes the
+language's basic structure and role.
 
 ### 4.1 Command Structure
 
@@ -184,7 +188,7 @@ line are abandoned; subcommands that already completed are not rolled back.
 | `+name`    | Connect: link a pin to a signal, add a function to a thread, or vice versa |
 | `-name`    | Disconnect: unlink a named pin or function from target object |
 | `-`        | Disconnect: unlink this pin or function from whatever it is connected to |
-| `-+name` | Rebind: disconnect current target, then connect to new target |
+| `-+name`   | Rebind: disconnect current target, then connect to new target |
 
 When a pin is disconnected, its current value is preserved by copying it into
 the pin's dummy signal.
@@ -197,28 +201,81 @@ state unchanged. Error categories include: name resolution failures, type
 mismatches, direction or driver violations, and illegal value writes.
 
 ---
+## 5. The Block Definition Language
 
-## 5. Deployment Modes
+EMBLOCS control blocks consist of a mixture of generated and hand-written code.
+The `.bloc` block definition language is used to describe the interfaces of a
+given block.  Block instance data structures are generated automatically from
+the `.bloc` file, then the block author writes code to implement the block
+functionality.  The full lexical and syntactic specification of the `.bloc`
+language is in `bloc_language.md`; this section describes the language's
+basic features, structure and role; some statements such as `include` and
+`var` are omitted here.
+
+### 5.1 Block Statement
+
+A `.bloc` file must begin with exactly one `block` statement, which defines the
+name of the block described by the file.  By convention this is the base name
+of the `.bloc` file, but this is not required.
+
+### 5.2 Parameter Statement
+
+A `.bloc` file can contain zero or more `param` statements, each of which defines
+a parameter than can be used to generate multiple variants from a single `.bloc`
+file.  Parameters are named (by convention in UPPERCASE), and can be boolean or
+unsigned integters.  All parameters must have a default value, and u32 parameters
+can have optional minimum and maximum values.
+
+### 5.3 Body Statements
+
+The body section of a `.bloc` file follows the `block` and `param` (if any)
+statements, and is what actually defines the block.  The body consists of
+any combination of `pin` and `function` statements, which may be contained
+in `#if <condition> / #endif` blocks.  The `<condition>` field of an `#if`
+statement must be an expression containing only constants, operators, and/or
+parameter names.
+
+#### 5.3.1 Pin Statement
+
+A `pin` statement defines one or more EMBLOCS pins.  Each statement starts with
+the `pin` keyword, followed by the pin type and direction.  This is followed by
+a pin name specification and an optional conditional.
+Pins can be scalar or arrays.  A scalar pin is simple; it defines a single pin,
+and the name specification is simply the pin name itself.  Array pins have
+dimensions, and the name specification serves as a template to create unique
+EMBLOCS pin names for each array element.  Array dimensions must be expressions
+containing constants, operators, and/or parameter names.
+Each pin can be followed by an optional `if` expression that determines if that
+particular pin is exported; this allows sparse export from array pins.  The `if`
+expression can include constants, operators, parameter names, and array index
+names.
+
+
+---
+## 6. Deployment Modes
+
+***Work in progress***
+*at the moment only static deployment with no metadata (section 6.3) is supported*
 
 EMBLOCS supports a spectrum of deployment configurations controlled by
 compile-time options in `emblocs_config.h`. The same `.blocs` file produces
 all deployment modes; only the build configuration changes.
 
-### 5.1 Dynamic (development)
+### 6.1 Dynamic (development)
 
 - All modules compiled in, including the parser and name metadata
 - System is configured at runtime by sending `.blocs` commands over UART
 - Most flexible, largest flash and RAM footprint
 - Use case: early development, interactive exploration
 
-### 5.2 Static with Metadata (integration/debug)
+### 6.2 Static with Metadata (integration/debug)
 
 - System pre-configured at startup via generated `system.c`
 - Parser and name metadata still compiled in
 - Runtime monitor can inspect and modify the running system by name
 - Use case: integration testing, debug builds
 
-### 5.3 Static, No Metadata (production)
+### 6.3 Static, No Metadata (production)
 
 - System pre-configured at startup via generated `system.c`
 - Name strings stripped to minimize flash and RAM usage
@@ -228,9 +285,14 @@ all deployment modes; only the build configuration changes.
 
 ---
 
-## 6. Source Structure
+## 7. Source Structure
 
-### 6.1 `emblocs/src/emblocs/`
+***This section is very likely to change***
+*At the moment, none of the C code below is used; only the code types
+defined in emblocs_common.h are used.  This will change when metadata
+and runtime support are added.*
+
+### 7.1 `emblocs/src/emblocs/`
 
 The core library. Key files:
 
@@ -263,12 +325,12 @@ Include hierarchy:
 - Whether null pointer checks are compiled in
 - Whether the parser and show modules are included
 
-### 6.2 `emblocs/src/components/`
+### 7.2 `emblocs/src/components/`
 
 Generic block implementations. Each block depends only on the core library.
 Blocks are designed to be independently testable via CI test harnesses.
 
-### 6.3 `emblocs/src/misc/`
+### 7.3 `emblocs/src/misc/`
 
 Utility code used by the core library:
 - Linked list management
@@ -277,29 +339,32 @@ Utility code used by the core library:
 - Serial port library implementing a combined human-readable stream and
   binary packet protocol
 
-### 6.4 `emblocs/python/`
+### 7.4 `emblocs/python/`
 
 Build-time and runtime Python tools (see Section 7).
 
 ---
 
-## 7. Python Tooling
+## 8. Python Tooling
 
-### 7.1 Shared Object Model (`emblocs.py`)
+### 8.1 Shared Object Model (`emblocs.py`)
 
 All Python tools import `emblocs.py`, which defines the complete EMBLOCS
 object model as Python classes. This single source of truth covers both
 block-level objects (Block, Pin, Function, Parameter) and system-level
 objects (Signal, Thread, BlockInstance).
 
-By sharing the object model across tools, consistency is guaranteed: Tool 1,
-Tool 2, and the runtime monitor all work with the same class hierarchy.
+By sharing the object model across tools, consistency is guaranteed: the
+.bloc compiler, the .blocs compiler, and the runtime monitor all work
+with the same class hierarchy.
 
 Parsers for the .bloc and .blocs languages are implemented as modules;
 any tool that needs to parse a file imports the appropriate parser and
 gets the object level model directly.
 
-### 7.2 Runtime Monitor
+### 8.2 Runtime Monitor
+
+***Under Construction***
 
 A GUI tool (using Tkinter) that connects to a running EMBLOCS system over
 UART. It imports `emblocs.py` and uses the same object model as the build
@@ -310,132 +375,109 @@ tools. Features:
 - **Oscilloscope**: display signal values vs. time, capturing one sample per
   thread execution
 
-### 7.3 Build-time Tools
+### 8.3 Block Compiler (`bloc_compiler.py`)
 
-EMBLOCS uses a two-tool model for block and system compilation. The tools
-have distinct responsibilities and run at different times.
+The block compiler and the .bloc language are used by block authors to
+define individual control blocks.
 
-#### 7.3.1 Tool 1: Block Compiler (`bloc_compiler.py`)
+#### 8.3.1 Blocks and Variants
 
-Tool 1 is the single authority on block structure and pin layout. It operates
-in two modes.
+Many control blocks have a fixed configuration; always the same input and
+output pins, always the same functions that perform the same tasks.  A system
+can contain multiple instances of the block, but each instance is the same.
 
-**Template mode** — run by the block author when creating or updating a
-`.bloc` file. Produces:
+However, sometimes a block naturally tends to have variations.  A classic
+example is a multiplexor that chooses one of several inputs to be copied
+to an output.  A multiplexor might choose one of two inputs, or one of
+three, or one of ten.  It might also be convenient to have a multiplexor
+with multiple parallel channels, such that one `select` input switches all
+channels in parallel.  EMBLOCS supports this with the concept of `variants`.
 
-- **`<block>.h`** — a header containing the instance struct definition and
-  default parameter defines, using `BL_` preprocessor symbols for all
-  variant-controlled values. Default values (from the `.bloc` file's
-  `default=` clauses) are wrapped in `#ifndef`/`#endif` guards so that
-  variant-specific values take precedence at build time while providing
-  clangd with a complete compilation environment during editing. This file
-  lives alongside `<block>.bloc` and `<block>.c` in the block's library
-  and is checked into source control.
-- **`<block>.c`** — a one-time source template with function stubs and a
-  comment inventory of available pins. Generated only if the file does not
-  already exist; the block author owns this file from the moment of creation
-  and Tool 1 never overwrites it. The author may delete it to obtain a fresh
-  template after significant structural changes.
+A single `.blocs` file can support multiple variants by means of `parameters`.
+For example, the `mux` (multiplexor) example has parameters called `NUM_CHAN`
+for the number of parallel channels, and `NUM_INPUT` to determine if it
+selects one of two, one of three, etc. inputs.  Each unique combination of
+parameter values produces a unique variant, but all share the same `.bloc`
+file and source code.
 
-Template mode may be run any number of times. Re-running after `.bloc`
-changes is normal and safe: `<block>.h` is always regenerated, `<block>.c`
-is left untouched if it exists. If the block author adds or renames a pin,
-they must manually reconcile their `<block>.c` implementation with the
-updated `<block>.h`. Tool 1 applies stable-output detection — `<block>.h`
-is written to disk only if its content has changed, so unchanged files do
-not receive updated timestamps and do not trigger unnecessary recompilation.
+To manage variants, EMBLOCS has two concepts, `BlockSpec` or block specification,
+and `BlockDef`, or block definition.  A `BlockDef` describes exactly one
+variant; it is fully resolved and can be used to create block instances in
+a system design.  A `BlockSpec` is derived from a `.bloc` file and cannot
+itself be used to create block instances; instead the `BlockSpec` must be
+resolved to a `BlockDef` first.
 
-**Variant mode** — invoked by Tool 2 per `blockdef` command. Produces three
-files in the project build directory:
+If a `.bloc` file does not contain parameters, the resulting `BlockSpec`
+can produce only one `BlockDef`.  However, a `.bloc` file with parameters
+results in a `BlockSpec` with parameters, which can be used to create
+multiple different `BlockDefs` by supplying different parameter values.
+Each `BlockDef` describes a different variant.
 
-- **`<variant>.h`** — a fully expanded variant-specific header with all
-  `BL_` symbols replaced by concrete values and all names mangled with the
-  block type name. Contains no preprocessor conditionals and no `BL_`
-  symbols; safe for inclusion by `system.c` alongside headers for other
-  variants.
-- **`<variant>.c`** — a fully expanded variant-specific source file.
-  Includes `<variant>.h` instead of `<block>.h`. All `BL_` symbols are
-  replaced by concrete values and all `BL_MANGLE()` calls are expanded to
-  their mangled forms. Conditional `#if`/`#endif` blocks are retained with
-  literal values substituted, so the C preprocessor handles branch
-  elimination normally. A `#line` directive at the top of the file points
-  back to `<block>.c`, ensuring that compiler error messages refer to the
-  file the author actually edits. (If the `#line` directive causes toolchain
-  issues, the fallback is to document that `<variant>.c` line numbers
-  correspond directly to `<block>.c` line numbers since no lines are added
-  or removed during substitution.)
-- **`<variant>.json`** — a full serialization of the block's object model,
-  including all pins with their complete attribute sets (name, field name,
-  type, direction, byte offset, array dimensions, metadata description) and
-  all functions with their mangled symbol names. The schema is versioned.
-  Consumed by Tool 2 when processing signal connections and pin references
-  in the `.blocs` file.
-
-All three variant-mode output files use stable-output detection. Tool 1
-writes them only if their content has changed, so edits to the wiring region
-of `system.blocs` do not trigger unnecessary recompilation of variant object
-files.
-
-The block author may use a standard C editor with full LSP support (clangd)
-on `<block>.c`, because it includes `<block>.h` which provides default
-parameter values. Clangd sees a complete, consistent compilation environment
-without requiring a variant build to have been run first.
-
-#### 7.3.2 Tool 2: System Compiler (`blocs_compiler.py`)
-
-Tool 2 uses `blocs_parser.py` to read a `.blocs` system definition file
-and build a complete in-memory model of the system using the classes
-from `emblocs.py`.
-For each `blockdef` command it invokes `bloc_parser.py` to parse the .bloc
-file, then `bloc_resolver.py` to generate the specific variant.
-For each `signal` and `thread` command it constructs the corresponding objects,
-tracking connections, values, and thread ordering. The resulting in-memory
-model is fully inspectable and is used to drive all output generation.
-
-Tool 2 produces:
-
-- **`system.cmake`** — CMake compile rules. For each `blockdef` command,
-  emits an `add_library(... OBJECT ...)` rule that compiles `<variant>.c`
-  to `<variant>.o`. No `-D` flags are needed since all substitutions are
-  already performed in `<variant>.c`.
-- **`system.c`** — instance struct declarations and signal initializers
-  for static deployment modes.
-
-#### 7.3.3 Build Dependency and Over-triggering
-
-Tool 2 (and Tool 1 in variant mode) are triggered when `system.blocs`
-changes. However, `system.blocs` has two regions with different change
-frequencies: the structural region (`blockdef`/`block` commands, rarely
-changed) and the wiring region (signal connections and value assignments,
-changed frequently during tuning). Edits to the wiring region unnecessarily
-re-trigger Tool 1 variant mode even though no structural change occurred.
-
-The preferred mitigation is stable-output detection: Tool 1 in variant mode
-generates its output content and writes to disk only if the content differs
-from the existing files. If the files are unchanged, their timestamps are not
-updated and CMake does not retrigger downstream C compilation. This is a
-standard code-generation technique requiring minimal implementation effort.
-
-### 7.4 Block Authoring Workflow
+#### 8.3.2 Block Authoring Workflow
 
 The intended workflow for creating or updating a block:
 
-1. Author writes or updates `<block>.bloc` describing pins, parameters,
+1. Author writes or updates `<block>.bloc` describing parameters, pins,
    private variables, and function names.
-2. Author runs Tool 1 in template mode, which generates or updates
-   `<block>.h` and generates `<block>.c` if it does not already exist.
-   Re-running after `.bloc` changes is normal and safe. If structural
-   changes are large enough that a fresh template is preferable, the author
-   may delete `<block>.c` before re-running.
-3. Author implements or updates the function bodies in `<block>.c`. The
-   editor provides full C language support via clangd because the file is
-   pure C with a complete header. If pins were added or renamed, the author
-   must manually reconcile the implementation with the updated `<block>.h`.
-4. When the system is assembled, Tool 2 reads the `.blocs` file, invokes
-   Tool 1 in variant mode for each `blockdef` command, and generates
-   variant-specific artifacts.
+2. Author runs `bloc_compiler.py` on `<block>.bloc`, which generates
+   `<block>.h` and `<block>.c`, which are referred to as `template` files.
+   These files are created in the same directory as `<block>.bloc` and
+   should be placed under version control.
+3. `<block>.h` contains a typedef for the instance data structure, which
+   may have conditional fields and/or variable size arrays based on
+   parameter values.  `<block>.c` contains empty bodies for the functions
+   defined by the `.bloc` file, and includes `<block>.h` to define the
+   instance data structure.
+4. Author implements the function bodies by editing `<block>.c`. The
+   editor provides full C language support via clangd because the file
+   is pure C with a complete header.
+5. If changes to the block specification are needed, the `.bloc` file
+   can be edited, and `bloc_compiler.py` run again.  It will update
+   `<block>.h` which is always a generated file, but it will not overwrite
+   `<block>.c`, since that file might contain function implementations
+   added by the block author.  For a complete fresh start, the author
+   can delete `<block>.c`, in which case the block compiler will generate
+   both files.
+6. The `<block>.h` and `<block>.c` files are normally never compiled into
+   actual code for the system.  Instead, each `blockdef` command in the
+   system is process by the system compiler `blocs_compiler.py`, producing
+   `<variant>.h` and `<variant>.c` in the system build directory.  These
+   variant files have fixed fields and fixed size arrays as defined by
+   the specific block definition, and are the code that is actually
+   compiled and linked into the finished system.
 
-### 7.5 Name Mangling
+#### 8.4 System Compiler (`blocs_compiler.py`)
+
+The system compiler `blocs_compiler.py` reads a `.blocs` system definition
+file and build a complete in-memory model of the system using the classes
+from `emblocs.py`.  For each `blockdef` command, it invokes `bloc_parser.py`
+to parse the .bloc file, then `bloc_resolver.py` to generate the specific
+`<variant>.h` and `<variant>.c` files in the system build directory.  For
+each `signal` and `thread` command it constructs the corresponding objects,
+tracking connections, values, and thread ordering. The resulting in-memory
+model is fully inspectable and is used to drive all output generation.
+
+In addition to the variant source files, the system compiler also produces
+the following files in the system build directory:
+
+- **`<system>.cmake`** — CMake compile rules. For each `blockdef` command,
+  emits an `add_library(... OBJECT ...)` rule that compiles `<variant>.c`
+  to `<variant>.o`.
+- **`<system>.c`** — instance struct declarations and signal initializers
+  for static deployment modes.
+
+#### 8.4.1 Build Dependency and Over-triggering
+
+`blocs_compiler.py` is triggered when `<system>.blocs` changes. However,
+`<system>.blocs` has two regions with different change frequencies: the
+structural region (`blockdef`/`block` commands, rarely changed) and the
+wiring region (signal connections and value assignments, changed frequently
+during tuning). The system compiler checks for existing variant source
+files, and only re-writes those files if their content has changed.  This
+prevents unnecessary re-compilation when no structural change has occurred.
+
+
+### 8.5 Name Mangling
 
 When the same `.bloc` file is compiled for multiple variants (e.g., a
 1-channel mux and a 3-channel mux), each variant's object file must
@@ -446,17 +488,15 @@ function names — are mangled using the block type name from the
 The block type name is passed as the preprocessor symbol `BL_BLOCK_NAME`.
 A `BL_MANGLE(name)` macro in the generated header expands to
 `<blocktype>_<name>`. For example, `BL_MANGLE(update)` in a compilation
-for block type `mux2to1` expands to `mux2to1_update`.
-
-In `<variant>.c`, Tool 1 performs this expansion directly during source
-generation, so the compiled file contains fully mangled names and requires
-no `-D` flags at compile time.
+for block type `mux2to1` expands to `mux2to1_update`.  This allows the
+`update` functions for multiple multiplexor variants to coexist in the
+linker namespace.
 
 ---
 
-## 8. Build System
+## 9. Build System
 
-### 8.1 Philosophy
+### 9.1 Philosophy
 
 EMBLOCS uses CMake as its build system. All source is compiled per-project
 into a project-specific build directory. There are no pre-compiled libraries;
@@ -471,7 +511,7 @@ generation machinery, not for using the compiled library itself.
 Only open-source toolchains are supported (`arm-none-eabi-gcc`, etc.).
 Proprietary compilers are explicitly not supported.
 
-### 8.2 File Locations
+### 9.2 File Locations
 
 Files fall into two categories based on who owns them and where they live.
 
@@ -482,31 +522,30 @@ library directory, checked into source control:
 |------|-------|-------|
 | `<block>.bloc` | Block author | Hand-written |
 | `<block>.c` | Block author | Hand-written after initial generation |
-| `<block>.h` | Tool 1 | Generated; never hand-edited; checked in to support editor tooling without requiring a build |
+| `<block>.h` | bloc_compiler | Generated; never hand-edited; checked in to support editor tooling without requiring a build |
 
 The presence of `<block>.h` in source control is a deliberate exception to
 the "generated files go in build/" rule, justified by the requirement that a
 fresh checkout provides a working editor environment. CI should verify that
-the checked-in `<block>.h` matches what Tool 1 would generate from the
-current `<block>.bloc`.
+the checked-in `<block>.h` matches what bloc_compiler.py would generate from
+the current `<block>.bloc`.
 
 **Project build artifacts** — live in the project build directory, not
 checked into source control:
 
 | File | Producer |
 |------|----------|
-| `<variant>.h` | Tool 1, variant mode |
-| `<variant>.c` | Tool 1, variant mode |
-| `<variant>.json` | Tool 1, variant mode |
+| `<variant>.h` | blocs_compiler |
+| `<variant>.c` | blocs_compiler |
 | `<variant>.o` | C compiler |
-| `system.c` | Tool 2 |
-| `system.cmake` | Tool 2 |
-| `system.o` | C compiler |
+| `<system>.c` | blocs_compiler |
+| `<system>.cmake` | blocs_compiler |
+| `<system>.o` | C compiler |
 
-### 8.3 CMake Integration
+### 9.3 CMake Integration
 
 The master `CMakeLists.txt` is hand-written and stable. It includes the
-generated `system.cmake`:
+generated `<system>.cmake`:
 
 ```cmake
 include(${CMAKE_BINARY_DIR}/system.cmake)
@@ -525,7 +564,7 @@ libraries into the final firmware target.
 
 ---
 
-## 9. Portability
+## 10. Portability
 
 EMBLOCS targets MCUs only — not PCs or embedded Linux. Supported and planned
 compiler toolchains:
