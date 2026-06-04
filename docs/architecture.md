@@ -393,7 +393,7 @@ three, or one of ten.  It might also be convenient to have a multiplexor
 with multiple parallel channels, such that one `select` input switches all
 channels in parallel.  EMBLOCS supports this with the concept of `variants`.
 
-A single `.blocs` file can support multiple variants by means of `parameters`.
+A single `.bloc` file can support multiple variants by means of `parameters`.
 For example, the `mux` (multiplexor) example has parameters called `NUM_CHAN`
 for the number of parallel channels, and `NUM_INPUT` to determine if it
 selects one of two, one of three, etc. inputs.  Each unique combination of
@@ -449,7 +449,7 @@ The intended workflow for creating or updating a block:
 #### 8.4 System Compiler (`blocs_compiler.py`)
 
 The system compiler `blocs_compiler.py` reads a `.blocs` system definition
-file and build a complete in-memory model of the system using the classes
+file and builds a complete in-memory model of the system using the classes
 from `emblocs.py`.  For each `blockdef` command, it invokes `bloc_parser.py`
 to parse the .bloc file, then `bloc_resolver.py` to generate the specific
 `<variant>.h` and `<variant>.c` files in the system build directory.  For

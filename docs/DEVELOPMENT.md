@@ -19,8 +19,10 @@ modules are peers in the same directory.
 | `emblocs.py` | Shared object model: BlockSpec, BlockDef, Design, and all related classes |
 | `parse_common.py` | Shared parser infrastructure: Token, Severity, ErrorContext, report() |
 | `expressions.py` | Expression evaluator for .bloc parameter expressions |
+| `bloc_compiler.py` | Generates template .h and .c files from a .bloc file |
 | `bloc_parser.py` | Parser for .bloc block template files → BlockSpec |
 | `bloc_resolver.py` | Resolver: BlockSpec + params → BlockDef |
+| `blocs_compiler.py` | Generates variant .h and .c files plus system .h, .c, and .cmake files from a .blocs file |
 | `blocs_parser.py` | Parser for .blocs system definition files → Design |
 | `blocs_output.py` | Serializer: Design → .blocs format output |
 
@@ -68,7 +70,8 @@ All error reporting goes through the module-level `ctx` instance of
 
 ### 1.4 Bloc Spec Cache
 
-`blocs_parser.py` maintains a module-level cache of parsed `BlockSpec` objects:
+*This cache may be replaced in the near future by adding a list of BlockSpec objects to the top-level Design object*
+`blocs_compiler.py` maintains a module-level cache of parsed `BlockSpec` objects:
 
 ```python
 _bloc_spec_cache: dict[str, BlockSpec] = {}
@@ -125,7 +128,7 @@ wrappers:
 
 Every pin in a `BlockInstance` is always connected to a signal — either a
 named signal or a private dummy signal. Dummy signals are created automatically
-when a block instance is created, named `__<instance>__<pin>`, stored in
+when a block instance is created, named `dsig_<instance>_<pin>`, stored in
 `Design.dummy_signals` (separate from `Design.signals`), and marked with
 `Signal.is_dummy = True`. This allows `set_pin_value()` to work without special
 cases, and preserves pin values across connect/disconnect cycles.
@@ -137,7 +140,7 @@ namespace enforced by `Design.namespace` (a `dict[str, object]`). In addition
 to ensuring name uniqueness, the namespace allows O(1) lookup of an object
 by name even if its type is unknown; the type can then be checked after
 lookup.
-Dummy signal names are not in the namespace — their `__block__pin` naming
+Dummy signal names are not in the namespace — their `dsig_block_pin` naming
 convention ensures uniqueness without namespace pollution.
 
 ---
@@ -229,43 +232,3 @@ def full_name(self) -> str:
 
 ## 5. Planned Features
 
-### 5.1 Support for platform-specific includes in block definitions
-
-Block authors who need platform-specific types in their instance struct
-(e.g. `GPIO_TypeDef *` from a STM32 SDK header) currently have no way to
-include the required header inside `<block>.h` and `<variant>.h`, where it
-must appear for the struct to be fully defined when `system.c` includes the
-variant header.
-
-The planned solution is a new `include` keyword in the `.bloc` language,
-allowed in the PARAMS section (where conditionals are not permitted).
-Order relative to `param` declarations does not matter.
-
-Example:
-
-    include "stm32g4xx.h"
-
-Multiple `include` statements are allowed.
-
-#### 5.1.1 Impact on the object model
-
-- `BlockSpec` gains `includes: list[str]`
-- `BlockDef` gains `includes: list[str]`
-- `bloc_resolver.py`: copy `spec.includes` to `BlockDef` unchanged —
-  no expression evaluation, no conditionals
-- `test_emblocs.py`: fixture updates to add `includes=[]`
-
-#### 5.1.2 Impact on the parsers
-
-- `bloc_parser.py`: add `"include"` to `_ALLOWED[Section.PARAMS]` and
-  add a handler that appends the quoted path to `block_spec.includes`
-
-#### 5.1.3 Impact on the output generators
-
-- `blockspec_as_template_h`: emit includes between
-  `#include "emblocs_comp.h"` and the struct definition
-- `blockdef_as_variant_h`: same
-
-#### 5.1.4 Impact on the `.bloc` language reference
-
-- Document the new `include` keyword in `bloc_language.md`
