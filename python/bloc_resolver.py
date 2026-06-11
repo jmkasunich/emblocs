@@ -31,7 +31,7 @@ def _build_variables(spec: BlockSpec,
     Returns a complete variables dict, or None if any error was reported.
     """
     variables = {}
-
+    error_count = ctx.error_count
     for param in spec.params:
         # get supplied value or default
         val = supplied.get(param.name, param.default)
@@ -49,6 +49,8 @@ def _build_variables(spec: BlockSpec,
                           f"is greater than max ({param.max_val})", column=OMIT)
         # save value
         variables[param.name] = val
+    if ctx.error_count > error_count:
+        return None
     return variables
 
 

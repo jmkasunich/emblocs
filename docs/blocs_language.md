@@ -187,17 +187,22 @@ command.
 
 ### 5.1 Block Definition Creation
 
-    blockdef <type-name> <path> [option...]
+    blockdef <def-name> <bloc-name> [PARAM=value...]
 
-Registers a block type, making it available for instantiation. `<type-name>`
-is an identifier placed in the system-wide namespace. `<path>` is the path
-to the `.bloc` template file (see Section 2.6 for path conventions). Options
-are `NAME=value` pairs passed to the block compiler; they supply variant
-parameters controlling code generation.
+Registers a block definition, making it available for instantiation.
+`<def-name>` is the name of the new block definition, and is placed in
+the system-wide namespace. `<bloc-name>` is the base name of a `.bloc`
+file which serves as a template from which the new blockdef is created.
+Options are `PARAM=value` pairs which allow one `.bloc` file to generate
+multiple block definitions (referred to as `variants`).
 
-Block definitions are immutable once created. All `blockdef` commands for
-types needed by a system must appear before any `block` commands that
-instantiate those types.
+The namespaces for `<bloc-name>` and `<def-name>` are independent; for
+blocks without parameters it is both allowed and common to use the same
+name for both, e.g. `blockdef limit1 limit1`, means "create block
+definition `limit1` from `limit1.bloc`".
+
+Block definitions are immutable once created. A `blockdef` command
+must appear before any `block` command that instantiates that definition.
 
 #### 5.1.1 Block Variant Creation
 
@@ -207,9 +212,23 @@ serves as a template and parameters are supplied as options on the `blockdef`
 command. The toolchain generates the variant-specific C source from the
 template and the supplied parameters.
 
-Example — registering a 3-channel 2-to-1 multiplexor variant:
+Example — a 3-channel 2-to-1 multiplexor variant based on `mux.bloc`:
 
-    blockdef mux_3ch_2to1 components/mux.bloc NCHANNELS=3 NINPUTS=2
+    blockdef mux_3ch_2to1 mux NCHANNELS=3 NINPUTS=2
+
+#### 5.1.2 Block Search Path
+
+The toolchain searches for `<bloc-name>.bloc` in the following locations,
+in order:
+
+1. The directory containing the `.blocs` file being compiled
+2. Paths listed in `emblocs.json` under `bloc_search_paths`, in order
+
+Paths in `bloc_search_paths` may be absolute, relative (resolved against
+the `.blocs` file directory), or prefixed with `$EMBLOCS` (resolved against
+the emblocs installation root).  Searches are not recursive; to search in
+both `$EMBLOCS/src/components` and `$EMBLOCS/src/componnets/special` you
+must put both paths in the list.
 
 ### 5.2 Block Instantiation
 

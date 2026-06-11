@@ -6,7 +6,7 @@
 from __future__ import annotations
 import pytest
 from emblocs import (
-    Design, BlockDef, BlockInstance, Signal, Thread,
+    Design, BlockSpec, BlockDef, BlockInstance, Signal, Thread,
     FieldDef, PinDef, FunctDef, VarDef,
     PinType, PinDir,
     EmblocsError,
@@ -38,6 +38,13 @@ def minimal_block_def():
         ordered_fields       = [],
     )
 
+@pytest.fixture
+def minimal_block_spec():
+    """A BlockSpec with no params, includes, or statements."""
+    return BlockSpec(
+        abs_path = "test.bloc",
+        name     = "myblock",
+    )
 
 @pytest.fixture
 def another_block_def():
@@ -103,6 +110,35 @@ class TestAddBlockDef:
         empty_design.namespace["limit1"] = None
         with pytest.raises(EmblocsError):
             empty_design.add_block_def(minimal_block_def)
+
+# ---------------------------------------------------------------------------
+# add_block_spec tests
+# ---------------------------------------------------------------------------
+
+class TestAddBlockSpec:
+
+    def test_add_new_spec(self, empty_design, minimal_block_spec):
+        result = empty_design.add_block_spec(minimal_block_spec)
+        assert result is minimal_block_spec
+        assert "myblock" in empty_design.block_specs
+        assert empty_design.block_specs["myblock"] is minimal_block_spec
+
+    def test_add_same_object_again(self, empty_design, minimal_block_spec):
+        empty_design.add_block_spec(minimal_block_spec)
+        result = empty_design.add_block_spec(minimal_block_spec)
+        assert result is minimal_block_spec
+        assert len(empty_design.block_specs) == 1
+        assert empty_design.block_specs["myblock"] is minimal_block_spec
+
+    def test_different_object_same_name_raises(self, empty_design, minimal_block_spec):
+        duplicate = BlockSpec(abs_path="other.bloc", name="myblock")
+        empty_design.add_block_spec(minimal_block_spec)
+        with pytest.raises(EmblocsError) as exc:
+            empty_design.add_block_spec(duplicate)
+        assert str(exc.value) == "duplicate block spec name 'myblock'"
+        assert empty_design.block_specs["myblock"] is minimal_block_spec
+        assert len(empty_design.block_specs) == 1
+
 
 # ---------------------------------------------------------------------------
 # Fixtures for add_block_instance tests

@@ -97,50 +97,6 @@ def get_value(text: str, value_type: PinType) -> int | float | None:
             return None
         return float(result)
 
-# ---------------------------------------------------------------------------
-# Path resolution
-# ---------------------------------------------------------------------------
-
-_tags: dict[str, str] = {}
-
-def set_tags(tags: dict[str, str]) -> None:
-    """Set the tag-to-path mapping for resolving tagged bloc file paths.
-    Call this before parse_blocs_file() or parse_blocs_string().
-    Tag values must be absolute POSIX path strings."""
-    global _tags
-    _tags = tags
-
-
-def resolve_bloc_path(path: str) -> str | None:
-    """
-    Resolve a .bloc file path as written in a blockdef command.
-
-    Tagged paths (TAGNAME:/rest/of/path.bloc) are resolved relative to
-    the tag's registered path.  Tags are registered via set_tags().
-
-    Untagged absolute paths (starting with /) are used as-is.
-    Untagged relative paths are resolved relative to the directory
-    containing the .blocs file currently being parsed.
-
-    Returns resolved path as a POSIX string, or None on error.
-    """
-    if Path(path).suffix != '.bloc':
-        ctx.error(f"blockdef path must be a .bloc file, got {path!r}")
-        return None
-    tag, sep, remainder = path.partition(":")
-    if sep == ":":
-        if not tag.isidentifier():
-            ctx.error(f"invalid tag name {tag!r} in path {path!r}")
-            return None
-        if tag not in _tags:
-            ctx.error(f"unknown tag {tag!r} in path {path!r}")
-            return None
-        resolved = (Path(_tags[tag]) / remainder.lstrip("/")).resolve()
-    else:
-        blocs_dir = Path(ctx.source).parent
-        resolved = (blocs_dir / path).resolve()
-    return resolved.as_posix()
-
 
 # ---------------------------------------------------------------------------
 # Bloc spec callback
@@ -149,9 +105,9 @@ def resolve_bloc_path(path: str) -> str | None:
 # when a blockdef command is encountered, we use a callback
 # to get the corresponding BlockSpec
 
-_get_block_spec: Callable[[str], BlockSpec | None] | None = None
+_get_block_spec: Callable[[str, Design], BlockSpec | None] | None = None
 
-def set_get_block_spec(handler: Callable[[str], BlockSpec | None]) -> None:
+def set_get_block_spec(handler: Callable[[str, Design], BlockSpec | None]) -> None:
     global _get_block_spec
     _get_block_spec = handler
 
@@ -168,21 +124,19 @@ def cmd_blockdef(tokens: list[Token], design: Design) -> tuple[BlockDef | None, 
     or (None, 0) on error.
     """
     if len(tokens) < 3:
-        ctx.error("'blockdef' requires a name and a path", column=OMIT)
+        ctx.error("'blockdef' requires a new def name and a source block name", column=OMIT)
         return None, 0
-    name_tok = tokens[1]
-    path_tok = tokens[2]
-    if not name_tok.text.isidentifier():
-        ctx.error(f"invalid blockdef name {name_tok.text!r}", token=name_tok)
+    defname_tok = tokens[1]
+    specname_tok = tokens[2]
+    if not defname_tok.text.isidentifier():
+        ctx.error(f"invalid blockdef name {defname_tok.text!r}", token=defname_tok)
         return None, 0
-    # resolve path to .bloc file
-    ctx.set(token=path_tok)
-    resolved_path = resolve_bloc_path(path_tok.text)
-    if resolved_path is None:
-        # error already reported by resolve_bloc_path
+    if not specname_tok.text.isidentifier():
+        ctx.error(f"invalid source block name {specname_tok.text!r}", token=specname_tok)
         return None, 0
     # callback to get BlockSpec
-    spec = _get_block_spec(resolved_path)
+    ctx.set(token=specname_tok)
+    spec = _get_block_spec(specname_tok.text, Design)
     if spec is None:
         # error already reported by _get_block_spec
         return None, 0
@@ -213,17 +167,17 @@ def cmd_blockdef(tokens: list[Token], design: Design) -> tuple[BlockDef | None, 
             ctx.info(f"parameter {param.name!r} not supplied, "
                      f"using default value {param.default}", column=OMIT)
     # resolve BlockSpec to BlockDef - set context for resolve() errors
-    ctx.set(token=name_tok)
-    block_def = resolve(spec, name_tok.text, path_tok.text, supplied_params)
+    ctx.set(token=defname_tok)
+    block_def = resolve(spec, defname_tok.text, specname_tok.text, supplied_params)
     if block_def is None:
-        ctx.error(f"failed to resolve {path_tok.text!r} as {name_tok.text!r}",
+        ctx.error(f"failed to resolve {specname_tok.text!r} as {defname_tok.text!r}",
                   column=OMIT)
         return None, 0
     # add to design
     try:
         blockdef = design.add_block_def(block_def)
     except EmblocsError as e:
-        ctx.error(str(e), token=name_tok)
+        ctx.error(str(e), token=defname_tok)
         return None, 0
     return blockdef, n_tokens
 

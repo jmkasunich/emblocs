@@ -68,20 +68,6 @@ All error reporting goes through the module-level `ctx` instance of
   popping to print error/warning/info counts
 
 
-### 1.4 Bloc Spec Cache
-
-*This cache may be replaced in the near future by adding a list of BlockSpec objects to the top-level Design object*
-`blocs_compiler.py` maintains a module-level cache of parsed `BlockSpec` objects:
-
-```python
-_bloc_spec_cache: dict[str, BlockSpec] = {}
-```
-
-Keyed by normalized POSIX path. When a `blockdef` command references a `.bloc`
-file that has already been parsed, the cached `BlockSpec` is reused. This
-allows multiple variants of the same block to be defined without re-parsing
-the `.bloc` file each time.
-
 ---
 
 ## 2. Object Model
@@ -188,9 +174,6 @@ python/tests/
 - **Generated test files** — write to `tests/data/tmp/` for predictable paths
   in error messages. This directory is in `.gitignore`.
 
-- **Cache cleanup** — tests that exercise `blocs_parser.py` use the
-  `clear_cache` fixture to reset `_bloc_spec_cache` between tests.
-
 ### 3.3 Code Style
 
 - No blank lines in function bodies — use comment lines to separate phases
@@ -218,9 +201,6 @@ python/tests/
 
 - `bloc_resolver.py` has no dedicated test suite
 - `blocs_output.py` has no automated test suite
-- `.bloc` file path handling in `blockdef` commands currently stores the
-  original relative path; a tag-based library path system is planned but
-  deferred until real project experience informs the design
 - Code generation (Tool 1 template mode, Tool 1 variant mode, Tool 2) not yet started
 - Runtime monitor not yet started
 - CMake integration not yet started

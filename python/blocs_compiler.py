@@ -11,7 +11,7 @@ import sys
 import json
 
 from parse_common import ctx, OMIT, short_path
-from blocs_parser import parse_blocs_file, set_tags, set_get_block_spec
+from blocs_parser import parse_blocs_file, set_get_block_spec
 from bloc_parser import parse_bloc_file
 from emblocs import Design, BlockSpec
 from emblocs_output import (
@@ -48,48 +48,45 @@ def load_config(config_path: Path) -> dict:
         ctx.summarize()
         ctx.pop()
         return config
-    # extract and validate tags
-    tags = raw.get("tags", {})
-    if not isinstance(tags, dict):
-        ctx.error(f"'tags' must be a JSON object")
+    # extract and validate bloc_search_paths
+    paths = raw.get("bloc_search_paths", [])
+    if not isinstance(paths, list):
+        ctx.error(f"'bloc_search_paths' must be a JSON array")
     else:
-        config_dir = config_path.parent
-        resolved_tags = {}
-        for name, value in tags.items():
-            if not isinstance(value, str):
-                ctx.error(f"tag {name!r} value must be a string")
+        valid_paths = ["."]  # always start with dir containing the .blocs file
+        for i, entry in enumerate(paths):
+            if not isinstance(entry, str):
+                ctx.error(f"'bloc_search_paths' entry {i} must be a string")
                 continue
-            tag_path = Path(value)
-            if not tag_path.is_absolute():
-                tag_path = (config_dir / tag_path).resolve()
-            resolved_tags[name] = tag_path.as_posix()
-        if resolved_tags:
-            config["tags"] = resolved_tags
+            valid_paths.append(entry)
+        if valid_paths:
+            config["bloc_search_paths"] = valid_paths
         else:
-            ctx.info(f"no tags found in config")
+            ctx.info(f"no bloc_search_paths found in config")
     ctx.summarize()
     ctx.pop()
     return config
 
 
-_blockspec_cache: dict[str, BlockSpec] = {}
+_bloc_paths: list[Path] = []
 
-def get_blockspec(path: str) -> BlockSpec | None:
+def get_blockspec(name: str, design: Design) -> BlockSpec | None:
     '''
     Callback for blockdef command in blocs_parser.py.
-    Verifies that the named .bloc file exists, and that the
-    corresponding .h and .c files exist and are newer than
-    the .bloc file, then calls parse_bloc_file to create a
-    valid BlockSpec.
+    Verifies that the named .bloc file exists in the _bloc_paths
+    search path and that the corresponding .h and .c files exist
+    and are newer than the .bloc file, then calls parse_bloc_file
+    to create a valid BlockSpec.
     Returns the BlockSpec, or None on error
     '''
-    # get BlockSpec from cache if available
-    if path in _blockspec_cache:
-        return _blockspec_cache[path]
-    # not in cache, validate .bloc file
-    bloc_path = Path(path)
-    if not bloc_path.is_file():
-        ctx.error(f"bloc file not found: {bloc_path.name!r}")
+    # is BlockSpec already in the Design?
+    if name in design.block_specs:
+        # yes, use it
+        return design.block_specs[name]
+    # no, validate .bloc file
+    bloc_path = find_bloc_file(name)
+    if bloc_path is None:
+        ctx.error(f"'{name}.bloc' not found on block search path")
         return None
     bloc_time = bloc_path.stat().st_mtime
     # capture error count so we can check/report several errors at once
@@ -113,13 +110,48 @@ def get_blockspec(path: str) -> BlockSpec | None:
         ctx.info(f"run bloc_compiler.py on {bloc_path.name} and/or edit {c_path.name} to bring block up to date")
         return None
     # parse the bloc
-    spec = parse_bloc_file(path)
+    spec = parse_bloc_file(bloc_path.as_posix)
     if spec is None:
-        ctx.error(f"failed to parse {short_path(path)!r}")
+        ctx.error(f"failed to parse {short_path(bloc_path)!r}")
         return None
-    _blockspec_cache[path] = spec
+    # add BlockSpec to design for possible re-use
+    design.add_block_spec(spec)
     return spec
 
+def build_bloc_search_paths(blocs_dir: Path, raw_paths: list[str]) -> list[Path]:
+    """
+    Build and validate the .bloc file search path list.
+    raw_paths entries may use $EMBLOCS prefix or be relative to blocs_dir.
+    Returns list of resolved, validated Path objects.
+    """
+    EMBLOCS_ROOT = Path(__file__).parent.parent
+    result = []
+    for raw in raw_paths:
+        if raw.startswith("$EMBLOCS"):
+            resolved = (EMBLOCS_ROOT / raw[len("$EMBLOCS"):].lstrip("/")).resolve()
+        else:
+            p = Path(raw)
+            if p.is_absolute():
+                resolved = p.resolve()
+            else:
+                resolved = (blocs_dir / p).resolve()
+        if not resolved.is_dir():
+            ctx.error(f"bloc search path not found: {resolved}", lineno=OMIT, column=OMIT)
+            continue
+        result.append(resolved)
+    return result
+
+def find_bloc_file(name: str) -> Path | None:
+    """
+    Search _bloc_paths for a .bloc file matching the given block name.
+    Returns the path of the first match, or None if not found.
+    """
+    filename = f"{name}.bloc"
+    for directory in _bloc_paths:
+        candidate = directory / filename
+        if candidate.is_file():
+            return candidate
+    return None
 
 def main():
     ctx.push(source="blocs_compiler.py")
@@ -151,11 +183,14 @@ def main():
             ctx.info(f"using config file {config_path.as_posix()}", lineno=OMIT, column=OMIT)
         else:
             ctx.warning(f"no emblocs.json found; using defaults", lineno=OMIT, column=OMIT)
-    # load config and set tags
+    # load config and set .bloc file search paths
+    blocs_dir = blocs_path.parent
+    global _bloc_paths
+    _bloc_paths = build_bloc_search_paths(blocs_dir, ["."])
     if config_path is not None:
         config = load_config(config_path)
-        if "tags" in config:
-            set_tags(config["tags"])
+        if "bloc_search_paths" in config:
+            _bloc_paths = build_bloc_search_paths(blocs_dir, config["bloc_search_paths"])
     # create an empty design
     design = Design(abs_path=blocs_path.as_posix())
     # register callback for blockdef commands

@@ -631,6 +631,7 @@ class Design:
 
     Fields:
         abs_path    -- absolute path to the .blocs file this was parsed from
+        block_specs -- dict of BlockSpec keyed by .bloc file name
         block_defs  -- dict of BlockDef keyed by variant name
         blocks      -- dict of BlockInstance keyed by instance name
         signals     -- dict of Signal keyed by signal name
@@ -639,6 +640,7 @@ class Design:
                        objects in the design, O(1) search and uniqueness checks
     """
     abs_path:      str
+    block_specs:   dict[str, BlockSpec]     = field(default_factory=dict)
     block_defs:    dict[str, BlockDef]      = field(default_factory=dict)
     blocks:        dict[str, BlockInstance] = field(default_factory=dict)
     signals:       dict[str, Signal]        = field(default_factory=dict)
@@ -649,6 +651,8 @@ class Design:
     def describe(self) -> str:
         lines = [f"Design: {self.abs_path}"]
         if recurse:
+            for bs in self.block_specs.values():
+                lines.append(_indent_child(bs.describe()))
             for bd in self.block_defs.values():
                 lines.append(_indent_child(bd.describe()))
             for bi in self.blocks.values():
@@ -658,6 +662,8 @@ class Design:
             for thr in self.threads.values():
                 lines.append(_indent_child(thr.describe()))
         else:
+            for bs in self.block_specs.values():
+                lines.append(_indent_child(f"blockspec  {bs.name}"))
             for bd in self.block_defs.values():
                 lines.append(_indent_child(f"blockdef  {bd.name}"))
             for bi in self.blocks.values():
@@ -687,6 +693,14 @@ class Design:
             if block is None:
                 raise EmblocsError(f"block {n1!r} not found")
             return block.find_child_by_name(n2)
+
+    def add_block_spec(self, spec: BlockSpec) -> BlockSpec:
+        if spec.name in self.block_specs:
+            if self.block_specs[spec.name] is not spec:
+                raise EmblocsError(f"duplicate block spec name {spec.name!r}")
+            return self.block_specs[spec.name]
+        self.block_specs[spec.name] = spec
+        return spec
 
     def add_block_def(self, block_def: BlockDef) -> BlockDef:
         """
