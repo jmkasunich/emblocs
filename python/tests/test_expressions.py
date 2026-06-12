@@ -81,6 +81,9 @@ from expressions import evaluate, ExpressionError
     ("1.5<2.5", "float", 1),
     ("2.5>1.5", "float", 1),
     ("1.5!=2.5", "float", 1),
+    # --- float logical operators ---
+    ("!1.5", "float", 0),  # not of nonzero float
+    ("!0.0", "float", 1),  # not of zero float
     # --- Mixed int/float constants (float mode) ---
     ("1+1.5", "float", 2.5),
     ("2*1.5", "float", 3.0),

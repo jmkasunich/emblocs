@@ -235,6 +235,69 @@ class TestErrorContext:
         assert ctx.warning_count == 1
         ctx.pop()
 
+class TestOmitRepr:
+
+    def test_repr(self):
+        assert repr(OMIT) == "OMIT"
+
+
+class TestContextProperties:
+
+    def test_line_property(self):
+        ctx.push(source="test.py", line=5, column=3)
+        assert ctx.line == 5
+        ctx.pop()
+
+    def test_column_property(self):
+        ctx.push(source="test.py", line=5, column=3)
+        assert ctx.column == 3
+        ctx.pop()
+
+
+class TestContextSet:
+
+    def test_set_source(self):
+        ctx.push(source="old.py")
+        ctx.set(source="new.py")
+        assert ctx.source == "new.py"
+        ctx.pop()
+
+    def test_set_line(self):
+        ctx.push(source="test.py")
+        ctx.set(line=10)
+        assert ctx.line == 10
+        ctx.pop()
+
+    def test_set_column(self):
+        ctx.push(source="test.py")
+        ctx.set(column=5)
+        assert ctx.column == 5
+        ctx.pop()
+
+class TestReportLocationResolution:
+
+    def test_source_omit_suppresses_source(self, capsys):
+        ctx.push(source="test.py")
+        ctx.set(line=3)
+        ctx.error("bad thing", source=OMIT)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "error: bad thing"
+        ctx.pop()
+
+    def test_explicit_source_overrides_frame(self, capsys):
+        ctx.push(source="test.py")
+        ctx.error("bad thing", source="other.py")
+        actual = capsys.readouterr().err.strip()
+        assert actual == "other.py:0:0: error: bad thing"
+        ctx.pop()
+
+    def test_explicit_column_used_in_output(self, capsys):
+        ctx.push(source="test.py")
+        ctx.set(line=7)
+        ctx.error("bad thing", column=12)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "test.py:7:12: error: bad thing"
+        ctx.pop()
 
 # ---------------------------------------------------------------------------
 # ErrorContext and context stack tests

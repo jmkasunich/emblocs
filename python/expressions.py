@@ -255,7 +255,7 @@ def evaluate(expr: str, variables: dict = None, mode: str = 'int') -> int | floa
 # ---------------------------------------------------------------------------
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":   # pragma: no cover
     import sys
 
     args = sys.argv[1:]
