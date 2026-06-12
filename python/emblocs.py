@@ -37,14 +37,14 @@ S32_MAX =  0x7FFFFFFF
 S32_MIN = -0x80000000
 
 # ---------------------------------------------------------------------------
-# Output formatting for describe() methods
+# Output formatting for __str__() methods
 # ---------------------------------------------------------------------------
 
-# set this True to have Design.describe() recurse into child objects,
+# set this True to have Design.__str__() recurse into child objects,
 # or False to have it only print top-level summaries
 recurse = True
 
-# set this to '\n' to have descriptions start on a new line,
+# set this to '\n' to have __str__ descriptions start on a new line,
 # or ' ' to have them follow the declaration on the same line
 descr_prefix = '\n'
 
@@ -53,8 +53,8 @@ def _format_descr(descr: str) -> str:
         return ""
     return descr_prefix + textwrap.indent(descr, "  # ")
 
-def _indent_child(child_descr: str) -> str:
-    return textwrap.indent(child_descr, "  ")
+def _indent_child(child_str: str) -> str:
+    return textwrap.indent(child_str, "  ")
 
 
 # ---------------------------------------------------------------------------
@@ -98,7 +98,7 @@ class ParamSpec:
     max_val:     int = U32_MAX
     description: str = ""
 
-    def describe(self) -> str:
+    def __str__(self) -> str:
         desc = _format_descr(self.description)
         range_str = ""
         if self.min_val != 0:
@@ -125,7 +125,7 @@ class DimSpec:
     size_expr: str
     index_var: str
 
-    def describe(self) -> str:
+    def __str__(self) -> str:
         dim_str = ("[" + f"{self.index_var}={self.size_expr}" + "]")
         return f"dim  {dim_str}"
 
@@ -177,7 +177,7 @@ class PinSpec:
     export_condition: str | None = None
     description:      str        = ""
 
-    def describe(self) -> str:
+    def __str__(self) -> str:
         dims_str = ("scalar" if self.dims == []
                     else "[" + "][".join(
                         f"{d.index_var}={d.size_expr}"
@@ -216,7 +216,7 @@ class VarDef:
     dedup_name: str
     c_decl:     str
 
-    def describe(self) -> str:
+    def __str__(self) -> str:
         return f"var {self.field_name}:  {self.c_decl}"
 
 
@@ -242,7 +242,7 @@ class FunctSpec:
     dedup_name:  str
     description: str = ""
 
-    def describe(self) -> str:
+    def __str__(self) -> str:
         desc = _format_descr(self.description)
         return f"function  {self.name}{desc}"
 
@@ -267,12 +267,12 @@ class Statement:
     conditions: list[str]
     statement:  PinSpec | VarDef | FunctSpec
 
-    def describe(self) -> str:
+    def __str__(self) -> str:
         if self.conditions:
             cond_str = "(if: " + " && ".join(self.conditions) + "): "
         else:
             cond_str = ""
-        return cond_str + self.statement.describe()
+        return cond_str + str(self.statement)
 
 
 @dataclass
@@ -311,17 +311,17 @@ class BlockSpec:
     statements:  list[Statement]   = field(default_factory=list)
     namespace:   set[str]          = field(default_factory=set)
 
-    def describe(self) -> str:
+    def __str__(self) -> str:
         """Return a human-readable multi-line description for debugging."""
         lines = []
         desc = _format_descr(self.description)
         lines.append(f"BlockSpec: {self.name}  ({self.abs_path}){desc}")
         for p in self.params:
-            lines.append(_indent_child(p.describe()))
+            lines.append(_indent_child(str(p)))
         for i in self.includes:
             lines.append(_indent_child(f"include {i}"))
         for s in self.statements:
-            lines.append(_indent_child(s.describe()))
+            lines.append(_indent_child(str(s)))
         return "\n".join(lines)
 
 # ---------------------------------------------------------------------------
@@ -353,7 +353,7 @@ class FieldDef:
     direction:  PinDir | None
     c_decl:     str | None
 
-    def describe(self) -> str:
+    def __str__(self) -> str:
         if self.c_decl is not None:
             return f"field  var   {self.c_decl}"
         dims_str = "".join(f"[{d}]" for d in self.dims)
@@ -376,7 +376,7 @@ class PinDef:
     field_indices: tuple[int, ...] = ()
     description:  str = ""
 
-    def describe(self) -> str:
+    def __str__(self) -> str:
         desc = _format_descr(self.description)
         if self.field_indices:
             indices = "".join(f"[{i}]" for i in self.field_indices)
@@ -406,7 +406,7 @@ class FunctDef:
     name:        str
     description: str = ""
 
-    def describe(self) -> str:
+    def __str__(self) -> str:
         desc = _format_descr(self.description)
         return f"function  {self.name}{desc}"
 
@@ -448,7 +448,7 @@ class BlockDef:
     includes:    list[str]
     ordered_fields: list[FieldDef]
 
-    def describe(self) -> str:
+    def __str__(self) -> str:
         lines = []
         desc = _format_descr(self.description)
         lines.append(f"BlockDef: {self.name}  {desc}")
@@ -459,11 +459,11 @@ class BlockDef:
         for i in self.includes:
             lines.append(_indent_child(f"include {i}"))
         for f in self.ordered_fields:
-            lines.append(_indent_child(f.describe()))
+            lines.append(_indent_child(str(f)))
         for p in self.pins.values():
-            lines.append(_indent_child(p.describe()))
+            lines.append(_indent_child(str(p)))
         for f in self.functions.values():
-            lines.append(_indent_child(f.describe()))
+            lines.append(_indent_child(str(f)))
         return "\n".join(lines)
 
 # ---------------------------------------------------------------------------
@@ -492,7 +492,7 @@ class Signal:
     readers:  list[PinInstance]  = field(default_factory=list)
     is_dummy: bool = False
 
-    def describe(self) -> str:
+    def __str__(self) -> str:
         driver_str = self.driver.full_name if self.driver else "none"
         lines = [f"signal  {self.name}  {self.sig_type.name}  "
                  f"value={self.value}  driver={driver_str}"]
@@ -515,7 +515,7 @@ class Thread:
     period_ns: int
     functions: list[FunctInstance] = field(default_factory=list)
 
-    def describe(self) -> str:
+    def __str__(self) -> str:
         lines = [f"thread  {self.name}  ({self.period_ns} ns)"]
         for func in self.functions:
             lines.append(f"  {func.full_name}")
@@ -537,7 +537,7 @@ class PinInstance:
     signal:  Signal | None = None
     block:   BlockInstance | None = None
 
-    def describe(self) -> str:
+    def __str__(self) -> str:
         sig = self.signal.name if self.signal else "dummy"
         return f"pin  {self.full_name} -> {sig}"
 
@@ -572,7 +572,7 @@ class FunctInstance:
     thread:    Thread | None = None
     block:     BlockInstance | None = None
 
-    def describe(self) -> str:
+    def __str__(self) -> str:
         thr = self.thread.name if self.thread else "unassigned"
         return f"function  {self.full_name} -> {thr}"
 
@@ -601,12 +601,12 @@ class BlockInstance:
     functions: dict[str, FunctInstance] = field(default_factory=dict)
     namespace: dict[str, BlockInstChild] = field(default_factory=dict)
 
-    def describe(self) -> str:
+    def __str__(self) -> str:
         lines = [f"block  {self.name} ({self.block_def.name})"]
         for pin in self.pins.values():
-            lines.append(_indent_child(pin.describe()))
+            lines.append(_indent_child(str(pin)))
         for func in self.functions.values():
-            lines.append(_indent_child(func.describe()))
+            lines.append(_indent_child(str(func)))
         return "\n".join(lines)
 
     def find_child_by_name(self, name: str) -> BlockInstChild:
@@ -648,19 +648,19 @@ class Design:
     threads:       dict[str, Thread]        = field(default_factory=dict)
     namespace:     dict[str, DesignChild]   = field(default_factory=dict)
 
-    def describe(self) -> str:
+    def __str__(self) -> str:
         lines = [f"Design: {self.abs_path}"]
         if recurse:
             for bs in self.block_specs.values():
-                lines.append(_indent_child(bs.describe()))
+                lines.append(_indent_child(str(bs)))
             for bd in self.block_defs.values():
-                lines.append(_indent_child(bd.describe()))
+                lines.append(_indent_child(str(bd)))
             for bi in self.blocks.values():
-                lines.append(_indent_child(bi.describe()))
+                lines.append(_indent_child(str(bi)))
             for sig in self.signals.values():
-                lines.append(_indent_child(sig.describe()))
+                lines.append(_indent_child(str(sig)))
             for thr in self.threads.values():
-                lines.append(_indent_child(thr.describe()))
+                lines.append(_indent_child(str(thr)))
         else:
             for bs in self.block_specs.values():
                 lines.append(_indent_child(f"blockspec  {bs.name}"))

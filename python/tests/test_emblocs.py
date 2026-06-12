@@ -6,11 +6,14 @@
 from __future__ import annotations
 import pytest
 from emblocs import (
-    Design, BlockSpec, BlockDef, BlockInstance, Signal, Thread,
-    FieldDef, PinDef, FunctDef, VarDef,
+    Design,
+    BlockSpec, ParamSpec, DimSpec, PinSpec, FunctSpec, Statement,
+    BlockDef, FieldDef, PinDef, FunctDef, VarDef,
+    BlockInstance, Signal, Thread,
     PinType, PinDir,
     EmblocsError,
 )
+import emblocs  # for module level vars: recurse and descr_prefix
 
 
 # ---------------------------------------------------------------------------
@@ -862,3 +865,365 @@ class TestSetPinValue:
         """set_pin_value rejects values incompatible with the pin type."""
         with pytest.raises(EmblocsError):
             linked_design.set_value_by_name("s1.in", "not_a_number")
+
+# ---------------------------------------------------------------------------
+# set_value on invalid object type
+# ---------------------------------------------------------------------------
+
+class TestSetValueInvalidType:
+
+    def test_set_value_on_thread_raises(self, empty_design):
+        thread = empty_design.add_thread("fast", 1000000)
+        with pytest.raises(EmblocsError) as exc:
+            empty_design.set_value(thread, 0)
+        assert str(exc.value) == "cannot set value on object of type Thread"
+
+
+# ---------------------------------------------------------------------------
+# __str__ tests
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def no_recurse():
+    emblocs.recurse = False
+    yield
+    emblocs.recurse = True
+
+
+class TestFormatDescr:
+
+    def test_empty_string(self):
+        expected = ""
+        assert emblocs._format_descr("") == expected
+
+    def test_nonempty_string(self):
+        expected = "\n  # hello world"
+        assert emblocs._format_descr("hello world") == expected
+
+
+class TestIndentChild:
+
+    def test_single_line(self):
+        expected = "  foo"
+        assert emblocs._indent_child("foo") == expected
+
+    def test_multiline(self):
+        expected = "  foo\n  bar"
+        assert emblocs._indent_child("foo\nbar") == expected
+
+
+class TestParamSpecStr:
+
+    def test_no_min_max_no_desc(self):
+        p = ParamSpec(name='N', param_type='u32', default=1)
+        expected = "param  N  u32  default=1"
+        assert str(p) == expected
+
+    def test_with_description(self):
+        p = ParamSpec(name='N', param_type='u32', default=1,
+                      description='num channels')
+        expected = "param  N  u32  default=1\n  # num channels"
+        assert str(p) == expected
+
+    def test_with_min_and_max(self):
+        p = ParamSpec(name='N', param_type='u32', default=1,
+                      min_val=2, max_val=10)
+        expected = "param  N  u32  default=1  min=2  max=10"
+        assert str(p) == expected
+
+    def test_with_max_only(self):
+        p = ParamSpec(name='N', param_type='u32', default=1, max_val=10)
+        expected = "param  N  u32  default=1  max=10"
+        assert str(p) == expected
+
+
+class TestDimSpecStr:
+
+    def test_basic(self):
+        d = DimSpec(size_expr='NUM_CHAN', index_var='i')
+        expected = "dim  [i=NUM_CHAN]"
+        assert str(d) == expected
+
+
+class TestPinSpecStr:
+
+    def test_scalar_no_desc(self):
+        ps = PinSpec(name_template='in', field_name='in_', dedup_name='in_',
+                     pin_type=PinType.FLOAT, direction=PinDir.INPUT, dims=[])
+        expected = "pin  FLOAT  INPUT   'in' -> in_ (scalar)"
+        assert str(ps) == expected
+
+    def test_scalar_with_desc(self):
+        ps = PinSpec(name_template='in', field_name='in_', dedup_name='in_',
+                     pin_type=PinType.FLOAT, direction=PinDir.INPUT, dims=[],
+                     description='the input')
+        expected = "pin  FLOAT  INPUT   'in' -> in_ (scalar)\n  # the input"
+        assert str(ps) == expected
+
+    def test_array_with_condition(self):
+        ps = PinSpec(name_template='ch{i:2}_out', field_name='ch00_out_',
+                     dedup_name='ch00_out_', pin_type=PinType.RAW,
+                     direction=PinDir.OUTPUT,
+                     dims=[DimSpec('NUM_CHAN', 'i')],
+                     export_condition='i!=1')
+        expected = "pin  RAW    OUTPUT  'ch{i:2}_out' -> ch00_out_ ([i=NUM_CHAN])  if i!=1"
+        assert str(ps) == expected
+
+
+class TestVarDefStr:
+
+    def test_basic(self):
+        v = VarDef(field_name='acc', dedup_name='acc', c_decl='float acc;')
+        expected = "var acc:  float acc;"
+        assert str(v) == expected
+
+
+class TestFunctSpecStr:
+
+    def test_no_desc(self):
+        fs = FunctSpec(name='update', dedup_name='update_')
+        expected = "function  update"
+        assert str(fs) == expected
+
+    def test_with_desc(self):
+        fs = FunctSpec(name='update', dedup_name='update_',
+                       description='does stuff')
+        expected = "function  update\n  # does stuff"
+        assert str(fs) == expected
+
+
+class TestStatementStr:
+
+    def test_no_conditions(self):
+        fs = FunctSpec(name='update', dedup_name='update_')
+        stmt = Statement(conditions=[], statement=fs)
+        expected = "function  update"
+        assert str(stmt) == expected
+
+    def test_one_condition(self):
+        fs = FunctSpec(name='update', dedup_name='update_')
+        stmt = Statement(conditions=['HAS_ENABLE'], statement=fs)
+        expected = "(if: HAS_ENABLE): function  update"
+        assert str(stmt) == expected
+
+    def test_two_conditions(self):
+        fs = FunctSpec(name='update', dedup_name='update_',
+                       description='does stuff')
+        stmt = Statement(conditions=['HAS_ENABLE', 'HAS_HOLD'], statement=fs)
+        expected = (
+            "(if: HAS_ENABLE && HAS_HOLD): function  update\n"
+            "  # does stuff")
+        assert str(stmt) == expected
+
+
+class TestBlockSpecStr:
+
+    def test_minimal(self):
+        bs = BlockSpec(abs_path='test.bloc', name='myblock')
+        expected = "BlockSpec: myblock  (test.bloc)"
+        assert str(bs) == expected
+
+    def test_with_description_param_include_statement(self):
+        bs = BlockSpec(abs_path='test.bloc', name='myblock',
+                       description='a block')
+        bs.params.append(ParamSpec(name='N', param_type='u32', default=1))
+        bs.includes.append('"myheader.h"')
+        bs.statements.append(
+            Statement(conditions=[],
+                      statement=FunctSpec(name='update', dedup_name='update_')))
+        expected = (
+            'BlockSpec: myblock  (test.bloc)\n'
+            '  # a block\n'
+            '  param  N  u32  default=1\n'
+            '  include "myheader.h"\n'
+            '  function  update')
+        assert str(bs) == expected
+
+class TestFieldDefStr:
+
+    def test_var_field(self):
+        fd = FieldDef(name='acc', dims=(), pin_type=None, direction=None,
+                      c_decl='float acc;')
+        expected = "field  var   float acc;"
+        assert str(fd) == expected
+
+    def test_scalar_pin_field(self):
+        fd = FieldDef(name='out_', dims=(), pin_type=PinType.FLOAT,
+                      direction=PinDir.OUTPUT, c_decl=None)
+        expected = "field  FLOAT  OUTPUT  out_"
+        assert str(fd) == expected
+
+    def test_array_pin_field(self):
+        fd = FieldDef(name='ch00_out_', dims=(3,), pin_type=PinType.FLOAT,
+                      direction=PinDir.OUTPUT, c_decl=None)
+        expected = "field  FLOAT  OUTPUT  ch00_out_[3]"
+        assert str(fd) == expected
+
+
+class TestPinDefStr:
+
+    def test_scalar_no_desc(self):
+        in_field = FieldDef(name='in_', dims=(), pin_type=PinType.FLOAT,
+                            direction=PinDir.INPUT, c_decl=None)
+        pd = PinDef(name='in', field=in_field)
+        expected = "pin  FLOAT  INPUT   in -> in_"
+        assert str(pd) == expected
+
+    def test_scalar_with_desc(self):
+        in_field = FieldDef(name='in_', dims=(), pin_type=PinType.FLOAT,
+                            direction=PinDir.INPUT, c_decl=None)
+        pd = PinDef(name='in', field=in_field, description='the input')
+        expected = (
+            "pin  FLOAT  INPUT   in -> in_\n"
+            "  # the input")
+        assert str(pd) == expected
+
+    def test_array_with_indices(self):
+        arr_field = FieldDef(name='ch00_out_', dims=(3,), pin_type=PinType.FLOAT,
+                             direction=PinDir.OUTPUT, c_decl=None)
+        pd = PinDef(name='ch01_out', field=arr_field, field_indices=(1,))
+        expected = "pin  FLOAT  OUTPUT  ch01_out -> ch00_out_[1]"
+        assert str(pd) == expected
+
+
+class TestFunctDefStr:
+
+    def test_no_desc(self):
+        fd = FunctDef(name='update')
+        expected = "function  update"
+        assert str(fd) == expected
+
+    def test_with_desc(self):
+        fd = FunctDef(name='update', description='runs every cycle')
+        expected = (
+            "function  update\n"
+            "  # runs every cycle")
+        assert str(fd) == expected
+
+
+class TestBlockDefStr:
+
+    def test_full(self, block_def_with_pins):
+        expected = (
+            "BlockDef: simple  \n"
+            "  # block with pins\n"
+            "  abs_path:  simple.bloc\n"
+            "  orig_path: simple.bloc\n"
+            "  field  FLOAT  INPUT   in_\n"
+            "  pin  FLOAT  INPUT   in -> in_\n"
+            "  function  update\n"
+            "    # update function")
+        assert str(block_def_with_pins) == expected
+
+class TestSignalStr:
+
+    def test_no_driver_no_readers(self, linked_design):
+        expected = "signal  vel  FLOAT  value=0  driver=none"
+        assert str(linked_design.signals['vel']) == expected
+
+    def test_with_driver(self, linked_design):
+        linked_design.link_by_name('src.out', 'vel')
+        expected = "signal  vel  FLOAT  value=0  driver=src.out"
+        assert str(linked_design.signals['vel']) == expected
+
+    def test_with_reader(self, linked_design):
+        linked_design.link_by_name('s1.in', 'vel')
+        expected = (
+            "signal  vel  FLOAT  value=0  driver=none\n"
+            "  reader  s1.in")
+        assert str(linked_design.signals['vel']) == expected
+
+
+class TestThreadStr:
+
+    def test_empty_thread(self, linked_design):
+        expected = "thread  fast  (1000000 ns)"
+        assert str(linked_design.threads['fast']) == expected
+
+    def test_with_function(self, linked_design):
+        linked_design.link_by_name('s1.update', 'fast')
+        expected = (
+            "thread  fast  (1000000 ns)\n"
+            "  s1.update")
+        assert str(linked_design.threads['fast']) == expected
+
+
+class TestPinInstanceStr:
+
+    def test_unconnected(self, linked_design):
+        expected = "pin  s1.in -> dsig_s1_in"
+        assert str(linked_design.blocks['s1'].pins['in']) == expected
+
+    def test_connected(self, linked_design):
+        linked_design.link_by_name('s1.in', 'vel')
+        expected = "pin  s1.in -> vel"
+        assert str(linked_design.blocks['s1'].pins['in']) == expected
+
+
+class TestFunctInstanceStr:
+
+    def test_unassigned(self, linked_design):
+        expected = "function  s1.update -> unassigned"
+        assert str(linked_design.blocks['s1'].functions['update']) == expected
+
+    def test_assigned(self, linked_design):
+        linked_design.link_by_name('s1.update', 'fast')
+        expected = "function  s1.update -> fast"
+        assert str(linked_design.blocks['s1'].functions['update']) == expected
+
+
+class TestBlockInstanceStr:
+
+    def test_basic(self, linked_design):
+        expected = (
+            "block  s1 (simple)\n"
+            "  pin  s1.in -> dsig_s1_in\n"
+            "  function  s1.update -> unassigned")
+        assert str(linked_design.blocks['s1']) == expected
+
+
+class TestDesignStr:
+
+    def test_no_recurse_empty(self, no_recurse):
+        d = Design(abs_path='test.blocs')
+        expected = "Design: test.blocs"
+        assert str(d) == expected
+
+    def test_no_recurse_populated(self, no_recurse, linked_design):
+        expected = (
+            "Design: test.blocs\n"
+            "  blockdef  simple\n"
+            "  blockdef  source\n"
+            "  block  src (source)\n"
+            "  block  s1 (simple)\n"
+            "  block  s2 (simple)\n"
+            "  signal  vel  FLOAT\n"
+            "  signal  b  BOOL\n"
+            "  thread  fast  1000000 ns\n"
+            "  thread  slow  100000000 ns")
+        assert str(linked_design) == expected
+
+    def test_no_recurse_with_block_spec(self, no_recurse, linked_design,
+                                        minimal_block_spec):
+        linked_design.add_block_spec(minimal_block_spec)
+        expected = (
+            "Design: test.blocs\n"
+            "  blockspec  myblock\n"
+            "  blockdef  simple\n"
+            "  blockdef  source\n"
+            "  block  src (source)\n"
+            "  block  s1 (simple)\n"
+            "  block  s2 (simple)\n"
+            "  signal  vel  FLOAT\n"
+            "  signal  b  BOOL\n"
+            "  thread  fast  1000000 ns\n"
+            "  thread  slow  100000000 ns")
+        assert str(linked_design) == expected
+
+    def test_recurse_populated(self, linked_design):
+        # just verify that recursion happens - child content should appear
+        result = str(linked_design)
+        assert 'BlockDef:' in result
+        assert 'block  s1' in result
+        assert 'signal  vel' in result
+        assert 'thread  fast' in result
