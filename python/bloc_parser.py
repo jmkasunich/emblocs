@@ -633,13 +633,13 @@ def parse_bloc_string(text: str, source: str = "<string>") -> BlockSpec | None:
 # Test driver
 # ---------------------------------------------------------------------------
 
-if __name__ == "__main__":
+if __name__ == "__main__":   # pragma: no cover
     if len(sys.argv) != 2:
         print(f"usage: {sys.argv[0]} <file.bloc>", file=sys.stderr)
         sys.exit(1)
 
     block_spec = parse_bloc_file(sys.argv[1])
     if block_spec is not None:
-        print(block_spec.describe())
+        print(block_spec)
     else:
         print("Parsing failed due to errors.", file=sys.stderr)
