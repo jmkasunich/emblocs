@@ -5,12 +5,12 @@ import pytest
 from pathlib import Path
 from parse_common import (Token, ctx)
 from blocs_parser import (
-    lex_lines, set_get_block_spec,
+    lex_lines, set_get_block_spec, unlink_no_arg_handler,
     parse_blocs, parse_blocs_string, parse_blocs_file,
 )
 from bloc_parser import parse_bloc_file
 from emblocs import (
-    PinType, Design, BlockSpec,
+    PinType, Design, BlockSpec
 )
 
 
@@ -96,6 +96,22 @@ def blocks_x4(test_blocs):
     assert len(design.signals) == 4
     assert len(design.threads) == 2
     return design
+
+# ---------------------------------------------------------------------------
+# parse_blocs_string encoding tests
+# ---------------------------------------------------------------------------
+
+class TestParseBlocsStringEncoding:
+
+    def test_non_ascii_string(self, capsys):
+        blocs_str = "signal f\u00f8o float\n"
+        design = Design(abs_path="test_design")
+        result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1: error: non-ASCII character\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert result is None
 
 
 # ---------------------------------------------------------------------------
@@ -214,7 +230,14 @@ class TestLexLines:
         # result should be empty since the command was never completed
         assert len(result) == 0
 
-
+    def test_no_trailing_newline(self):
+        lines = ["signal foo float"]
+        result = lex_lines(lines)
+        assert len(result) == 1
+        assert len(result[0]) == 3
+        assert result[0][0] == Token("signal", 1, 1)
+        assert result[0][1] == Token("foo",    1, 8)
+        assert result[0][2] == Token("float",  1, 12)
 
 # ---------------------------------------------------------------------------
 # cmd_blockdef tests
@@ -397,6 +420,19 @@ class TestCmdBlockdef:
         assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
         assert result is False
 
+    def test_blockdef_non_param_extra_token(self, capsys):
+        blocs_str = "blockdef myblock simple extra\n"
+        design = Design(abs_path="test_design")
+        result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1:25: error: 'myblock' (BlockDef) has no "
+            "subcommands, got 'extra'\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert result is False
+        # the blockdef itself was created successfully -- the break happens
+        # before any param-parsing error, so only the trailing token fails
+        assert "myblock" in design.block_defs
 
 # ---------------------------------------------------------------------------
 # cmd_block tests
@@ -778,6 +814,36 @@ class TestCmdConflicts:
             "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
+
+# ---------------------------------------------------------------------------
+# parse_command dispatcher tests
+# ---------------------------------------------------------------------------
+
+class TestParseCommandDispatch:
+
+    def test_unknown_identifier(self, capsys):
+        blocs_str = "nonexistent_thing\n"
+        design = Design(abs_path="test_design")
+        result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1:1: error: unknown command or object "
+            "'nonexistent_thing': 'nonexistent_thing' not found in design\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert result is False
+
+    def test_invalid_subcommand(self, capsys):
+        blocs_str = "signal foo float ?bad\n"
+        design = Design(abs_path="test_design")
+        result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1:18: error: subcommand '?bad' is invalid "
+            "for target 'foo' (Signal)\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert result is False
+
+
 # ---------------------------------------------------------------------------
 # subcmd '=' tests
 # ---------------------------------------------------------------------------
@@ -937,6 +1003,39 @@ class TestSubcmdEquals:
             "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
+    def test_set_bool_signal_invalid_expression_fails(self, capsys):
+        blocs_str = "signal flag bool =1+\n"
+        design = Design(abs_path="test_design")
+        result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1:18: error: invalid bool value '1+': expression '1+': invalid syntax\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert result is False
+
+    def test_set_s32_signal_invalid_expression_fails(self, capsys):
+        blocs_str = "signal count s32 =1+\n"
+        design = Design(abs_path="test_design")
+        result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:1:18: error: invalid s32 value '1+': expression '1+': invalid syntax\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert result is False
+
+    def test_set_raw_pin_fails(self, capsys):
+        blocs_str = (
+            "blockdef myblock parameterized NCHAN=2 MASK=0x0F HAS_ENABLE=0\n"
+            "block b1 myblock\n"
+            "b1.ch0_in =5\n"
+        )
+        design = Design(abs_path="test_design")
+        result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:3:11: error: cannot assign value to RAW pin/signal\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert result is False
 
 # ---------------------------------------------------------------------------
 # subcommand '+' tests
@@ -1121,6 +1220,39 @@ class TestSubcmdMinus:
             "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
+    def test_unlink_wrong_type_fails(self, capsys):
+        blocs_str = "signal a float\nsignal b float\na -b\n"
+        design = Design(abs_path="test_design")
+        result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:3:3: error: cannot unlink Signal\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert result is False
+
+    def test_unlink_target_not_found_fails(self, capsys):
+        blocs_str = "signal a float\na -nonexistent\n"
+        design = Design(abs_path="test_design")
+        result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:2:3: error: 'nonexistent' not found in design\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert result is False
+
+    def test_unlink_no_arg_wrong_type_direct_call(self, capsys):
+        # unlink_no_arg_handler is only ever dispatched for PinInstance and
+        # FunctInstance targets, for which design.unlink() never raises.
+        # This calls the handler directly with a Signal target to exercise
+        # its except-block contract: if design.unlink() ever does raise,
+        # the handler reports the error and returns False.
+        design = Design(abs_path="test_design")
+        sig = design.add_signal("s1", PinType.FLOAT)
+        result = unlink_no_arg_handler("", sig, design)
+        actual = capsys.readouterr().err.strip()
+        expected = "<test>:0:0: error: cannot unlink Signal"
+        assert actual == expected
+        assert result is False
 
 # ---------------------------------------------------------------------------
 # subcommand '-+' tests
@@ -1256,3 +1388,44 @@ class TestSubcmdRelink:
         assert result is False
         assert blocks_x4.signals["sig_float"].value==1.5
         assert blocks_x4.blocks["b1"].pins["in"].signal == blocks_x4.signals["sig_float"]
+
+    def test_relink_target_not_found(self, capsys):
+        blocs_str = "signal s1 float\ns1 -+nonexistent\n"
+        design = Design(abs_path="test_design")
+        result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == (
+            "tests/data/tmp/test.blocs:2:4: error: 'nonexistent' not found in design\n"
+            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert result is False
+
+# ---------------------------------------------------------------------------
+# parse_blocs_file tests
+# ---------------------------------------------------------------------------
+
+class TestParseBlocsFile:
+
+    def test_file_not_found(self, bad_dir, capsys):
+        path = bad_dir / "does_not_exist.blocs"
+        rel = path.as_posix()
+        design = Design(abs_path="test_design")
+        result = parse_blocs_file(str(path), design)
+        actual = capsys.readouterr().err.strip()
+        expected = (
+            f"{rel}: error: file not found\n"
+            f"{rel}: 1 error(s), 0 warning(s), 0 info(s)"
+        )
+        assert actual == expected
+        assert result is None
+
+    def test_successful_parse(self, good_dir, capsys):
+        path = good_dir / "minimal.blocs"
+        rel = path.as_posix()
+        design = Design(abs_path="test_design")
+        result = parse_blocs_file(str(path), design)
+        actual = capsys.readouterr().err.strip()
+        expected = f"{rel}: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == expected
+        assert result is True
+        assert "foo" in design.signals
+

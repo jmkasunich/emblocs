@@ -3,7 +3,6 @@
 # Reads a .blocs file and returns a Design object.
 
 from __future__ import annotations
-import sys
 from pathlib import Path
 from collections.abc import Callable
 from expressions import evaluate, ExpressionError
@@ -53,7 +52,7 @@ def get_value(text: str, value_type: PinType) -> int | float | None:
     Reports an error using the current context on failure.
     """
     if value_type == PinType.RAW:
-        ctx.error("internal error: get_value() called with RAW type")
+        ctx.error("cannot assign value to RAW pin/signal")
         return None
     if value_type == PinType.BOOL:
         if text == "true":
@@ -208,7 +207,7 @@ def cmd_block(tokens: list[Token], design: Design) -> tuple[BlockInstance | None
         return None, 0
     return block, 3
 
-def cmd_signal(tokens: list[Token], design: Design) -> tuple[Signal | None:, int]:
+def cmd_signal(tokens: list[Token], design: Design) -> tuple[Signal | None, int]:
     """
     Handle the 'signal' command.
     Syntax: signal <signal-name> <type>
@@ -469,10 +468,6 @@ def lex_lines(lines: list[str]) -> list[list[Token]]:
     if in_continuation:
         ctx.error("unexpected end of file after line continuation",
                   lineno=lineno, column=OMIT)
-    elif logical_tokens:
-        # file ended without final newline
-        logical_lines.append(logical_tokens)
-
     return logical_lines
 
 
@@ -525,19 +520,3 @@ def parse_blocs_string(text: str, design: Design,
     ctx.pop()
     return result
 
-
-# ---------------------------------------------------------------------------
-# Test driver
-# ---------------------------------------------------------------------------
-
-if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print(f"usage: {sys.argv[0]} <file.blocs>", file=sys.stderr)
-        sys.exit(1)
-
-    design = parse_blocs_file(sys.argv[1])
-    if design is not None:
-        print(design.describe())
-    else:
-        print("Parsing failed due to errors.", file=sys.stderr)
-        sys.exit(1)
