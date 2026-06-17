@@ -99,20 +99,26 @@ The result must be a positive integer in the range [1, 2³²−1].
 Common forms include decimal literals (`1000000`), hexadecimal (`0xF4240`),
 and arithmetic expressions (`1000*1000`).
 
-### 2.6 Paths
-
-Paths in `blockdef` commands always use forward slashes as directory
-separators, following POSIX conventions, regardless of the host operating
-system. Both absolute and relative paths are supported. Relative paths are
-interpreted relative to the location of the `.blocs` file, not the current
-working directory of the tool invocation. The Python toolchain converts paths
-to native separators internally when opening files.
-
 ---
 
 ## 3. Namespaces
 
-### 3.1 System-wide Namespace
+### 3.1 Block Spec Namespace
+
+The block spec namespace contains the names of all block templates that
+have been loaded and are available for use in `blockdef` commands. A block
+spec name is derived from the base name of its `.bloc` file — `limit1.bloc`
+produces the block spec name `limit1`. Block spec names are not part of
+the system-wide namespace and do not conflict with block definition, block
+instance, signal, or thread names.
+
+Block specs are loaded implicitly by `blockdef` commands: when a `blockdef`
+command names a block spec that has not yet been loaded, the toolchain
+searches (see Section 5.1.2) for the corresponding `.bloc` file and loads it.
+If the same block spec name is referenced by multiple `blockdef` commands,
+the `.bloc` file is loaded only once.
+
+### 3.2 System-wide Namespace
 
 The following object types share a single flat namespace:
 
@@ -124,7 +130,7 @@ The following object types share a single flat namespace:
 All names in this namespace must be unique. Declaring any object with a name
 already in use is an error, regardless of object type.
 
-### 3.2 Block-instance Namespace
+### 3.3 Block-instance Namespace
 
 Each block instance has a private namespace containing its pins and functions.
 Pins and functions share this namespace, so a pin and a function within the
@@ -187,38 +193,54 @@ command.
 
 ### 5.1 Block Definition Creation
 
-    blockdef <def-name> <bloc-name> [PARAM=value...]
+    blockdef <def-name> <spec-name> [PARAM=value...]
 
 Registers a block definition, making it available for instantiation.
 `<def-name>` is the name of the new block definition, and is placed in
-the system-wide namespace. `<bloc-name>` is the base name of a `.bloc`
-file which serves as a template from which the new blockdef is created.
-Options are `PARAM=value` pairs which allow one `.bloc` file to generate
-multiple block definitions (referred to as `variants`).
+the system-wide namespace (Section 3.2). `<spec-name>` is the name of
+the template from which the new blockdef is created.  The compiler
+searches for `<spec-name>.bloc` to provide the template.
 
-The namespaces for `<bloc-name>` and `<def-name>` are independent; for
-blocks without parameters it is both allowed and common to use the same
-name for both, e.g. `blockdef limit1 limit1`, means "create block
-definition `limit1` from `limit1.bloc`".
+Options are `PARAM=value` pairs which allow one `.bloc` file to generate
+multiple block definitions (referred to as `variants`, see below).
 
 Block definitions are immutable once created. A `blockdef` command
 must appear before any `block` command that instantiates that definition.
 
-#### 5.1.1 Block Variant Creation
+#### 5.1.1 Block Variants
 
-A block variant is a parameterized form of a block type. Rather than
-maintaining separate source files for each variant, a single `.bloc` file
-serves as a template and parameters are supplied as options on the `blockdef`
-command. The toolchain generates the variant-specific C source from the
-template and the supplied parameters.
+Every `blockdef` command produces exactly one block definition, which is
+a **variant** of its block spec. For block specs with no parameters, only
+one variant is possible and no `PARAM=value` pairs are needed or accepted.
+For block specs with parameters, different `PARAM=value` combinations
+produce different variants — each with its own `<def-name>` — all derived
+from the same `.bloc` file.
 
-Example — a 3-channel 2-to-1 multiplexor variant based on `mux.bloc`:
+Example — two variants of a multiplexor block spec, differing in the
+number of inputs:
 
-    blockdef mux_3ch_2to1 mux NCHANNELS=3 NINPUTS=2
+    blockdef mux2to1 mux NINPUTS=2
+    blockdef mux3to1 mux NINPUTS=3
+
+Both variants share the same `mux.bloc` template and the same `mux.c`
+and `mux.h` implementation files, but each produces a distinct block
+definition with its own pin layout and instance data structure. A system
+may instantiate both variants independently.
+
+Parameters not supplied on the `blockdef` command line emit a warning
+and take their default values from the `.bloc` file. A parameter value
+outside the range declared in the `.bloc` file is an error.
+
+For block specs without parameters, only one variant is possible. In this
+case it is common to use the same name for both `<def-name>` and
+`<spec-name>`, e.g. `blockdef limit1 limit1` means "create block definition
+`limit1` from `limit1.bloc`". The block spec namespace (Section 3.1) and
+the blockdef namespace (Section 3.2) are independent, so re-using the name
+does not cause a collision.
 
 #### 5.1.2 Block Search Path
 
-The toolchain searches for `<bloc-name>.bloc` in the following locations,
+The toolchain searches for `<spec-name>.bloc` in the following locations,
 in order:
 
 1. The directory containing the `.blocs` file being compiled
@@ -227,16 +249,17 @@ in order:
 Paths in `bloc_search_paths` may be absolute, relative (resolved against
 the `.blocs` file directory), or prefixed with `$EMBLOCS` (resolved against
 the emblocs installation root).  Searches are not recursive; to search in
-both `$EMBLOCS/src/components` and `$EMBLOCS/src/componnets/special` you
+both `$EMBLOCS/src/components` and `$EMBLOCS/src/componets/special` you
 must put both paths in the list.
 
 ### 5.2 Block Instantiation
 
-    block <instance-name> <type-name>
+    block <instance-name> <def-name>
 
-Creates a named instance of a previously defined block type. `<instance-name>`
-is placed in the system-wide namespace. The instance inherits all pins and
-functions from `<type-name>`. The block type must have been declared with
+Creates a named instance of a previously defined block definition.
+The new instance is called `<instance-name>` and is placed in the
+system-wide namespace. The instance inherits all pins and functions
+from `<def-name>`. The block definition must have been declared with
 `blockdef` before this command is processed.
 
 Example:
@@ -409,7 +432,7 @@ read-ahead. The following ordering rules apply:
 ### 7.1 Required Ordering
 
 - A `blockdef` command must appear before any `block` command that references
-  its type name.
+  its `<def-name>`.
 - A `block` command must appear before any signal, thread, pin, or function
   modification command that references any of its pins or functions.
 - A `signal` command must appear before any modification command that
@@ -483,7 +506,7 @@ command         ::= blockdef-cmd
                   | pin-mod-cmd
                   | func-mod-cmd
 
-blockdef-cmd    ::= 'blockdef' identifier path { param }
+blockdef-cmd    ::= 'blockdef' identifier identifier { param }
 param           ::= identifier '=' expression
 
 block-cmd       ::= 'block' identifier identifier
@@ -521,7 +544,6 @@ fullname        ::= identifier '.' identifier
 
 identifier      ::= [A-Za-z_][A-Za-z0-9_]*            (* max 31 chars *)
 expression      ::= token  (* integer or float expression; no internal whitespace *)
-path            ::= token  (* see Section 2.6 for path conventions *)
 token           ::= <any non-whitespace ASCII sequence>
 ```
 
@@ -539,9 +561,9 @@ at 1 kHz.
 
 ```
 # Block type registrations
-blockdef pid_controller  pid.bloc
-blockdef encoder_input   encoder.bloc
-blockdef pwm_output      pwm.bloc
+blockdef pid_controller  pid
+blockdef encoder_input   encoder
+blockdef pwm_output      pwm
 
 # Block instances
 block enc   encoder_input

@@ -78,20 +78,27 @@ Threads are periodic execution contexts. Each thread has a period (in
 nanoseconds) and an ordered list of block functions to call. On bare-metal
 systems, threads typically run in interrupt service routines (ISRs). On
 RTOS systems, threads run as OS threads.  However, the core EMBLOCS system
-does not directly control how threads are invoked.  One convention is that
-a thread named `init` can be used for things that only need to run once
-at startup; a program's main() function can simply invoke the `init` thread
-once.
+does not directly control how threads are invoked.
+
+By convention, a thread named `init` can be used for things that only need
+to run once at startup; a program's main() function can simply invoke the
+`init` thread once.  This is simply a convention, neither `init` functions
+nor an `init` thread get special treatment by the toolchain.
 
 ---
 
 ## 3. Namespaces
 
-EMBLOCS maintains two distinct namespaces.
+EMBLOCS maintains three distinct namespaces.
+
+The **block spec namespace** contains the names of all block templates that
+have been loaded. A block spec name is derived from the base name of its
+`.bloc` file. Block spec names do not conflict with names in the other
+namespaces.
 
 The **system-wide namespace** contains all block definitions, block instances,
-signals, and threads. All names within this namespace must be unique; a block
-instance, a signal, and a thread cannot share a name.
+signals, and threads. All names within this namespace must be unique; no two
+items (block definition, block instance, signal, thread) can share a name.
 
 Each **block instance** has its own private namespace containing that
 instance's pins and functions. Pins and functions share the same namespace
@@ -118,35 +125,32 @@ that object. This applies uniformly across all command types.
 
 #### 4.2.1 Block Definition (`blockdef`)
 
-Registers a block type from a `.bloc` template file, making it available for
-instantiation. Options and parameters are passed to the `.bloc` toolchain.
+Registers a block type, making it available for instantiation. The first
+argument is the name of the new block definition; the second is the name
+of a block spec — the base name of a `.bloc` template file located via
+the block search path. Optional `PARAM=value` pairs generate parameterized
+variants from a single template.
 
-    blockdef <type-name> <path-to-.bloc> [option...]
-
-Block definitions are immutable once created. All block definitions needed by
-a system must appear before any block instances that use them.
-
-Block variants — parameterized forms of a block type — are also declared here.
-Rather than maintaining separate source files for each variant, a single
-`.bloc` file serves as a template, and parameters (such as the number of
-channels or inputs) are supplied in the `blockdef` command to generate the
-variant-specific C code.
+    blockdef <def-name> <spec-name> [PARAM=value...]
 
 Example — defining a 3-channel 2-to-1 multiplexor variant:
 
-    blockdef mux_3ch_2to1 mux.bloc NUM_CHAN=3 NUM_INPUT=2
+    blockdef mux_3ch_2to1 mux NUM_CHAN=3 NUM_INPUT=2
 
 The resulting block type has pins: `ch00_in0`, `ch00_in1`, `ch01_in0`,
 `ch01_in1`, `ch02_in0`, `ch02_in1`, `ch00_out`, `ch01_out`, `ch02_out`,
 `select`. When `select=1`, each `chN_in1` is copied to `chN_out`.
 
+See `blocs_language.md` Section 5.1 for full details including variant
+creation and the block search path.
+
 #### 4.2.2 Block Instantiation (`block`)
 
-Creates a named instance of a previously defined block type.
+Creates a named instance of a previously defined block definition.
 
-    block <instance-name> <type-name>
+    block <instance-name> <def-name>
 
-The instance inherits all pins and functions defined by its block type.
+The instance inherits all pins and functions defined by its block definition.
 
 #### 4.2.3 Signal Commands (`signal`)
 
@@ -214,9 +218,10 @@ basic features, structure and role; some statements such as `include` and
 
 ### 5.1 Block Statement
 
-A `.bloc` file must begin with exactly one `block` statement, which defines the
-name of the block described by the file.  By convention this is the base name
-of the `.bloc` file, but this is not required.
+A `.bloc` file must begin with exactly one `block` statement, which defines
+the name of the block and provides a description of its purpose and behavior.
+The block name must match the base name of the `.bloc` file; a mismatch is
+an error.
 
 ### 5.2 Parameter Statement
 
@@ -341,7 +346,7 @@ Utility code used by the core library:
 
 ### 7.4 `emblocs/python/`
 
-Build-time and runtime Python tools (see Section 7).
+Build-time and runtime Python tools (see Section 8).
 
 ---
 
@@ -350,9 +355,11 @@ Build-time and runtime Python tools (see Section 7).
 ### 8.1 Shared Object Model (`emblocs.py`)
 
 All Python tools import `emblocs.py`, which defines the complete EMBLOCS
-object model as Python classes. This single source of truth covers both
-block-level objects (Block, Pin, Function, Parameter) and system-level
-objects (Signal, Thread, BlockInstance).
+object model as Python classes. This single source of truth covers block
+spec objects (BlockSpec, ParamSpec, PinSpec, DimSpec, FunctSpec,
+Statement), block definition objects (BlockDef, FieldDef, PinDef, FunctDef),
+system level objects (BlockInstance, PinInstance, FunctInstance, Signal, Thread),
+and finally the overall Design object that fully defines a system.
 
 By sharing the object model across tools, consistency is guaranteed: the
 .bloc compiler, the .blocs compiler, and the runtime monitor all work
