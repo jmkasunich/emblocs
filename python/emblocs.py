@@ -301,6 +301,8 @@ class BlockSpec:
                         PinSpec, VarDef, and FunctSpec objects intermixed
         namespace    -- set of dedup_names for all statements added so far;
                         used for O(1) collision detection at parse time
+        filehash     -- hash of the lines in the file, used for matching against
+                        blockspec in the target
     """
     abs_path:    str
     name:        str               = ""
@@ -310,6 +312,7 @@ class BlockSpec:
     defaults:    dict[str, int]    = field(default_factory=dict)
     statements:  list[Statement]   = field(default_factory=list)
     namespace:   set[str]          = field(default_factory=set)
+    filehash:    str               = ""
 
     def __str__(self) -> str:
         """Return a human-readable multi-line description for debugging."""

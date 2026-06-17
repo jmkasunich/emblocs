@@ -5,6 +5,8 @@
 from __future__ import annotations
 import sys
 import re
+import hashlib
+import base64
 from pathlib import Path
 from dataclasses import dataclass, field
 from enum import Enum, auto
@@ -539,6 +541,33 @@ def parse_statement(spec: BlockSpec, state: ParseState,
 
 
 # ---------------------------------------------------------------------------
+# helper for hashing .bloc files
+# ---------------------------------------------------------------------------
+
+# 6 bytes → 48 bits → 8 Base64 characters (no padding)
+FILEHASH_DIGEST_SIZE = 6
+
+def compute_filehash(lines: list[str]) -> str:
+    """
+    Compute a deterministic hash of file contents.
+
+    Assumes 'lines' comes from read_source_file(), which already
+    normalizes line endings to '\n'. The hash therefore reflects
+    the canonical text representation used by the parser.
+
+    Returns:
+        URL-safe Base64 encoded hash string (no padding).
+    """
+    h = hashlib.blake2s(digest_size=FILEHASH_DIGEST_SIZE)
+    for line in lines:
+        # Lines are already normalized and UTF-8 safe
+        h.update(line.encode("utf-8"))
+    encoded = base64.urlsafe_b64encode(h.digest()).decode("ascii")
+    # With 6-byte digest, there is no padding, but strip defensively
+    return encoded.rstrip("=")
+
+
+# ---------------------------------------------------------------------------
 # Main parser
 # ---------------------------------------------------------------------------
 
@@ -607,7 +636,10 @@ def parse_bloc_file(path: str) -> BlockSpec | None:
         ctx.summarize()
         ctx.pop()
         return None
+    filehash = compute_filehash(lines)
     result = parse_bloc(lines)
+    if result is not None:
+        result.filehash = filehash
     if not ctx.is_clean():
         ctx.summarize()
     ctx.pop()
