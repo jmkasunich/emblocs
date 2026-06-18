@@ -1,5 +1,5 @@
 // tests/good/parameterized.bloc
-block parameterized /// this is a test block definition using parameters
+/// this is a test block definition using parameters
 param u32  NCHAN       default=2 min=1 max=4
 param u32  MASK        default=0xF min=0 max=0xF
 param bool HAS_ENABLE  default=0

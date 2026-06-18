@@ -47,7 +47,7 @@ is written by the block author and is used by multiple EMBLOCS tools.
 The `<block>.h` file contains a typedef for the block instance data structure.
 Each block instance has a copy of this structure, which contains block internal
 state as well as the pin pointers that are used to interconect blocks into a
-larger system.  The `<block>.h` file is created by running `bloc_compiler.ph`
+larger system.  The `<block>.h` file is created by running `bloc_compiler.py`
 on `<block>.bloc` and is never edited manually.  It should be checked into
 version control.
 
@@ -62,8 +62,8 @@ but the block author is responsible for updating `<block>.c`.  The block
 compiler will never overwrite an existing `<block>.c` file because it might
 contain implementation code that must not be lost.  If changes to a .bloc
 file are extreme enough that the block author wants to start over with the
-implementation, they can delete `<block>.c` and rerun the bloc compiler
-to generate a fresh template file.
+implementation, they can delete or rename `<block>.c` and rerun the bloc
+compiler to generate a fresh template file.
 
 
 
@@ -86,7 +86,7 @@ Produces:
   `#endif` guards so that variant-specific values take precedence at build
   time while providing clangd with a complete, squiggle-free compilation
   environment during editing. This file lives alongside `<block>.bloc` and
-  `<block>.c` in the block's library and is checked into source control.
+  `<block>.c` in the blocks library and is checked into source control.
 - `<block>.c` — a one-time source template containing function stubs, the
   instance cast line, and an inventory of available pins as comments.
   Generated only if the file does not already exist; the block author owns

@@ -39,12 +39,12 @@ PIN_DIRS = {
 # ---------------------------------------------------------------------------
 
 class Section(Enum):
-    BLOCK  = auto()
+    HEADER = auto()
     PARAMS = auto()
     BODY   = auto()
 
 _ALLOWED = {
-    Section.BLOCK:  {"block"},
+    Section.HEADER: set(),
     Section.PARAMS: {"param", "include"},
     Section.BODY:   {"pin", "var", "function", "#if", "#endif"},
 }
@@ -61,29 +61,12 @@ class ParseState:
                     active; innermost condition is last in the list.
                     Empty outside any #if block.
     """
-    section:  Section   = Section.BLOCK
+    section:  Section   = Section.HEADER
     if_stack: list[str] = field(default_factory=list)
 
 # ---------------------------------------------------------------------------
 # Per-keyword parse functions
 # ---------------------------------------------------------------------------
-
-def parse_block(spec: BlockSpec,
-                tokens: list[Token], description: str) -> None:
-    """Handle the 'block' declaration."""
-    keyword = tokens[0]
-    if spec.name:
-        ctx.error("'block' declared more than once", token=keyword)
-        return
-    if len(tokens) < 2:
-        ctx.error("'block' declaration requires a name", token=keyword)
-        return
-    name_tok = tokens[1]
-    if not name_tok.text.isidentifier():
-        ctx.error(f"invalid block name: {name_tok.text!r}", token=name_tok)
-        return
-    spec.name        = name_tok.text
-    spec.description = description
 
 def parse_param(spec: BlockSpec, tokens: list[Token], description: str) -> None:
     """
@@ -475,22 +458,33 @@ def parse_statement(spec: BlockSpec, state: ParseState,
     """
     Dispatch a complete statement to the appropriate per-keyword handler.
 
-    tokens is guaranteed non-empty.  description may be "".
+    'tokens' may be empty.  'description' may be "".
 
     Section transitions:
-        BLOCK  -> PARAMS  on any _ALLOWED[Section.PARAMS] keyword
-        BLOCK  -> BODY    on any _ALLOWED[Section.BODY] keyword (no params in file)
+        HEADER -> PARAMS  on any _ALLOWED[Section.PARAMS] keyword
+        HEADER -> BODY    on any _ALLOWED[Section.BODY] keyword (no params in file)
         PARAMS -> BODY    on any _ALLOWED[Section.BODY] keyword
     """
+    # no tokens, no description - nothing to do
+    if not tokens and not description:
+        return
+    # description without tokens - only valid in header
+    if not tokens:
+        if state.section == Section.HEADER:
+            spec.description = description
+        else:
+            ctx.error("misplaced description", column=OMIT)
+        return
+    # token(s) present
     keyword = tokens[0]
 
     # Step 1: section transitions
     if keyword.text in _ALLOWED[Section.PARAMS]:
-        if state.section == Section.BLOCK:
+        if state.section == Section.HEADER:
             state.section = Section.PARAMS
 
     if keyword.text in _ALLOWED[Section.BODY]:
-        if state.section in ( Section.BLOCK, Section.PARAMS ):
+        if state.section in ( Section.HEADER, Section.PARAMS ):
             # generate dict of params and default values
             spec.defaults = { p.name : p.default for p in spec.params }
             state.section = Section.BODY
@@ -502,9 +496,7 @@ def parse_statement(spec: BlockSpec, state: ParseState,
         return
 
     # Step 3: dispatch
-    if keyword.text == "block":
-        parse_block(spec, tokens, description)
-    elif keyword.text == "param":
+    if keyword.text == "param":
         parse_param(spec, tokens, description)
     elif keyword.text == "include":
         parse_include(spec, tokens, description)
@@ -584,7 +576,7 @@ def parse_bloc(lines: list[str]) -> BlockSpec | None:
 
     def flush():
         nonlocal pending_tokens, pending_description
-        if pending_tokens:
+        if pending_tokens or pending_description:
             parse_statement(spec, state, pending_tokens,
                             pending_description.rstrip().strip("\n"))
         pending_tokens      = []
@@ -600,25 +592,24 @@ def parse_bloc(lines: list[str]) -> BlockSpec | None:
         else:
             new_description = ""
         # apply language rules
-        if pending_description and new_description and not new_tokens:
-            # description continuation line
-            pending_description += new_description
-        else:
+        if new_tokens:
             # any previous statement is now complete
             flush()
-            if new_description and not new_tokens:
-                # misplaced description
-                ctx.error("Misplaced description",
-                          lineno=lineno, column=len(first_part))
-            elif new_tokens:
-                # new statement
-                pending_tokens      = new_tokens
+            # begin new statement
+            pending_tokens = new_tokens
+            if not new_description:
+                # no description, can process immediately
+                flush()
+            else:
                 pending_description = new_description
-            # else: empty line or comment-only line, do nothing
+        else:
+            # keep building description
+            pending_description += new_description
+            ctx.set(line=lineno)
     # end of input
     flush()
-    if spec.name == "" and ctx.no_errors():
-        ctx.error("no 'block' declaration found", lineno=OMIT)
+    if not spec.description and ctx.no_errors():
+        ctx.error("block description is required", lineno=OMIT)
     if state.if_stack:
         ctx.error(f"end-of-file with {len(state.if_stack)} "
                   f"unterminated '#if' statements", lineno=OMIT)
@@ -640,6 +631,7 @@ def parse_bloc_file(path: str) -> BlockSpec | None:
     result = parse_bloc(lines)
     if result is not None:
         result.filehash = filehash
+        result.name = Path(path).stem
     if not ctx.is_clean():
         ctx.summarize()
     ctx.pop()
@@ -657,6 +649,8 @@ def parse_bloc_string(text: str, source: str = "<string>") -> BlockSpec | None:
         ctx.pop()
         return None
     result = parse_bloc(lines)
+    if result is not None:
+        result.name = Path(source).stem
     ctx.pop()
     return result
 

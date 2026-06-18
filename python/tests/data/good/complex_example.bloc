@@ -1,4 +1,4 @@
-block complex_example /// Test case for a variety of .bloc constructs.
+/// Test case for a variety of .bloc constructs.
 /// Not a real component; exercises parser happy paths.
 /// Covers: bool and u32 params, scalar pins, array pins (1D and 2D),
 ///   raw and s32 pin types, vars (simple, array, pointer), nested #if,

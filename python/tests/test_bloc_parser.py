@@ -4,7 +4,7 @@
 from __future__ import annotations
 import pytest
 from parse_common import ctx, read_source_string
-from bloc_parser import parse_bloc_string, parse_bloc_file, parse_bloc
+from bloc_parser import parse_bloc_string, parse_bloc_file, parse_bloc, Section, ParseState
 import bloc_parser   # for monkeypatching in lexer tests
 from emblocs import BlockSpec, DimSpec, PinType, PinDir, U32_MAX
 
@@ -32,6 +32,7 @@ def _run_lexer(text, monkeypatch):
     calls = []
     def fake_parse_statement(spec, state, tokens, description):
         calls.append(([t.text for t in tokens], description))
+        state.section = Section.PARAMS
     monkeypatch.setattr(bloc_parser, "parse_statement", fake_parse_statement)
     lines = read_source_string(text)
     parse_bloc(lines)
@@ -49,143 +50,172 @@ def _run_lexer(text, monkeypatch):
 class TestBlocLexing:
 
     def test_simple_statement(self, monkeypatch):
-        calls = _run_lexer("block foo\n", monkeypatch)
-        assert calls == [(["block", "foo"], "")]
+        calls = _run_lexer("foo bar\n", monkeypatch)
+        assert calls == [(["foo", "bar"], "")]
 
     def test_comment_stripped(self, monkeypatch):
-        calls = _run_lexer("block foo // a comment\n", monkeypatch)
-        assert calls == [(["block", "foo"], "")]
+        calls = _run_lexer("foo bar // a comment\n", monkeypatch)
+        assert calls == [(["foo", "bar"], "")]
 
-    def test_single_line_description(self, monkeypatch):
-        calls = _run_lexer("block foo /// the foo block\n", monkeypatch)
-        assert calls == [(["block", "foo"], " the foo block")]
+    def test_standalone_single_line_description(self, monkeypatch):
+        calls = _run_lexer("/// a standalone description\n", monkeypatch)
+        assert calls == [([], " a standalone description")]
 
-    def test_multiline_description(self, monkeypatch):
+    def test_standalone_multiline_description(self, monkeypatch):
         calls = _run_lexer(
-            "block foo /// first line\n"
+            "/// first line\n"
             "/// second line\n"
             "function update\n",
             monkeypatch)
         assert calls == [
-            (["block", "foo"], " first line\n second line"),
+            ([], " first line\n second line"),
+            (["function", "update"], ""),
+        ]
+
+    def test_standalone_multiline_description_after_token(self, monkeypatch):
+        calls = _run_lexer(
+            "foo bar\n"
+            "/// first line\n"
+            "/// second line\n"
+            "function update\n",
+            monkeypatch)
+        assert calls == [
+            (["foo", "bar"], ""),
+            ([], " first line\n second line"),
+            (["function", "update"], ""),
+        ]
+
+    def test_single_line_description(self, monkeypatch):
+        calls = _run_lexer("foo bar /// the foo statement\n", monkeypatch)
+        assert calls == [(["foo", "bar"], " the foo statement")]
+
+    def test_multiline_description(self, monkeypatch):
+        calls = _run_lexer(
+            "foo bar /// first line\n"
+            "/// second line\n"
+            "function update\n",
+            monkeypatch)
+        assert calls == [
+            (["foo", "bar"], " first line\n second line"),
             (["function", "update"], ""),
         ]
 
     def test_indented_multiline_description(self, monkeypatch):
         calls = _run_lexer(
-            "block foo /// first line\n"
-            "          /// second line\n"
-            "          ///   indented third line\n"
+            "foo /// first line\n"
+            "    /// second line\n"
+            "    ///   indented third line\n"
             "function update\n",
             monkeypatch)
         assert calls == [
-            (["block", "foo"], " first line\n second line\n   indented third line"),
+            (["foo"], " first line\n second line\n   indented third line"),
             (["function", "update"], ""),
         ]
 
     def test_trailing_whitespace_stripped_leading_preserved(self, monkeypatch):
-        calls = _run_lexer("block foo ///   text   \n", monkeypatch)
-        assert calls == [(["block", "foo"], "   text")]
-
-    def test_misplaced_description(self, monkeypatch, capsys):
-        calls = _run_lexer(
-            "pin float input in\n"
-            "/// orphan description\n",
-            monkeypatch)
-        actual = capsys.readouterr().err.strip()
-        expected = "<string>:2:0: error: Misplaced description"
-        assert actual == expected
-        # the preceding statement still flushes normally
-        assert calls == [(["pin", "float", "input", "in"], "")]
+        calls = _run_lexer("foo bar ///   text   \n", monkeypatch)
+        assert calls == [(["foo", "bar"], "   text")]
 
     def test_blank_and_comment_only_lines(self, monkeypatch):
         calls = _run_lexer(
-            "block foo\n"
+            "foo bar\n"
             "\n"
             "// just a comment\n"
             "function update\n",
             monkeypatch)
         assert calls == [
-            (["block", "foo"], ""),
+            (["foo", "bar"], ""),
             (["function", "update"], ""),
         ]
 
-    def test_end_of_input_flush(self, monkeypatch):
+    def test_end_of_input_flush_tokens(self, monkeypatch):
         # last statement has no trailing blank line
-        calls = _run_lexer("block foo", monkeypatch)
-        assert calls == [(["block", "foo"], "")]
+        calls = _run_lexer("foo bar", monkeypatch)
+        assert calls == [(["foo", "bar"], "")]
+
+    def test_end_of_input_flush_description(self, monkeypatch):
+        # last statement has no trailing blank line
+        calls = _run_lexer("/// description", monkeypatch)
+        assert calls == [([], " description")]
 
     def test_multiple_statements_no_bleed_over(self, monkeypatch):
         calls = _run_lexer(
-            "block foo /// the foo block\n"
+            "foo bar /// the foo statement\n"
             "pin float input in /// input value\n"
             "// a plain comment, ignored\n"
             "function update /// the update function\n",
             monkeypatch)
         assert calls == [
-            (["block", "foo"], " the foo block"),
+            (["foo", "bar"], " the foo statement"),
             (["pin", "float", "input", "in"], " input value"),
             (["function", "update"], " the update function"),
         ]
 
-    def test_unterminated_if_at_end_of_file(self, monkeypatch, capsys):
-        # the stub mutates state.if_stack directly to simulate an
-        # unclosed #if, without needing real #if/#endif handling
-        def fake_parse_statement(spec, state, tokens, description):
-            if tokens[0].text == "block":
-                spec.name = tokens[1].text
-            elif tokens[0].text == "#if":
-                state.if_stack.append(tokens[1].text)
-        monkeypatch.setattr(bloc_parser, "parse_statement", fake_parse_statement)
-        lines = read_source_string("block foo\n#if HAS_ENABLE\n")
-        parse_bloc(lines)
-        ctx.pop()
-        actual = capsys.readouterr().err.strip()
-        expected = "<string>: error: end-of-file with 1 unterminated '#if' statements"
-        assert actual == expected
-
 # ---------------------------------------------------------------------------
-# parse_block tests
+# header tests
 # ---------------------------------------------------------------------------
 
-class TestParseBlock:
-
-    def test_happy_path(self):
+    def test_block_name_and_description(self):
         spec = parse_bloc_string(
-            "block foo /// the foo block\n"
-            "function update\n"
+            "/// test block\n"
+            "function update\n",
+            source="foo.bloc"
         )
         assert spec is not None
         assert spec.name == "foo"
-        assert spec.description == " the foo block"
+        assert spec.description == " test block"
 
-    def test_duplicate_block_declaration(self, capsys):
+    def test_block_name_and_long_description(self):
         spec = parse_bloc_string(
-            "block foo\n"
-            "block bar\n"
+            "/// test block\n"
+            "/// with long\n"
+            "/// description\n"
+            "function update\n",
+            source="foo.bloc"
+        )
+        assert spec is not None
+        assert spec.name == "foo"
+        assert spec.description == " test block\n with long\n description"
+
+    def test_misplaced_description(self, capsys):
+        spec = parse_bloc_string(
+            "/// test block\n"
+            "function update\n"
+            "/// misplaced\n",
+            source="foo.bloc"
         )
         actual = capsys.readouterr().err.strip()
-        expected = "<string>:2:1: error: 'block' declared more than once"
+        expected = "foo.bloc:3: error: misplaced description"
         assert actual == expected
         assert spec is None
 
-    def test_missing_name(self, capsys):
+    def test_misplaced_description_2(self, capsys):
         spec = parse_bloc_string(
-            "block\n"
+            "/// test block\n"
+            "function update\n"
+            "/// misplaced\n"
+            "function f2\n",
+            source="foo.bloc"
         )
         actual = capsys.readouterr().err.strip()
-        expected = "<string>:1:1: error: 'block' declaration requires a name"
+        expected = "foo.bloc:3: error: misplaced description"
         assert actual == expected
         assert spec is None
 
-    def test_invalid_name(self, capsys):
+    def test_unterminated_if(self, capsys):
         spec = parse_bloc_string(
-            "block 1foo\n"
+            "/// test block\n"
+            "#if 1\n"
+            "function update",
+            source="foo.bloc"
         )
         actual = capsys.readouterr().err.strip()
-        expected = "<string>:1:7: error: invalid block name: '1foo'"
+        expected = "foo.bloc: error: end-of-file with 1 unterminated '#if' statements"
         assert actual == expected
         assert spec is None
+
+
+
 
 # ---------------------------------------------------------------------------
 # parse_param tests
@@ -195,7 +225,7 @@ class TestParseParam:
 
     def test_u32_param_with_min_max_and_description(self):
         spec = parse_bloc_string(
-            "block foo /// test block\n"
+            "/// test block\n"
             "param u32 NCHAN default=2 min=1 max=8 /// number of channels\n"
             "function update\n"
         )
@@ -211,7 +241,7 @@ class TestParseParam:
 
     def test_bool_param_default_min_max(self):
         spec = parse_bloc_string(
-            "block foo /// test block\n"
+            "/// test block\n"
             "param bool HAS_ENABLE default=1\n"
             "function update\n"
         )
@@ -227,7 +257,7 @@ class TestParseParam:
 
     def test_too_few_tokens(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "param u32 N\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -237,7 +267,7 @@ class TestParseParam:
 
     def test_invalid_type(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "param float N default=1\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -247,7 +277,7 @@ class TestParseParam:
 
     def test_invalid_name(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "param u32 1bad default=1\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -257,7 +287,7 @@ class TestParseParam:
 
     def test_duplicate_name(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "param u32 N default=1\n"
             "param u32 N default=2\n"
         )
@@ -268,7 +298,7 @@ class TestParseParam:
 
     def test_unexpected_token(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "param u32 N default=1 foo\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -278,7 +308,7 @@ class TestParseParam:
 
     def test_missing_value_after_equals(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "param u32 N default=\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -288,7 +318,7 @@ class TestParseParam:
 
     def test_bad_expression(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "param u32 N default=1+\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -298,7 +328,7 @@ class TestParseParam:
 
     def test_u32_out_of_range_high(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "param u32 N default=0xFFFFFFFF1\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -308,7 +338,7 @@ class TestParseParam:
 
     def test_u32_out_of_range_negative(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "param u32 N default=-1\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -318,7 +348,7 @@ class TestParseParam:
 
     def test_bool_value_not_0_or_1_warning(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "param bool N default=2\n"
             "function update\n"
         )
@@ -329,7 +359,7 @@ class TestParseParam:
 
     def test_duplicate_default_token(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "param u32 N default=1 default=2\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -339,7 +369,7 @@ class TestParseParam:
 
     def test_missing_default(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "param u32 N min=1 max=2\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -349,7 +379,7 @@ class TestParseParam:
 
     def test_bool_min_not_meaningful_warning(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "param bool N default=1 min=1\n"
             "function update\n"
         )
@@ -360,7 +390,7 @@ class TestParseParam:
 
     def test_bool_max_not_meaningful_warning(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "param bool N default=0 max=1\n"
             "function update\n"
         )
@@ -371,7 +401,7 @@ class TestParseParam:
 
     def test_min_greater_than_max(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "param u32 N default=5 min=10 max=2\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -381,7 +411,7 @@ class TestParseParam:
 
     def test_default_less_than_min(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "param u32 N default=1 min=5 max=10\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -391,7 +421,7 @@ class TestParseParam:
 
     def test_default_greater_than_max(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "param u32 N default=20 min=1 max=10\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -407,7 +437,7 @@ class TestParseInclude:
 
     def test_angle_bracket_include(self):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "include <mylib.h>\n"
             "function update\n"
         )
@@ -416,7 +446,7 @@ class TestParseInclude:
 
     def test_quoted_include(self):
         spec = parse_bloc_string(
-            'block foo\n'
+            '/// a block\n'
             'include "mylib.h"\n'
             'function update\n'
         )
@@ -425,7 +455,7 @@ class TestParseInclude:
 
     def test_missing_filename(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "include\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -435,7 +465,7 @@ class TestParseInclude:
 
     def test_invalid_path_no_delimiters(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "include mylib.h\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -445,7 +475,7 @@ class TestParseInclude:
 
     def test_invalid_path_mismatched_delimiters(self, capsys):
         spec = parse_bloc_string(
-            'block foo\n'
+            '/// a block\n'
             'include <mylib.h"\n'
         )
         actual = capsys.readouterr().err.strip()
@@ -455,7 +485,7 @@ class TestParseInclude:
 
     def test_invalid_path_too_short(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "include <>\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -471,7 +501,7 @@ class TestParsePin:
 
     def test_scalar_pin(self):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "pin float input in /// the input\n"
             "function update\n"
         )
@@ -488,7 +518,7 @@ class TestParsePin:
 
     def test_1d_array_pin(self):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "param u32 NUM_CHAN default=2 min=1 max=8\n"
             "pin raw output ch{i:2}_out[i=NUM_CHAN] /// mux output\n"
             "function update\n"
@@ -506,7 +536,7 @@ class TestParsePin:
 
     def test_2d_array_pin(self):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "param u32 NUM_CHAN default=2 min=1 max=8\n"
             "param u32 NUM_INPUT default=2 min=2 max=10\n"
             "pin raw input ch{c:2}_in{i:1}[i=NUM_INPUT][c=NUM_CHAN] /// mux input\n"
@@ -528,7 +558,7 @@ class TestParsePin:
 
     def test_1d_array_pin_with_export_condition(self):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "param u32 NUM_CHAN default=4 min=1 max=8\n"
             "pin raw output ch{i:2}_out[i=NUM_CHAN] if i&1 /// odd channels only\n"
             "function update\n"
@@ -546,7 +576,7 @@ class TestParsePin:
 
     def test_wrong_token_count_too_few(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "pin float input\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -559,7 +589,7 @@ class TestParsePin:
         # "if" with no condition, a condition with no "if", or anything
         # else, the count check fires before either is examined
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "pin float input in if\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -569,7 +599,7 @@ class TestParsePin:
 
     def test_wrong_token_count_too_many(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "pin float input in if x extra\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -579,7 +609,7 @@ class TestParsePin:
 
     def test_unknown_pin_type(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "pin double input in\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -589,7 +619,7 @@ class TestParsePin:
 
     def test_unknown_pin_direction(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "pin float sideways in\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -599,7 +629,7 @@ class TestParsePin:
 
     def test_empty_template(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "pin raw output [i=4] /// bad\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -609,7 +639,7 @@ class TestParsePin:
 
     def test_dimension_missing_closing_bracket(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "pin raw output ch{i:2}_out[i=4 /// bad\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -619,7 +649,7 @@ class TestParsePin:
 
     def test_dimension_missing_equals(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "pin raw output ch{i:2}_out[i4] /// bad\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -629,7 +659,7 @@ class TestParsePin:
 
     def test_dimension_invalid_index_variable(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "pin raw output ch{i:2}_out[1i=4] /// bad\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -639,7 +669,7 @@ class TestParsePin:
 
     def test_dimension_duplicate_index_variable(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "pin raw output ch{i:2}_in{j:1}[i=4][i=4] /// bad\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -649,7 +679,7 @@ class TestParsePin:
 
     def test_dimension_index_variable_collides_with_param(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "param u32 NCHAN default=2 min=1 max=8\n"
             "pin raw output ch{i:2}_out[NCHAN=4] /// bad\n"
         )
@@ -660,7 +690,7 @@ class TestParsePin:
 
     def test_dimension_missing_size(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "pin raw output ch{i:2}_out[i=] /// bad\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -670,7 +700,7 @@ class TestParsePin:
 
     def test_dimension_invalid_expression(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "pin raw output ch{i:2}_out[i=1+] /// bad\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -680,7 +710,7 @@ class TestParsePin:
 
     def test_dimension_size_less_than_one(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "pin raw output ch{i:2}_out[i=0] /// bad\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -690,7 +720,7 @@ class TestParsePin:
 
     def test_malformed_template_specifier(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "pin raw output ch{i:10}_out /// bad\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -700,7 +730,7 @@ class TestParsePin:
 
     def test_invalid_field_name(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "pin float output 1out /// bad\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -710,7 +740,7 @@ class TestParsePin:
 
     def test_duplicate_name_in_namespace(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "pin float input in /// first\n"
             "pin float output in /// dup\n"
         )
@@ -721,7 +751,7 @@ class TestParsePin:
 
     def test_invalid_template_expression(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "pin raw output ch{BADVAR:2}_out /// bad\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -731,7 +761,7 @@ class TestParsePin:
 
     def test_expected_if_keyword(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "pin float input in foo bar /// bad\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -741,7 +771,7 @@ class TestParsePin:
 
     def test_invalid_if_condition_expression(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "pin float input in if BADVAR /// bad\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -757,7 +787,7 @@ class TestParseVar:
 
     def test_simple_var(self):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "var float accumulated; // PID integrator state\n"
             "function update\n"
         )
@@ -769,7 +799,7 @@ class TestParseVar:
 
     def test_pointer_var(self):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "var GPIO_TypeDef *base_addr;\n"
             "function update\n"
         )
@@ -781,7 +811,7 @@ class TestParseVar:
 
     def test_array_var(self):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "var float history[4];\n"
             "function update\n"
         )
@@ -793,7 +823,7 @@ class TestParseVar:
 
     def test_too_few_tokens(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "var\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -803,7 +833,7 @@ class TestParseVar:
 
     def test_missing_semicolon(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "var float acc\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -813,7 +843,7 @@ class TestParseVar:
 
     def test_invalid_field_name(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "var float 123abc;\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -823,7 +853,7 @@ class TestParseVar:
 
     def test_duplicate_name_in_namespace(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "var float acc;\n"
             "var u32 acc;\n"
         )
@@ -836,7 +866,7 @@ class TestParseVar:
         # pin field names get a trailing '_', so a var must be declared
         # with a matching trailing underscore to collide
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "pin float input acc /// the accumulator pin\n"
             "var float acc_;\n"
         )
@@ -853,7 +883,7 @@ class TestParseFunction:
 
     def test_happy_path(self):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "function update /// the update function\n"
         )
         assert spec is not None
@@ -864,7 +894,7 @@ class TestParseFunction:
 
     def test_too_many_tokens(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "function update extra\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -874,7 +904,7 @@ class TestParseFunction:
 
     def test_too_few_tokens(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "function\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -884,7 +914,7 @@ class TestParseFunction:
 
     def test_invalid_function_name(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "function 1update\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -894,7 +924,7 @@ class TestParseFunction:
 
     def test_duplicate_name_collides_with_pin(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "pin float input update /// a pin\n"
             "function update\n"
         )
@@ -913,7 +943,7 @@ class TestParseStatement:
         # 'param' is only legal in the PARAMS section; once a 'pin'
         # statement has moved parsing into BODY, 'param' is rejected
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "pin float input in\n"
             "param u32 N default=1\n"
         )
@@ -924,7 +954,7 @@ class TestParseStatement:
 
     def test_if_requires_expression(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "param bool HAS_ENABLE default=0\n"
             "#if\n"
         )
@@ -935,7 +965,7 @@ class TestParseStatement:
 
     def test_bad_if_condition(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "param bool HAS_ENABLE default=0\n"
             "#if BADVAR\n"
         )
@@ -946,7 +976,7 @@ class TestParseStatement:
 
     def test_if_endif_condition_scoping(self):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "param bool HAS_ENABLE default=0\n"
             "#if HAS_ENABLE\n"
             "pin bool input enable /// enable pin\n"
@@ -961,7 +991,7 @@ class TestParseStatement:
 
     def test_endif_extra_tokens_warning(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "param bool HAS_ENABLE default=0\n"
             "#if HAS_ENABLE\n"
             "pin bool input enable\n"
@@ -974,7 +1004,7 @@ class TestParseStatement:
 
     def test_endif_without_matching_if(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// a block\n"
             "#endif\n"
         )
         actual = capsys.readouterr().err.strip()
@@ -1018,7 +1048,7 @@ class TestParseBlocFile:
         )
         assert actual == expected
         assert spec is not None
-        assert spec.name == "warns"
+        assert spec.name == "with_warning"
 
 
 class TestParseBlocStringEncoding:

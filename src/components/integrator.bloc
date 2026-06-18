@@ -1,4 +1,4 @@
-block integrator /// Integrates input over time.
+/// Integrates input over time.
 /// Optional enable and hold pins control integration behavior.
 
 param bool HAS_ENABLE  default=0  /// if true, export the enable pin

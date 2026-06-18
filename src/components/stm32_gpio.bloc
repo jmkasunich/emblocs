@@ -1,11 +1,11 @@
-block stm32_gpio /// STM32 GPIO port driver with per-pin EMBLOCS interface.
-                 /// Each bit set in a bitmask parameter exports one EMBLOCS pin.
-                 /// Array slots for unselected pins are NULL and must not be
-                 /// dereferenced.
-                 ///
-                 /// Usage: set INPUTS, OUTPUTS, and/or ENABLES to bitmasks
-                 /// selecting which GPIO pins to export.  For example,
-                 /// INPUTS=0x0003 exports pins 0 and 1 as inputs.
+/// STM32 GPIO port driver with per-pin EMBLOCS interface.
+/// Each bit set in a bitmask parameter exports one EMBLOCS pin.
+/// Array slots for unselected pins are NULL and must not be
+/// dereferenced.
+///
+/// Usage: set INPUTS, OUTPUTS, and/or ENABLES to bitmasks
+/// selecting which GPIO pins to export.  For example,
+/// INPUTS=0x0003 exports pins 0 and 1 as inputs.
 
 param u32 PORT_NUM  default=0  /// determines the port: 0 = GPIOA, 1=GPIOB, etc
 param u32 INPUTS    default=0x00FF /// bitmask: selects pins to export as inputs

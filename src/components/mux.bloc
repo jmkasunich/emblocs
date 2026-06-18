@@ -1,6 +1,6 @@
-block mux /// N-channel M-to-1 multiplexor.
-          /// All channels share a single select input.
-          /// When select=N, each channel's Nth input is copied to its output.
+/// N-channel M-to-1 multiplexor.
+/// All channels share a single select input.
+/// When select=N, each channel's Nth input is copied to its output.
 
 param u32 NUM_CHAN   default=1  min=1  max=100 /// number of independent channels
 param u32 NUM_INPUT  default=2  min=2  max=10  /// number of inputs per channel

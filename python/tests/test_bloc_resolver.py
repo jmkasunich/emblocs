@@ -103,7 +103,7 @@ class TestBuildVariables:
 class TestResolveTopLevel:
 
     def test_invalid_variant_name(self, capsys):
-        spec = parse_bloc_string("block foo\nfunction update\n")
+        spec = parse_bloc_string("/// foo block\nfunction update\n")
         ctx.clear()
         ctx.push(source="<test>")
         block_def = resolve(spec, "1bad", "test.bloc")
@@ -114,7 +114,7 @@ class TestResolveTopLevel:
 
     def test_happy_path_field_mapping(self):
         spec = parse_bloc_string(
-            "block foo /// the foo block\n"
+            "/// the foo block\n"
             "param u32 N default=2 min=1 max=8 /// channel count\n"
             "include <mylib.h>\n"
             "var float accumulator;\n"
@@ -139,7 +139,7 @@ class TestResolveTopLevel:
 
     def test_supplied_params_none_uses_defaults(self):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// foo block\n"
             "param u32 N default=2 min=1 max=8\n"
             "function update\n"
         )
@@ -158,7 +158,7 @@ class TestExpandScalarPin:
 
     def test_scalar_pin(self):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// foo block\n"
             "pin float input in /// the input\n"
             "function update\n"
         )
@@ -192,7 +192,7 @@ class TestExpandArrayPin:
 
     def test_1d_array_pin(self):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// foo block\n"
             "param u32 NUM_CHAN default=2 min=1 max=8\n"
             "pin raw output ch{i:2}_out[i=NUM_CHAN] /// mux output\n"
             "function update\n"
@@ -214,7 +214,7 @@ class TestExpandArrayPin:
 
     def test_2d_array_pin(self):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// foo block\n"
             "param u32 NUM_CHAN default=2 min=1 max=8\n"
             "param u32 NUM_INPUT default=2 min=2 max=10\n"
             "pin raw input ch{c:2}_in{i:1}[i=NUM_INPUT][c=NUM_CHAN] /// mux input\n"
@@ -251,7 +251,7 @@ class TestExportCondition:
 
     def test_sparse_export_arithmetic_condition(self):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// foo block\n"
             "param u32 NUM_CHAN default=4 min=1 max=8\n"
             "pin raw output ch{i:2}_out[i=NUM_CHAN] if i&1 /// odd channels only\n"
             "function update\n"
@@ -269,7 +269,7 @@ class TestExportCondition:
 
     def test_sparse_export_bitmask_condition_uses_resolved_value(self):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// foo block\n"
             "param u32 MASK default=0x0009\n"
             "pin bool input pin{i:2}_in[i=8] if (MASK>>i)&1 /// gpio inputs\n"
             "function update\n"
@@ -297,7 +297,7 @@ class TestIfCondition:
 
     def test_if_true_includes_statement(self):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// foo block\n"
             "param bool HAS_ENABLE default=0\n"
             "#if HAS_ENABLE\n"
             "pin bool input enable /// enable pin\n"
@@ -313,7 +313,7 @@ class TestIfCondition:
 
     def test_if_false_excludes_statement_entirely(self):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// foo block\n"
             "param bool HAS_ENABLE default=0\n"
             "#if HAS_ENABLE\n"
             "pin bool input enable /// enable pin\n"
@@ -331,7 +331,7 @@ class TestIfCondition:
 
     def test_nested_if_requires_all_true(self):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// foo block\n"
             "param bool HAS_A default=0\n"
             "param bool HAS_B default=0\n"
             "#if HAS_A\n"
@@ -370,7 +370,7 @@ class TestValueDependentExpressionErrors:
 
     def test_dimension_size_error(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// foo block\n"
             "param u32 DIVISOR default=1 min=0 max=10\n"
             "param u32 BASE default=4 min=1 max=20\n"
             "pin float input ch{i:1}[i=BASE/DIVISOR]\n"
@@ -386,7 +386,7 @@ class TestValueDependentExpressionErrors:
 
     def test_export_condition_error(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// foo block\n"
             "param u32 DIVISOR default=1 min=0 max=4\n"
             "param u32 NUM_CHAN default=1 min=1 max=8\n"
             "pin raw output ch{i:1}_out[i=NUM_CHAN] if i/DIVISOR\n"
@@ -402,7 +402,7 @@ class TestValueDependentExpressionErrors:
 
     def test_if_condition_error(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// foo block\n"
             "param u32 DIVISOR default=1 min=0 max=4\n"
             "#if 1/DIVISOR\n"
             "pin bool input enable\n"
@@ -419,7 +419,7 @@ class TestValueDependentExpressionErrors:
 
     def test_template_expression_error(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// foo block\n"
             "param u32 DIVISOR default=1 min=0 max=4\n"
             "param u32 NUM_CHAN default=1 min=1 max=4\n"
             "pin raw output ch{i/DIVISOR:1}_out[i=NUM_CHAN]\n"
@@ -446,7 +446,7 @@ class TestDuplicateNameAfterResolution:
 
     def _spec(self):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// foo block\n"
             "param u32 N default=2 min=1 max=20\n"
             "pin float input a{i:1}[i=N]\n"
             "pin float input a1{j:1}[j=N]\n"
@@ -486,7 +486,7 @@ class TestResolvePropagatesParamValidation:
 
     def test_out_of_range_param_causes_resolve_to_return_none(self, capsys):
         spec = parse_bloc_string(
-            "block foo\n"
+            "/// foo block\n"
             "param u32 N default=2 min=1 max=8\n"
             "function update\n"
         )

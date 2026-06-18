@@ -1,12 +1,12 @@
-block pico_gpio /// Raspberry Pi Pico GPIO driver with per-pin EMBLOCS interface.
-                /// Each bit set in a bitmask parameter exports one EMBLOCS pin.
-                /// Array slots for unselected pins are NULL and must not be
-                /// dereferenced.
-                ///
-                /// Usage: set INPUTS, OUTPUTS, and/or ENABLES to bitmasks
-                /// selecting which GPIO pins to export.  For example,
-                /// OUTPUTS=0x02000000 exports GP25 (the onboard LED) as an
-                /// output pin.
+/// Raspberry Pi Pico GPIO driver with per-pin EMBLOCS interface.
+/// Each bit set in a bitmask parameter exports one EMBLOCS pin.
+/// Array slots for unselected pins are NULL and must not be
+/// dereferenced.
+///
+/// Usage: set INPUTS, OUTPUTS, and/or ENABLES to bitmasks
+/// selecting which GPIO pins to export.  For example,
+/// OUTPUTS=0x02000000 exports GP25 (the onboard LED) as an
+/// output pin.
 
 param u32 INPUTS   default=0x02000000  /// bitmask: selects pins to export as inputs (GP0-GP29)
 param u32 OUTPUTS  default=0x02000000  /// bitmask: selects pins to export as outputs (GP0-GP29)
