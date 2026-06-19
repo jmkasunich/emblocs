@@ -65,7 +65,7 @@ class TestReadSourceFile:
         path = str(bad_dir / "does_not_exist.bloc")
         read_source_file(path)
         actual = capsys.readouterr().err.strip()
-        expected = "does_not_exist.bloc: error: file not found"
+        expected = "error: file 'tests/data/bad/does_not_exist.bloc' not found"
         assert actual == expected, (
             f"\nEXPECTED: {expected!r}\n"
             f"ACTUAL:   {actual!r}\n"

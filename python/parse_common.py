@@ -353,7 +353,7 @@ def read_source_file(path: str) -> list[str] | None:
                    lineno=OMIT, column=OMIT)
         return None
     except FileNotFoundError:
-        ctx.error("file not found", lineno=OMIT, column=OMIT)
+        ctx.error(f"file {Path(path).as_posix()!r} not found", source=OMIT)
         return None
 
     return lines if _check_ascii(lines) else None

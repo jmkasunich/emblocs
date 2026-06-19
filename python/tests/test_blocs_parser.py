@@ -1412,7 +1412,7 @@ class TestParseBlocsFile:
         result = parse_blocs_file(str(path), design)
         actual = capsys.readouterr().err.strip()
         expected = (
-            f"does_not_exist.blocs: error: file not found\n"
+            f"error: file 'tests/data/bad/does_not_exist.blocs' not found\n"
             f"does_not_exist.blocs: 1 error(s), 0 warning(s), 0 info(s)"
         )
         assert actual == expected
