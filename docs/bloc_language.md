@@ -148,9 +148,12 @@ recompilation when only the wiring region of `system.blocs` changes.
 
 **Tool 2: The system compiler** reads a `.blocs` system definition file and
 builds a complete in-memory model of the system using the shared object model
-from `emblocs.py`. For each `blockdef` command it invokes Tool 1 in variant
-mode to obtain the variant artifacts, then deserializes `<variant>.json` into
-the object model. For each `signal` and `thread` command it constructs the
+from `emblocs.py`. For each `blockdef` command it reads the corresponding
+.bloc file and builds a block specification in the object model.  It then
+uses `parameter=value` pairs to resolve the block spec into a concrete
+block defintion which also becomes part of the object model.  Each `block`
+command then adds an instance of the named block definition to the model.
+For each `signal` and `thread` command it constructs the
 corresponding objects, tracking connections, values, and thread ordering.
 The in-memory model is fully inspectable and drives all output generation.
 Tool 2 produces:
@@ -195,8 +198,8 @@ compilation occurs.
 must be on one physical line.
 - The tokens of a statement may optionally be followed by a comment or a
 description; see section 2.2 for details.
-- Statements that introduce a named object (such as block, pin, param,
-var, and function) are called declarations. Control flow statements (#if,
+- Statements that introduce a named object (such as pin, param, var,
+and function) are called declarations. Control flow statements (#if,
 #endif) are statements but not declarations.
 
 ### 2.2 Comments and Descriptions
@@ -211,7 +214,9 @@ file; they are discarded by the parser.
 
 Descriptions start with `///`.  A description applies to a specific statement,
 and the starting `///` must appear after (but on the same line as) the tokens
-of the statement.
+of the statement.  There is one exception to this; a .bloc file must begin
+with one or more `///` lines that serve as a description that applies to the
+entire file; these lines have no associated statement tokens.
 
 Once started, a description can extend over multiple lines by repeating
 the `///` marker on each line.  All characters (including whitespace, slash,
@@ -236,8 +241,8 @@ language's identifier rules.
 
 ### 2.4 Keywords
 
-Reserved keywords: `block`, `param`, `include`, `pin`, `var`,
-`function`, `if`, `#if`, `#endif`, `true`, `false`, `input`, `output`,
+Reserved keywords: `param`, `include`, `pin`, `var`, `function`,
+`if`, `#if`, `#endif`, `true`, `false`, `input`, `output`,
 `bool`, `u32`, `s32`, `float`, `raw`, `default`, `min`, `max`.
 
 ### 2.5 Whitespace
@@ -296,8 +301,8 @@ unambiguous.
 ## 3. Declaration Types
 
 A .bloc file consists of three sections, in order: header, parameters, and
-body.  The header contains exactly one `block` statement that describes
-the block. The parameters section contains zero or more `param` declarations
+body.  The header contains no statements, just a description of the block
+The parameters section contains zero or more `param` declarations
 which can be used to generate customized variants of the block, and may also
 contain optional `include` statements that allow exteral files to be included
 before a block instance data structure is defined. The body contains the rest
@@ -307,20 +312,27 @@ grouped within `#if`/`#endif` blocks.
 The order in which `pin` and `var` declarations appear in the body determines
 the order of fields in the generated C instance struct.  Block authors may
 choose this ordering deliberately, for example to optimize cache usage.
+The order in which `pin` and `function` declarations appear in the body
+determines which pins are associated with each function; see section 3.6.1
+for more details.
 For a description of the instance struct and its role in the EMBLOCS
 framework, see `architecture.md`.
 
-### 3.1 Block Declaration
+### 3.1 Block Description
 
-    block <NAME> /// description
+    /// description
     
-Declares the name of the block and describes the block's purpose and behavior.
-Exactly one block statement must appear in a .bloc file.  While descriptions
-are optional for some statements, a block statement must have one.  Block
-descriptions should take advantage of the multi-line syntax:
+A .bloc file must begin with a description of its overall purpose and behavior.
+The block description can be one or multiple lines, and can take advantage
+of the fact that whitespace is preserved in descriptions to do indenting and
+other formatting:
 
-    block limit1 /// Clamps input to [min, max] range.
-                 ///   Both bounds are inclusive.
+    /// Clamps input to [min, max] range.
+    ///   Both bounds are inclusive.
+
+The block description ends when the first statement (such as `param` or `pin`)
+is encountered.  All subsequent `///` descriptions must be on the same line
+as a valid statement and apply to that statement.
 
 ### 3.2 Parameter Declaration
 
@@ -419,7 +431,7 @@ array pins. It may contain one or more format specifiers of the form:
     {expr:N}
 
 where `expr` is an expression (see Section 2.6) that may reference
-parameters and index variables (see Section 3.3.3.2) in scope, and
+parameters and index variables (see Section 3.4.3.2) in scope, and
 `N` is a single digit from 1 to 9 specifying the minimum number of
 digits, zero-padded.
 
@@ -493,7 +505,7 @@ The optional trailing `if <expr>` clause controls which pin slots are
 exported as EMBLOCS pins. The expression is evaluated for each slot using
 the current values of all parameters and in-scope index variables. Slots
 for which the expression evaluates to zero (false) are not exported:
-they receive no EMBLOCS-visible name, do not appear in the JSON metadata,
+they receive no EMBLOCS-visible name, do not appear in the block metadata,
 and are initialized to `NULL` in `system.c`.
 
 The expression is a single token (no internal whitespace) evaluated using
@@ -530,8 +542,8 @@ pin bool   input   pin{i:2}_in[i=16]  if (MASK>>i)&1   /// GPIO input pins
 #### 3.4.5 Pin Description
 
 A `///` annotation on a `pin` declaration should describe the pin's behavior
-and semantics. This metadata is stored in the JSON output and may be
-displayed by the runtime monitor as help text.
+and semantics. This metadata may be displayed by the runtime monitor as
+help text.
 
 ### 3.5 Private Variable Declaration
 
@@ -545,7 +557,7 @@ valid C.
 
 Private variables may be of any C type, including arrays, pointers, and
 structs. They are not visible to the `.blocs` system definition language and
-do not appear in the EMBLOCS JSON metadata. Use `//` comments (not `///`) to
+do not appear in the EMBLOCS metadata. Use `//` comments (not `///`) to
 annotate `var` declarations.
 
 EMBLOCS guarantees that all `var` fields are zero-initialized before any
@@ -568,14 +580,15 @@ conditionally needed.
     function <name>  /// description
 
 Declares a function exported by the block. The function name is chosen by
-the block author; by convention, simple blocks use `update`. The function
-prototype is fixed by the EMBLOCS framework:
-
-    void <name>(void *instance_data, uint32_t periodns);
+the block author; by convention, simple blocks use `update`.
 
 The block compiler uses function declarations to generate function stubs in
-the `.c` template and to register functions in the block metadata stored in
-`<variant>.json`.
+the `.c` template, and the system compiler uses function declarations to
+know what functions are available to be called from threads.
+
+The function prototype is fixed by the EMBLOCS framework:
+
+    void <name>(void *instance_data, uint32_t periodns);
 
 In `<block>.h`, function names are mangled using the `BL_MANGLE` macro (see
 Section 5.2) to ensure uniqueness when the same `.bloc` file is compiled for
@@ -592,11 +605,57 @@ Examples:
     function read    /// read IDR and drive input pins; call early in thread
     function write   /// read output pins and drive ODR/BSRR; call late in thread
 
-By convention, a function named `init` can be defined to do any one-time setup
-that the block requires.  Also by convention, a .blocs file can declare a
-thread named `init` and add all `init` functions to it; the main program would
-then run that thread once at startup.  Note the the .bloc and .blocs languages
-to not assign any special meaning to `init` functions or threads; this is simply
+#### 3.6.1 Pin-to-Function Association
+
+The order of `pin` and `function` declarations within the body section
+determines which pins are associated with which functions. This association
+may be used in the future by the toolchain to determine valid execution
+order within a thread.
+
+The rules are:
+
+- Pins declared before the first `function` statement are **shared** —
+  associated with all functions in the block.
+- Pins declared after a `function` statement are associated with that
+  function until the next `function` statement or end of file.
+
+For blocks with a single function, this means that all pins are
+associated with that single function regardless of whether the
+`function` statement appears before or after the pin declarations.
+
+Example — a software encoder with two functions:
+
+    /// Software encoder counter block.
+
+    pin bool  input  enable          /// master enable; stops both functions when false
+
+    function sample  /// sample A/B phases; call in fast thread
+    pin bool  input  phase_a         /// encoder A phase input
+    pin bool  input  phase_b         /// encoder B phase input
+
+    // internal state passed between functions
+    var u32 raw_count;      // captured counts
+    var u32 timestamp;      // timestamp of most recent count
+
+    function compute  /// compute position and velocity; call in slow thread
+    pin float output position        /// scaled position output
+    pin float output velocity        /// scaled velocity output
+
+In this example, `enable` is shared between both functions. `phase_a` and
+`phase_b` are associated only with `sample`. `position` and `velocity` are
+associated only with `compute`.
+
+**Note:** Automatic thread ordering based on pin-to-function association
+is planned but not yet implemented. The convention is established now so
+that existing `.bloc` files will be compliant when the feature arrives.
+
+#### 3.6.2 The `init` Convention
+
+By convention, a function named `init` can be defined to do any one-time
+setup that the block requires. A `.blocs` file can declare a thread named
+`init` and add all `init` functions to it; the main program would then run
+that thread once at startup. The `.bloc` and `.blocs` languages do not
+assign any special meaning to `init` functions or threads; this is simply
 a useful pattern for block and system authors.
 
 ---
@@ -821,26 +880,6 @@ The CMake rule for `<variant>.c` requires no `-D` flags:
 add_library(integrator_with_hold OBJECT ${CMAKE_BINARY_DIR}/integrator_with_hold.c)
 ```
 
-### 5.7 JSON Metadata (`<variant>.json`)
-
-** Currently not defined, and may be deleted **
-
-Generated by Tool 1 in variant mode. Lives in the project build directory.
-Contains a full serialization of the block's object model for consumption
-by Tool 2. The schema is versioned. At minimum, the JSON represents:
-
-- Block-level attributes: variant name, source `.bloc` file path, block
-  description metadata, schema version
-- For each pin: EMBLOCS-visible name, C struct field name, type, direction,
-  byte offset in the instance struct, array dimensions, metadata description
-- For each function: EMBLOCS-visible name, mangled C symbol name, metadata
-  description
-- For each parameter: name, type, concrete value for this variant, default
-  value, min/max bounds if specified, metadata description
-
-The full JSON schema is defined by the Python classes in `emblocs.py` and
-is authoritative over this prose description.
-
 ---
 
 ## 6. Open Issues
@@ -889,6 +928,8 @@ mitigation (e.g., a block-type prefix on all macros) is deferred.
 Structure fields created by the `var` statement are intialized to zero.
 If non-zero values are needed, the block author must use one field as a
 flag to force initialization the first time the main update function runs.
+The `init` function and `init` thread conventions described in 3.6.2 are
+another way to address this issue.
 
 ### 6.4 Bool/Bit Keyword
 
@@ -921,6 +962,16 @@ Block authors must use distinct names for declarations in mutually
 exclusive `#if` blocks. A future `#else` construct could allow the parser
 to detect mutual exclusivity and suppress the false collision, but is not
 currently considered a priority.
+
+### 6.8 Parameter-Sized var Arrays
+
+The `var` declaration passes C code verbatim into the generated struct.
+Array sizes using `BL_PARAMNAME` macros work in `<block>.h` but not in
+`<variant>.h`, since variant headers use concrete values rather than
+`BL_` symbols. Block authors who need private arrays whose size matches
+a parameter currently have no clean solution. Name-mangling the parameter
+macros (e.g. `BL_MANGLE(NCHAN)`) is a possible future approach.
+
 ---
 
 ## 7. Examples
@@ -938,8 +989,8 @@ A block with four scalar pins and no variants. Demonstrates the minimal
 **`limit1.bloc`:**
 
 ```
-block limit1 /// Clamps input to [min, max] range.
-             /// Both bounds are inclusive.
+/// Clamps input to [min, max] range.
+/// Both bounds are inclusive.
 
 // pins declared in expected access order
 pin float  input   in   /// value to be clamped
@@ -1020,8 +1071,8 @@ A block with two optional pins controlled by boolean parameters. Demonstrates
 **`integrator.bloc`:**
 
 ```
-block integrator  /// Integrates input over time.
-                  /// Optional enable and hold pins control integration behavior.
+/// Integrates input over time.
+/// Optional enable and hold pins control integration behavior.
 
 param bool HAS_ENABLE  default=0  /// if true, export the enable pin
 param bool HAS_HOLD    default=0  /// if true, export the hold pin
@@ -1120,8 +1171,8 @@ from name ordering.
 **`mux.bloc`:**
 
 ```
-block mux /// N-channel M-to-1 multiplexor.
-          /// All channels share a single select input.
+/// N-channel M-to-1 multiplexor.
+/// All channels share a single select input.
 
 param u32 NUM_CHAN  default=1  min=1  max=16  /// number of independent channels
 param u32 NUM_INPUT default=2  min=2  max=10  /// number of inputs per channel
@@ -1224,10 +1275,10 @@ initialized to `NULL` in `system.c` and skipped at runtime.
 **`stm32_gpio.bloc`:**
 
 ```
-block stm32_gpio /// STM32 GPIO port driver with per-pin EMBLOCS interface.
-                 /// Each bit set in a bitmask parameter exports one EMBLOCS pin.
-                 /// Array slots for unselected pins are NULL and must not be
-                 /// dereferenced.
+/// STM32 GPIO port driver with per-pin EMBLOCS interface.
+/// Each bit set in a bitmask parameter exports one EMBLOCS pin.
+/// Array slots for unselected pins are NULL and must not be
+/// dereferenced.
 
 param u32 INPUTS   default=0x0000  /// bitmask: bits selecting pins to export as inputs
 param u32 OUTPUTS  default=0x0000  /// bitmask: bits selecting pins to export as outputs
@@ -1306,11 +1357,12 @@ void BL_MANGLE(read)(void *instance_data, uint32_t periodns) {
 
 | Statement | Syntax | Section |
 |-----------|--------|---------|
-| `block` | `block <name> /// description` | 3.1 |
+| `///` | `/// block description` | 3.1 |
 | `param` | `param <type> <NAME> default=<value> [min=<value>] [max=<value>]` | 3.2 |
-| `pin` | `pin <type> <direction> <name-spec> [if <expr>]` | 3.3 |
-| `var` | `var <C-declaration>;` | 3.4 |
-| `function` | `function <name>` | 3.5 |
+| `include` | `include <NAME>` or `include "NAME"` | 3.3 |
+| `pin` | `pin <type> <direction> <name-spec> [if <expr>]` | 3.4 |
+| `var` | `var <C-declaration>;` | 3.5 |
+| `function` | `function <name>` | 3.6 |
 | `#if` | `#if <expr>` | 4.1 |
 | `#endif` | `#endif` | 4.1 |
 
@@ -1398,12 +1450,10 @@ The build dependency graph flows cleanly with no circular dependencies:
 <block>.bloc ──→ [Tool 1, template mode] ──→ <block>.h   (always regenerated)
                                          └──→ <block>.c  (generated only if missing)
 
-<block>.bloc ──→ [Tool 1, variant mode]  ──→ <variant>.h
-system.blocs ─┘  (params from blockdef)  ├──→ <variant>.c
-                                         └──→ <variant>.json
-
-<variant>.json ──→ [Tool 2] ──→ system.c
-                             └──→ system.cmake
+system.blocs ──→ [Tool 2, variant mode]  ──→ <variant>.h
+<block>.bloc ─┘  (params from blockdef)  ├──→ <variant>.c
+                                         |──→ system.c
+                                         └──→ system.cmake
 
 <variant>.c ──→ [C compiler] ──→ <variant>.o
 system.c + <variant>.h ──→ [C compiler] ──→ system.o
@@ -1433,7 +1483,6 @@ checked into source control:
 |------|----------|
 | `<variant>.h` | Tool 1, variant mode |
 | `<variant>.c` | Tool 1, variant mode |
-| `<variant>.json` | Tool 1, variant mode |
 | `<variant>.o` | C compiler |
 | `system.c` | Tool 2 |
 | `system.cmake` | Tool 2 |
