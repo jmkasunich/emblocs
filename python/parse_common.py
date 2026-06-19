@@ -184,7 +184,7 @@ class ErrorContext:
     def summarize(self) -> None:
         """Print error/warning/info counts for the current frame to stderr."""
         frame = self._top()
-        print(f"{frame.source}: {frame.error_count} error(s), "
+        print(f"{short_path(frame.source)}: {frame.error_count} error(s), "
               f"{frame.warning_count} warning(s), "
               f"{frame.info_count} info(s)",
               file=sys.stderr)
@@ -239,7 +239,7 @@ class ErrorContext:
         # build location prefix
         location = ""
         if resolved_source is not None:
-            location = resolved_source
+            location = short_path(resolved_source)
             if resolved_lineno is not None:
                 location += f":{resolved_lineno}"
                 if resolved_column is not None:
@@ -306,11 +306,8 @@ ctx = ErrorContext()
 # ---------------------------------------------------------------------------
 
 def short_path(path: str | Path) -> str:
-    """Return path relative to cwd if possible, otherwise absolute POSIX path."""
-    try:
-        return Path(path).resolve().relative_to(Path.cwd()).as_posix()
-    except ValueError:
-        return Path(path).as_posix()
+    """Return just the filename and extension, discarding all directory components."""
+    return Path(path).name
 
 # ---------------------------------------------------------------------------
 # Parser input processing
@@ -347,7 +344,7 @@ def read_source_file(path: str) -> list[str] | None:
     Returns the list of lines, or None if the file could
     not be read or contains encoding errors.
     """
-    ctx.push(source=short_path(path))
+    ctx.push(source=path)
     try:
         with open(path, "r", encoding="utf-8") as f:
             lines = f.readlines()

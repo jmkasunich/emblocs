@@ -65,7 +65,7 @@ class TestReadSourceFile:
         path = str(bad_dir / "does_not_exist.bloc")
         read_source_file(path)
         actual = capsys.readouterr().err.strip()
-        expected = "tests/data/bad/does_not_exist.bloc: error: file not found"
+        expected = "does_not_exist.bloc: error: file not found"
         assert actual == expected, (
             f"\nEXPECTED: {expected!r}\n"
             f"ACTUAL:   {actual!r}\n"
@@ -88,7 +88,7 @@ class TestReadSourceFile:
         path = str(bad_dir / "UTF-16LE.bloc")
         read_source_file(path)
         actual = capsys.readouterr().err.strip()
-        expected = "tests/data/bad/UTF-16LE.bloc: error: file is not valid UTF-8; re-save as UTF-8 and try again"
+        expected = "UTF-16LE.bloc: error: file is not valid UTF-8; re-save as UTF-8 and try again"
         assert actual == expected, (
             f"\nEXPECTED: {expected!r}\n"
             f"ACTUAL:   {actual!r}\n"
@@ -111,7 +111,7 @@ class TestReadSourceFile:
         path = str(bad_dir / "test_nonascii.bloc")
         read_source_file(path)
         actual = capsys.readouterr().err.strip()
-        expected = "tests/data/bad/test_nonascii.bloc:2: error: non-ASCII character"
+        expected = "test_nonascii.bloc:2: error: non-ASCII character"
         assert actual == expected, (
             f"\nEXPECTED: {expected!r}\n"
             f"ACTUAL:   {actual!r}\n"

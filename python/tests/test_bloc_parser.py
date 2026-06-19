@@ -1024,8 +1024,8 @@ class TestParseBlocFile:
         spec = parse_bloc_file(str(path))
         actual = capsys.readouterr().err.strip()
         expected = (
-            f"{rel}: error: file not found\n"
-            f"{rel}: 1 error(s), 0 warning(s), 0 info(s)"
+            f"does_not_exist.bloc: error: file not found\n"
+            f"does_not_exist.bloc: 1 error(s), 0 warning(s), 0 info(s)"
         )
         assert actual == expected
         assert spec is None
@@ -1043,8 +1043,8 @@ class TestParseBlocFile:
         spec = parse_bloc_file(str(path))
         actual = capsys.readouterr().err.strip()
         expected = (
-            f"{rel}:2:17: warning: default value 2 is not 0 or 1 for bool parameter\n"
-            f"{rel}: 0 error(s), 1 warning(s), 0 info(s)"
+            f"with_warning.bloc:2:17: warning: default value 2 is not 0 or 1 for bool parameter\n"
+            f"with_warning.bloc: 0 error(s), 1 warning(s), 0 info(s)"
         )
         assert actual == expected
         assert spec is not None

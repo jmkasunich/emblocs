@@ -109,8 +109,8 @@ class TestParseBlocsStringEncoding:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1: error: non-ASCII character\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1: error: non-ASCII character\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is None
 
 
@@ -257,7 +257,7 @@ class TestCmdBlockdef:
         design = Design(abs_path="test_design")
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        expect = "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        expect = "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
         assert result is True
         assert "myblock" in design.block_defs
@@ -270,7 +270,7 @@ class TestCmdBlockdef:
         design = Design(abs_path="test_design")
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        expect = "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        expect = "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
         assert result is True
         assert design.block_defs["myblock"].params["NCHAN"] == 3
@@ -283,7 +283,7 @@ class TestCmdBlockdef:
         design = Design(abs_path="test_design")
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        expect = "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        expect = "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
         assert result is True
         assert design.block_defs["block1"].params["NCHAN"] == 3
@@ -299,8 +299,8 @@ class TestCmdBlockdef:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         expect = (
-            "tests/data/tmp/test.blocs:1:25: warning: unmatched parameter 'UNKNOWN' will be ignored\n"
-            "tests/data/tmp/test.blocs: 0 error(s), 1 warning(s), 0 info(s)")
+            "test.blocs:1:25: warning: unmatched parameter 'UNKNOWN' will be ignored\n"
+            "test.blocs: 0 error(s), 1 warning(s), 0 info(s)")
         assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
         assert result is True
 
@@ -310,9 +310,9 @@ class TestCmdBlockdef:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         expect = (
-            "tests/data/tmp/test.blocs:1: info: parameter 'NCHAN' not supplied, using default value 2\n"
-            "tests/data/tmp/test.blocs:1: info: parameter 'HAS_ENABLE' not supplied, using default value 0\n"
-            "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 2 info(s)")
+            "test.blocs:1: info: parameter 'NCHAN' not supplied, using default value 2\n"
+            "test.blocs:1: info: parameter 'HAS_ENABLE' not supplied, using default value 0\n"
+            "test.blocs: 0 error(s), 0 warning(s), 2 info(s)")
         assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
         assert result is True
         assert design.block_defs["myblock"].params["NCHAN"] == 2
@@ -325,8 +325,8 @@ class TestCmdBlockdef:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         expect = (
-            "tests/data/tmp/test.blocs:1: error: 'blockdef' requires a new def name and a source block name\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1: error: 'blockdef' requires a new def name and a source block name\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
         assert result is False
 
@@ -336,8 +336,8 @@ class TestCmdBlockdef:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         expect = (
-            "tests/data/tmp/test.blocs:1:24: error: invalid source block name 'NCHAN=3'\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1:24: error: invalid source block name 'NCHAN=3'\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
         assert result is False
 
@@ -347,8 +347,8 @@ class TestCmdBlockdef:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         expect = (
-            "tests/data/tmp/test.blocs:1:18: error: invalid source block name 'NCHAN=3'\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1:18: error: invalid source block name 'NCHAN=3'\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
         assert result is False
 
@@ -358,8 +358,8 @@ class TestCmdBlockdef:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         expect = (
-            "tests/data/tmp/test.blocs:1:10: error: invalid blockdef name '123bad'\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1:10: error: invalid blockdef name '123bad'\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
         assert result is False
 
@@ -369,8 +369,8 @@ class TestCmdBlockdef:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         expect = (
-            "tests/data/tmp/test.blocs:1:25: error: invalid parameter name '123BAD'\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1:25: error: invalid parameter name '123BAD'\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
         assert result is False
 
@@ -380,8 +380,8 @@ class TestCmdBlockdef:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         expect = (
-            "tests/data/tmp/test.blocs:1:18: error: 'no_such_block.bloc' not found on block search path\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1:18: error: 'no_such_block.bloc' not found on block search path\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
         assert result is False
 
@@ -392,8 +392,8 @@ class TestCmdBlockdef:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         expect = (
-            "tests/data/tmp/test.blocs:2:10: error: name 'myblock' is already in use\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:2:10: error: name 'myblock' is already in use\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
         assert result is False
 
@@ -403,8 +403,8 @@ class TestCmdBlockdef:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         expect = (
-            "tests/data/tmp/test.blocs:1:32: error: invalid value 'notanumber' for 'NCHAN': expected an integer\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1:32: error: invalid value 'notanumber' for 'NCHAN': expected an integer\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
         assert result is False
 
@@ -414,9 +414,9 @@ class TestCmdBlockdef:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         expect = (
-            "tests/data/tmp/test.blocs:1: error: parameter 'NCHAN' value 12 is greater than max (4)\n"
-            "tests/data/tmp/test.blocs:1: error: failed to resolve 'parameterized' as 'myblock'\n"
-            "tests/data/tmp/test.blocs: 2 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1: error: parameter 'NCHAN' value 12 is greater than max (4)\n"
+            "test.blocs:1: error: failed to resolve 'parameterized' as 'myblock'\n"
+            "test.blocs: 2 error(s), 0 warning(s), 0 info(s)")
         assert actual == expect, f"\nEXPECT: {expect!r}\nACTUAL: {actual!r}\n"
         assert result is False
 
@@ -426,9 +426,9 @@ class TestCmdBlockdef:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1:25: error: 'myblock' (BlockDef) has no "
+            "test.blocs:1:25: error: 'myblock' (BlockDef) has no "
             "subcommands, got 'extra'\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
         # the blockdef itself was created successfully -- the break happens
         # before any param-parsing error, so only the trailing token fails
@@ -446,7 +446,7 @@ class TestCmdBlock:
         design = blockdefs_x3
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert "b1" in design.blocks
         assert design.blocks["b1"].block_def.name == "simple"
@@ -461,7 +461,7 @@ class TestCmdBlock:
         design = blockdefs_x3
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert "b1" in design.blocks
         assert "b2" in design.blocks
@@ -474,8 +474,8 @@ class TestCmdBlock:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1: error: 'block' requires an instance name and a blockdef name\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1: error: 'block' requires an instance name and a blockdef name\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_block_missing_blockdef_name_fails(self, blockdefs_x3, capsys):
@@ -485,8 +485,8 @@ class TestCmdBlock:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1: error: 'block' requires an instance name and a blockdef name\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1: error: 'block' requires an instance name and a blockdef name\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_block_invalid_instance_name_fails(self, blockdefs_x3, capsys):
@@ -496,8 +496,8 @@ class TestCmdBlock:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1:7: error: invalid block instance name '123bad'\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1:7: error: invalid block instance name '123bad'\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_block_invalid_blockdef_name_fails(self, blockdefs_x3, capsys):
@@ -507,8 +507,8 @@ class TestCmdBlock:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1:10: error: invalid blockdef name '123bad'\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1:10: error: invalid blockdef name '123bad'\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_block_extra_token_fails(self, blockdefs_x3, capsys):
@@ -518,8 +518,8 @@ class TestCmdBlock:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1:17: error: 'b1' (BlockInstance) has no subcommands, got 'extra'\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1:17: error: 'b1' (BlockInstance) has no subcommands, got 'extra'\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_block_unknown_blockdef_name_fails(self, blockdefs_x3, capsys):
@@ -529,8 +529,8 @@ class TestCmdBlock:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1: error: unknown block definition 'nosuchblockdef'\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1: error: unknown block definition 'nosuchblockdef'\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_block_duplicate_instance_name_fails(self, blockdefs_x3, capsys):
@@ -540,8 +540,8 @@ class TestCmdBlock:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:2: error: name 'b1' is already in use\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:2: error: name 'b1' is already in use\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
 # ---------------------------------------------------------------------------
@@ -556,7 +556,7 @@ class TestCmdSignal:
         design = Design(abs_path="test_design")
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert "s1" in design.signals
         assert design.signals["s1"].sig_type == PinType.FLOAT
@@ -568,7 +568,7 @@ class TestCmdSignal:
         design = Design(abs_path="test_design")
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.signals["s1"].sig_type == PinType.BOOL
 
@@ -578,7 +578,7 @@ class TestCmdSignal:
         design = Design(abs_path="test_design")
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.signals["s1"].sig_type == PinType.U32
 
@@ -588,7 +588,7 @@ class TestCmdSignal:
         design = Design(abs_path="test_design")
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.signals["s1"].sig_type == PinType.S32
 
@@ -598,7 +598,7 @@ class TestCmdSignal:
         design = Design(abs_path="test_design")
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.signals["s1"].value == 0.0
 
@@ -609,8 +609,8 @@ class TestCmdSignal:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1: error: 'signal' requires a signal name and a type\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1: error: 'signal' requires a signal name and a type\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_signal_missing_type_fails(self, capsys):
@@ -620,8 +620,8 @@ class TestCmdSignal:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1: error: 'signal' requires a signal name and a type\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1: error: 'signal' requires a signal name and a type\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_signal_invalid_name_fails(self, capsys):
@@ -631,8 +631,8 @@ class TestCmdSignal:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1:8: error: invalid signal name '123bad'\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1:8: error: invalid signal name '123bad'\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_signal_invalid_type_fails(self, capsys):
@@ -642,8 +642,8 @@ class TestCmdSignal:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1:11: error: invalid signal type 'nosuchtype'\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1:11: error: invalid signal type 'nosuchtype'\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_signal_duplicate_name_fails(self, capsys):
@@ -653,8 +653,8 @@ class TestCmdSignal:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:2: error: name 's1' is already in use\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:2: error: name 's1' is already in use\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
 # ---------------------------------------------------------------------------
@@ -668,7 +668,7 @@ class TestCmdThread:
         design = Design(abs_path="test_design")
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert "t1" in design.threads
         assert design.threads["t1"].period_ns == 1000000
@@ -679,7 +679,7 @@ class TestCmdThread:
         design = Design(abs_path="test_design")
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.threads["t1"].period_ns == 1000000
 
@@ -688,7 +688,7 @@ class TestCmdThread:
         design = Design(abs_path="test_design")
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.threads["t1"].period_ns == 1000000
 
@@ -698,8 +698,8 @@ class TestCmdThread:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1: error: 'thread' requires a thread name and a period\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1: error: 'thread' requires a thread name and a period\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_thread_missing_period_fails(self, capsys):
@@ -708,8 +708,8 @@ class TestCmdThread:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1: error: 'thread' requires a thread name and a period\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1: error: 'thread' requires a thread name and a period\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_thread_invalid_name_fails(self, capsys):
@@ -718,8 +718,8 @@ class TestCmdThread:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1:8: error: invalid thread name '123bad'\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1:8: error: invalid thread name '123bad'\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_thread_zero_period_fails(self, capsys):
@@ -728,8 +728,8 @@ class TestCmdThread:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1: error: thread period must be positive, got 0\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1: error: thread period must be positive, got 0\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_thread_negative_period_fails(self, capsys):
@@ -738,8 +738,8 @@ class TestCmdThread:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1:11: error: u32 value '-1000000' is out of range [0, 4294967295]\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1:11: error: u32 value '-1000000' is out of range [0, 4294967295]\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_thread_invalid_period_fails(self, capsys):
@@ -748,9 +748,9 @@ class TestCmdThread:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1:11: error: invalid u32 value 'notanumber': "
+            "test.blocs:1:11: error: invalid u32 value 'notanumber': "
             "expression 'notanumber': unknown variable: 'notanumber'\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_thread_duplicate_name_fails(self, capsys):
@@ -759,8 +759,8 @@ class TestCmdThread:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:2: error: name 't1' is already in use\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:2: error: name 't1' is already in use\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
 # ---------------------------------------------------------------------------
@@ -776,8 +776,8 @@ class TestCmdConflicts:
         result = parse_blocs_string(blocs_str, design, source=rcwd(test_blocs))
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:2: error: name 'myblock' is already in use\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:2: error: name 'myblock' is already in use\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_blockdef_conflicts_with_thread(self, test_blocs, capsys):
@@ -787,8 +787,8 @@ class TestCmdConflicts:
         result = parse_blocs_string(blocs_str, design, source=rcwd(test_blocs))
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:2:10: error: name 'mythread' is already in use\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:2:10: error: name 'mythread' is already in use\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_thread_conflicts_with_block(self, blocks_x4, capsys):
@@ -798,8 +798,8 @@ class TestCmdConflicts:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1: error: name 'b1' is already in use\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1: error: name 'b1' is already in use\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_block_conflicts_with_signal(self, blocks_x4, capsys):
@@ -810,8 +810,8 @@ class TestCmdConflicts:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:2: error: name 'mysignal' is already in use\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:2: error: name 'mysignal' is already in use\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
 
@@ -827,9 +827,9 @@ class TestParseCommandDispatch:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1:1: error: unknown command or object "
+            "test.blocs:1:1: error: unknown command or object "
             "'nonexistent_thing': 'nonexistent_thing' not found in design\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_invalid_subcommand(self, capsys):
@@ -838,9 +838,9 @@ class TestParseCommandDispatch:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1:18: error: subcommand '?bad' is invalid "
+            "test.blocs:1:18: error: subcommand '?bad' is invalid "
             "for target 'foo' (Signal)\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
 
@@ -855,7 +855,7 @@ class TestSubcmdEquals:
         design = Design(abs_path="test_design")
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.signals["s1"].value == 1.5
 
@@ -865,7 +865,7 @@ class TestSubcmdEquals:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.signals["sig_float"].value == 2.5
 
@@ -875,7 +875,7 @@ class TestSubcmdEquals:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.signals["sig_bool"].value == 1
 
@@ -885,7 +885,7 @@ class TestSubcmdEquals:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.signals["sig_bool"].value == 0
 
@@ -895,7 +895,7 @@ class TestSubcmdEquals:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.signals["sig_bool"].value == 0
 
@@ -905,7 +905,7 @@ class TestSubcmdEquals:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.signals["sig_u32"].value == 42
 
@@ -915,7 +915,7 @@ class TestSubcmdEquals:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.signals["sig_u32"].value == 255
 
@@ -925,7 +925,7 @@ class TestSubcmdEquals:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.signals["sig_u32"].value == 9600
 
@@ -935,7 +935,7 @@ class TestSubcmdEquals:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.signals["sig_s32"].value == -42
 
@@ -945,7 +945,7 @@ class TestSubcmdEquals:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert abs(design.signals["sig_float"].value - 6.35) < 1e-6
 
@@ -956,8 +956,8 @@ class TestSubcmdEquals:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1:11: error: invalid float value '': expression '': invalid syntax\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1:11: error: invalid float value '': expression '': invalid syntax\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_set_u32_signal_out_of_range_fails(self, blocks_x4, capsys):
@@ -967,8 +967,8 @@ class TestSubcmdEquals:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1:9: error: u32 value '5000000000' is out of range [0, 4294967295]\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1:9: error: u32 value '5000000000' is out of range [0, 4294967295]\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_set_s32_signal_out_of_range_fails(self, blocks_x4, capsys):
@@ -978,8 +978,8 @@ class TestSubcmdEquals:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1:9: error: s32 value '5000000000' is out of range [-2147483648, 2147483647]\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1:9: error: s32 value '5000000000' is out of range [-2147483648, 2147483647]\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_set_float_pin_inline(self, blocks_x4, capsys):
@@ -988,7 +988,7 @@ class TestSubcmdEquals:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.blocks["b1"].pins["in"].signal.value == 3.14
 
@@ -999,8 +999,8 @@ class TestSubcmdEquals:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1:7: error: float value '1e300' is out of range for a 32-bit float\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1:7: error: float value '1e300' is out of range for a 32-bit float\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_set_bool_signal_invalid_expression_fails(self, capsys):
@@ -1009,8 +1009,8 @@ class TestSubcmdEquals:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1:18: error: invalid bool value '1+': expression '1+': invalid syntax\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1:18: error: invalid bool value '1+': expression '1+': invalid syntax\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_set_s32_signal_invalid_expression_fails(self, capsys):
@@ -1019,8 +1019,8 @@ class TestSubcmdEquals:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1:18: error: invalid s32 value '1+': expression '1+': invalid syntax\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1:18: error: invalid s32 value '1+': expression '1+': invalid syntax\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_set_raw_pin_fails(self, capsys):
@@ -1033,8 +1033,8 @@ class TestSubcmdEquals:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:3:11: error: cannot assign value to RAW pin/signal\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:3:11: error: cannot assign value to RAW pin/signal\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
 # ---------------------------------------------------------------------------
@@ -1049,7 +1049,7 @@ class TestSubcmdPlus:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.blocks["b1"].pins["in"].signal is design.signals["sig_float"]
 
@@ -1059,7 +1059,7 @@ class TestSubcmdPlus:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.blocks["b1"].pins["in"].signal is design.signals["sig_float"]
 
@@ -1069,7 +1069,7 @@ class TestSubcmdPlus:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.signals["sig_float"].driver is design.blocks["b1"].pins["out"]
 
@@ -1079,7 +1079,7 @@ class TestSubcmdPlus:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.blocks["b1"].functions["update"].thread is design.threads["fast"]
 
@@ -1089,7 +1089,7 @@ class TestSubcmdPlus:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.blocks["b1"].functions["update"].thread is design.threads["fast"]
 
@@ -1100,8 +1100,8 @@ class TestSubcmdPlus:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1:11: error: 'nosuchpin' not found in design\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1:11: error: 'nosuchpin' not found in design\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_link_empty_arg_fails(self, blocks_x4, capsys):
@@ -1111,8 +1111,8 @@ class TestSubcmdPlus:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1:11: error: '+' requires a name\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1:11: error: '+' requires a name\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_link_inline_signal_creation(self, blocks_x4, capsys):
@@ -1121,7 +1121,7 @@ class TestSubcmdPlus:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.blocks["b1"].pins["in"].signal is design.signals["s1"]
 
@@ -1131,7 +1131,7 @@ class TestSubcmdPlus:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.blocks["b1"].functions["update"].thread is design.threads["t1"]
 
@@ -1144,8 +1144,8 @@ class TestSubcmdPlus:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:3:7: error: pin 'b1.in' is already connected to signal 'sig_float'\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:3:7: error: pin 'b1.in' is already connected to signal 'sig_float'\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
 # ---------------------------------------------------------------------------
@@ -1161,7 +1161,7 @@ class TestSubcmdMinus:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.blocks["b1"].pins["in"].signal.is_dummy
 
@@ -1172,7 +1172,7 @@ class TestSubcmdMinus:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.blocks["b1"].functions["update"].thread is None
 
@@ -1183,7 +1183,7 @@ class TestSubcmdMinus:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.blocks["b1"].pins["in"].signal.is_dummy
 
@@ -1194,7 +1194,7 @@ class TestSubcmdMinus:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.blocks["b1"].functions["update"].thread is None
 
@@ -1205,8 +1205,8 @@ class TestSubcmdMinus:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1:7: error: '-' does not take an argument for PinInstance\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1:7: error: '-' does not take an argument for PinInstance\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_unlink_signal_no_arg_fails(self, blocks_x4, capsys):
@@ -1216,8 +1216,8 @@ class TestSubcmdMinus:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1:11: error: '-' requires a name\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1:11: error: '-' requires a name\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_unlink_wrong_type_fails(self, capsys):
@@ -1226,8 +1226,8 @@ class TestSubcmdMinus:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:3:3: error: cannot unlink Signal\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:3:3: error: cannot unlink Signal\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_unlink_target_not_found_fails(self, capsys):
@@ -1236,8 +1236,8 @@ class TestSubcmdMinus:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:2:3: error: 'nonexistent' not found in design\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:2:3: error: 'nonexistent' not found in design\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_unlink_no_arg_wrong_type_direct_call(self, capsys):
@@ -1268,7 +1268,7 @@ class TestSubcmdRelink:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.blocks["b1"].pins["in"].signal is design.signals["sig_float2"]
         assert design.blocks["b1"].pins["in"] not in design.signals["sig_float"].readers
@@ -1281,7 +1281,7 @@ class TestSubcmdRelink:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.blocks["b1"].pins["in"].signal is design.signals["sig_float2"]
         assert design.blocks["b1"].pins["in"] not in design.signals["sig_float"].readers
@@ -1293,7 +1293,7 @@ class TestSubcmdRelink:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.blocks["b1"].functions["update"].thread is design.threads["slow"]
         assert design.blocks["b1"].functions["update"] not in design.threads["fast"].functions
@@ -1305,7 +1305,7 @@ class TestSubcmdRelink:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.blocks["b1"].functions["update"].thread is design.threads["slow"]
         assert design.blocks["b1"].functions["update"] not in design.threads["fast"].functions
@@ -1316,7 +1316,7 @@ class TestSubcmdRelink:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.blocks["b1"].pins["in"].signal is design.signals["sig_float"]
 
@@ -1327,8 +1327,8 @@ class TestSubcmdRelink:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1:7: error: '-+' requires a name\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1:7: error: '-+' requires a name\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
     def test_multiple_plus_subcommands(self, blocks_x4, capsys):
@@ -1337,7 +1337,7 @@ class TestSubcmdRelink:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.blocks["b1"].pins["in"].signal is design.signals["s1"]
         assert design.blocks["b2"].pins["in"].signal is design.signals["s1"]
@@ -1348,7 +1348,7 @@ class TestSubcmdRelink:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.signals["s1"].value == 1.5
         assert design.blocks["b1"].pins["in"].signal is design.signals["s1"]
@@ -1359,7 +1359,7 @@ class TestSubcmdRelink:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         assert design.blocks["b1"].pins["in"].signal.is_dummy
 
@@ -1369,7 +1369,7 @@ class TestSubcmdRelink:
         design = blocks_x4
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
-        assert actual == "tests/data/tmp/test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert result is True
         funcs = design.threads["t1"].functions
         assert len(funcs) == 2
@@ -1383,8 +1383,8 @@ class TestSubcmdRelink:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:1:31: error: signal 'sig_float' is driven by 'b3.out'; cannot set value directly\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:1:31: error: signal 'sig_float' is driven by 'b3.out'; cannot set value directly\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
         assert blocks_x4.signals["sig_float"].value==1.5
         assert blocks_x4.blocks["b1"].pins["in"].signal == blocks_x4.signals["sig_float"]
@@ -1395,8 +1395,8 @@ class TestSubcmdRelink:
         result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
         actual = capsys.readouterr().err.strip()
         assert actual == (
-            "tests/data/tmp/test.blocs:2:4: error: 'nonexistent' not found in design\n"
-            "tests/data/tmp/test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+            "test.blocs:2:4: error: 'nonexistent' not found in design\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
         assert result is False
 
 # ---------------------------------------------------------------------------
@@ -1412,8 +1412,8 @@ class TestParseBlocsFile:
         result = parse_blocs_file(str(path), design)
         actual = capsys.readouterr().err.strip()
         expected = (
-            f"{rel}: error: file not found\n"
-            f"{rel}: 1 error(s), 0 warning(s), 0 info(s)"
+            f"does_not_exist.blocs: error: file not found\n"
+            f"does_not_exist.blocs: 1 error(s), 0 warning(s), 0 info(s)"
         )
         assert actual == expected
         assert result is None
@@ -1424,7 +1424,7 @@ class TestParseBlocsFile:
         design = Design(abs_path="test_design")
         result = parse_blocs_file(str(path), design)
         actual = capsys.readouterr().err.strip()
-        expected = f"{rel}: 0 error(s), 0 warning(s), 0 info(s)"
+        expected = f"minimal.blocs: 0 error(s), 0 warning(s), 0 info(s)"
         assert actual == expected
         assert result is True
         assert "foo" in design.signals
