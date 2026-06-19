@@ -1,5 +1,5 @@
 // Saved in ANSI as a test
-block limit1 /// Clamps input to [min, max] range.
+/// Clamps input to [min, max] range.
 /// Both bounds are inclusive. Input and output types are float.
 
 // pins declared in expected access order

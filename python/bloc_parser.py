@@ -555,7 +555,7 @@ def compute_filehash(lines: list[str]) -> str:
         # Lines are already normalized and UTF-8 safe
         h.update(line.encode("utf-8"))
     encoded = base64.urlsafe_b64encode(h.digest()).decode("ascii")
-    # With 6-byte digest, there is no padding, but strip defensively
+    # np padding if digest length is multiiple of three, but strip defensively
     return encoded.rstrip("=")
 
 

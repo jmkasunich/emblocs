@@ -1,4 +1,4 @@
-block lexer_ok /// inline description on block statement
+/// inline description on block statement
 /// second line of block description
 /// third line of block description
 
