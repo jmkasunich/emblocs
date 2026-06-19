@@ -1059,3 +1059,23 @@ class TestParseBlocStringEncoding:
         expected = "<string>:1: error: non-ASCII character"
         assert actual == expected
         assert spec is None
+
+# ---------------------------------------------------------------------------
+# parse_bloc_file hash tests
+# ---------------------------------------------------------------------------
+
+class TestParseBlocFileHash:
+
+    def test_hash_simple(self, good_dir, capsys):
+        spec = parse_bloc_file(str(good_dir / "simple.bloc"))
+        actual = capsys.readouterr().err.strip()
+        assert actual == ""
+        assert spec is not None
+        assert spec.filehash == "8kqo3AzU"
+
+    def test_hash_complex(self, good_dir, capsys):
+        spec = parse_bloc_file(str(good_dir / "complex_example.bloc"))
+        actual = capsys.readouterr().err.strip()
+        assert actual == ""
+        assert spec is not None
+        assert spec.filehash == "6YRpr5p0"
