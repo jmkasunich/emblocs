@@ -1,0 +1,26 @@
+{
+    "paths": {
+        "bloc_search_paths": [
+            "$EMBLOCS/src/components"
+        ]
+    },
+    "port": {
+        "port": "",
+        "baud": "115.2K"
+    },
+    "console": {
+        "show_linenum": true,
+        "show_timestamp": true,
+        "show_rx_text": true,
+        "show_tx_text": true,
+        "wrap_lines": false,
+        "autoscroll": true
+    },
+    "app": {
+        "geometry": ""
+    },
+    "text": {
+        "font_family": "courier",
+        "font_size": 12
+    }
+}
