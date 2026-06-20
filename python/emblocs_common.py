@@ -70,10 +70,9 @@ class Config:
 
     def __init__(self,
                  project_cfg: str | Path,
-                 default_cfg: str | Path = Path(__file__).parent.parent / 'emblocs_cfg.json'
-                 ) -> None:
-        self._project_cfg: Path             = Path(project_cfg)
-        self._default_cfg: Path             = Path(default_cfg)
+                 template_cfg: str | Path | None = None ) -> None:
+        self._project_cfg:  Path = Path(project_cfg)
+        self._template_cfg: Path | None = Path(template_cfg) if template_cfg is not None else None
         self._owned:       dict[str, dict]  = {}    # section -> defaults
         self._shared:      dict[str, dict]  = {}    # section -> defaults
         self._filedata:    dict             = {}    # raw JSON as read, for pass-through
@@ -199,15 +198,23 @@ class Config:
         Must be called after all register_owned(), register_shared(), and
         add_cli_arg() calls, and after parse_args().
         """
+        cfg_to_read = None
         if self._project_cfg.exists():
             cfg_to_read = self._project_cfg
-        elif self._default_cfg.exists():
-            ctx.info(f"project config {self._project_cfg.as_posix()!r} not found, "
-                     f"reading template {self._default_cfg.as_posix()!r}",
-                     source=OMIT)
-            cfg_to_read = self._default_cfg
         else:
-            cfg_to_read = None
+            ctx.info(f"project config {self._project_cfg.as_posix()!r} not found",
+                     source=OMIT)
+        if not cfg_to_read and self._template_cfg:
+            if self._template_cfg.exists():
+                cfg_to_read = self._template_cfg
+                ctx.info(f"using template {self._template_cfg.as_posix()!r}",
+                    source=OMIT)
+            else:
+                ctx.warning(f"config template {self._template_cfg.as_posix()!r} not found",
+                    source=OMIT)
+        if not cfg_to_read:
+            ctx.info(f"using built-in defaults", source=OMIT)
+        # read config file
         if cfg_to_read is not None:
             ctx.push(source=str(cfg_to_read))
             try:
@@ -221,14 +228,8 @@ class Config:
                 # merge file data onto defaults for all registered sections
                 self._merge(self._owned)
                 self._merge(self._shared)
-        else:
-            ctx.push(source="<config>")
-            ctx.warning(f"project config {self._project_cfg.as_posix()!r} and "
-                        f"template config {self._default_cfg.as_posix()!r} not found; "
-                        f"using built-in defaults",
-                        source=OMIT)
-        ctx.summarize()
-        ctx.pop()
+            ctx.summarize()
+            ctx.pop()
         # apply CLI overrides last so they take precedence over file values
         if args is not None:
             for dest, section, key in self._cli_map:

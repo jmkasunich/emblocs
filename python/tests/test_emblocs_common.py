@@ -51,7 +51,7 @@ def basic_config(tmp_cfg):
     A Config with one owned and one shared section, project config not yet
     created.  Template is the real emblocs_cfg.json.
     """
-    config = Config(project_cfg=tmp_cfg, default_cfg=TEMPLATE_CFG)
+    config = Config(project_cfg=tmp_cfg, template_cfg=TEMPLATE_CFG)
     config.register_owned(OWNED_SECTION, OWNED_DEFAULTS)
     config.register_shared(SHARED_SECTION, SHARED_DEFAULTS)
     return config
@@ -64,35 +64,35 @@ def basic_config(tmp_cfg):
 class TestRegistration:
 
     def test_register_owned_creates_section_with_defaults(self, tmp_cfg):
-        config = Config(project_cfg=tmp_cfg, default_cfg=TEMPLATE_CFG)
+        config = Config(project_cfg=tmp_cfg, template_cfg=TEMPLATE_CFG)
         config.register_owned(OWNED_SECTION, OWNED_DEFAULTS)
         assert config.data[OWNED_SECTION] == OWNED_DEFAULTS
 
     def test_register_shared_creates_section_with_defaults(self, tmp_cfg):
-        config = Config(project_cfg=tmp_cfg, default_cfg=TEMPLATE_CFG)
+        config = Config(project_cfg=tmp_cfg, template_cfg=TEMPLATE_CFG)
         config.register_shared(SHARED_SECTION, SHARED_DEFAULTS)
         assert config.data[SHARED_SECTION] == SHARED_DEFAULTS
 
     def test_section_returns_live_reference(self, tmp_cfg):
-        config = Config(project_cfg=tmp_cfg, default_cfg=TEMPLATE_CFG)
+        config = Config(project_cfg=tmp_cfg, template_cfg=TEMPLATE_CFG)
         config.register_owned(OWNED_SECTION, OWNED_DEFAULTS)
         ref = config.section(OWNED_SECTION)
         ref['port'] = 'COM3'
         assert config.data[OWNED_SECTION]['port'] == 'COM3'
 
     def test_section_raises_for_unregistered(self, tmp_cfg):
-        config = Config(project_cfg=tmp_cfg, default_cfg=TEMPLATE_CFG)
+        config = Config(project_cfg=tmp_cfg, template_cfg=TEMPLATE_CFG)
         with pytest.raises(KeyError):
             config.section('nonexistent')
 
     def test_register_owned_raises_if_already_shared(self, tmp_cfg):
-        config = Config(project_cfg=tmp_cfg, default_cfg=TEMPLATE_CFG)
+        config = Config(project_cfg=tmp_cfg, template_cfg=TEMPLATE_CFG)
         config.register_shared(SHARED_SECTION, SHARED_DEFAULTS)
         with pytest.raises(ValueError):
             config.register_owned(SHARED_SECTION, OWNED_DEFAULTS)
 
     def test_register_shared_raises_if_already_owned(self, tmp_cfg):
-        config = Config(project_cfg=tmp_cfg, default_cfg=TEMPLATE_CFG)
+        config = Config(project_cfg=tmp_cfg, template_cfg=TEMPLATE_CFG)
         config.register_owned(OWNED_SECTION, OWNED_DEFAULTS)
         with pytest.raises(ValueError):
             config.register_shared(OWNED_SECTION, SHARED_DEFAULTS)
@@ -104,13 +104,60 @@ class TestRegistration:
 
 class TestLoad:
 
-    def test_reads_template_when_no_project_config(self, tmp_cfg, basic_config, capsys):
-        basic_config.load()
+    def test_project_config_and_template_exist(self, tmp_cfg):
+        tmp_cfg.write_text(json.dumps({'port': {'port': 'COM2', 'baud': '115.2K'}}))
+        config = Config(project_cfg=tmp_cfg, template_cfg=TEMPLATE_CFG)
+        config.register_owned('port', OWNED_DEFAULTS)
+        config.load()
+        assert config.section('port')['port'] == 'COM2'
+
+    def test_project_config_exists_no_template(self, tmp_cfg):
+        tmp_cfg.write_text(json.dumps({'port': {'port': 'COM3', 'baud': '115.2K'}}))
+        config = Config(project_cfg=tmp_cfg)
+        config.register_owned('port', OWNED_DEFAULTS)
+        config.load()
+        assert config.section('port')['port'] == 'COM3'
+
+    def test_no_project_config_uses_template(self, tmp_cfg, capsys):
+        config = Config(project_cfg=tmp_cfg, template_cfg=TEMPLATE_CFG)
+        config.register_owned('port', OWNED_DEFAULTS)
+        config.load()
+        assert config.section('port') == OWNED_DEFAULTS
         actual = capsys.readouterr().err.strip()
         expected = (
-            f"info: project config {tmp_cfg.as_posix()!r} not found,"
-            f" reading template '../emblocs_cfg.json'\n"
+            f"info: project config {tmp_cfg.as_posix()!r} not found\n"
+            f"info: using template '../emblocs_cfg.json'\n"
             f"emblocs_cfg.json: 0 error(s), 0 warning(s), 0 info(s)")
+        assert actual == expected, (
+            f"\nEXPECTED: {expected!r}\n"
+            f"ACTUAL:   {actual!r}\n"
+        )
+
+    def test_no_project_config_no_template_uses_defaults(self, tmp_cfg, capsys):
+        config = Config(project_cfg=tmp_cfg)
+        config.register_owned('port', OWNED_DEFAULTS)
+        config.load()
+        assert config.section('port') == OWNED_DEFAULTS
+        actual = capsys.readouterr().err.strip()
+        expected = (
+            f"info: project config {tmp_cfg.as_posix()!r} not found\n"
+            f"info: using built-in defaults")
+        assert actual == expected, (
+            f"\nEXPECTED: {expected!r}\n"
+            f"ACTUAL:   {actual!r}\n"
+        )
+
+    def test_no_config_files(self, tmp_cfg, capsys):
+        missing_template = tmp_cfg.parent / "nonexistent_template.json"
+        config = Config(project_cfg=tmp_cfg, template_cfg=missing_template)
+        config.register_owned('port', OWNED_DEFAULTS)
+        config.load()
+        assert config.section('port') == OWNED_DEFAULTS
+        actual = capsys.readouterr().err.strip()
+        expected = (
+            f"info: project config {tmp_cfg.as_posix()!r} not found\n"
+            f"warning: config template {missing_template.resolve().as_posix()!r} not found\n"
+            f"info: using built-in defaults")
         assert actual == expected, (
             f"\nEXPECTED: {expected!r}\n"
             f"ACTUAL:   {actual!r}\n"
@@ -120,7 +167,7 @@ class TestLoad:
         tmp_cfg.write_text(json.dumps({
             'port': {'port': 'COM3', 'baud': '9600'}
         }))
-        config = Config(project_cfg=tmp_cfg, default_cfg=TEMPLATE_CFG)
+        config = Config(project_cfg=tmp_cfg, template_cfg=TEMPLATE_CFG)
         config.register_owned('port', OWNED_DEFAULTS)
         config.load()
         assert config.section('port')['port'] == 'COM3'
@@ -131,7 +178,7 @@ class TestLoad:
         tmp_cfg.write_text(json.dumps({
             'port': {'port': 'COM3'}
         }))
-        config = Config(project_cfg=tmp_cfg, default_cfg=TEMPLATE_CFG)
+        config = Config(project_cfg=tmp_cfg, template_cfg=TEMPLATE_CFG)
         config.register_owned('port', OWNED_DEFAULTS)
         config.load()
         assert config.section('port')['port'] == 'COM3'
@@ -151,7 +198,7 @@ class TestLoad:
         tmp_cfg.write_text(json.dumps({
             'port': {'port': 'COM3', 'baud': 9600}
         }))
-        config = Config(project_cfg=tmp_cfg, default_cfg=TEMPLATE_CFG)
+        config = Config(project_cfg=tmp_cfg, template_cfg=TEMPLATE_CFG)
         config.register_owned('port', OWNED_DEFAULTS)
         config.load()
         assert config.section('port')['baud'] == '115.2K'
@@ -167,7 +214,7 @@ class TestLoad:
 
     def test_json_parse_error(self, tmp_cfg, capsys):
         tmp_cfg.write_text("this is not json {{{")
-        config = Config(project_cfg=tmp_cfg, default_cfg=TEMPLATE_CFG)
+        config = Config(project_cfg=tmp_cfg, template_cfg=TEMPLATE_CFG)
         config.register_owned('port', OWNED_DEFAULTS)
         config.load()
         assert config.section('port') == OWNED_DEFAULTS
@@ -175,23 +222,6 @@ class TestLoad:
         expected = (
             "test_cfg.json:1:1: error: JSON parse error: Expecting value\n"
             "test_cfg.json: 1 error(s), 0 warning(s), 0 info(s)")
-        assert actual == expected, (
-            f"\nEXPECTED: {expected!r}\n"
-            f"ACTUAL:   {actual!r}\n"
-        )
-
-    def test_no_config_files(self, tmp_cfg, capsys):
-        missing_template = tmp_cfg.parent / "nonexistent_template.json"
-        config = Config(project_cfg=tmp_cfg, default_cfg=missing_template)
-        config.register_owned('port', OWNED_DEFAULTS)
-        config.load()
-        assert config.section('port') == OWNED_DEFAULTS
-        actual = capsys.readouterr().err.strip()
-        expected = (
-            f"warning: project config {tmp_cfg.as_posix()!r} and"
-            f" template config {missing_template.resolve().as_posix()!r} not found;"
-            f" using built-in defaults\n"
-            f"<config>: 0 error(s), 1 warning(s), 0 info(s)")
         assert actual == expected, (
             f"\nEXPECTED: {expected!r}\n"
             f"ACTUAL:   {actual!r}\n"
@@ -219,7 +249,7 @@ class TestRealTemplateConfig:
         assert isinstance(data['paths']['bloc_search_paths'], list)
 
     def test_load_from_real_template(self, tmp_cfg):
-        config = Config(project_cfg=tmp_cfg, default_cfg=TEMPLATE_CFG)
+        config = Config(project_cfg=tmp_cfg, template_cfg=TEMPLATE_CFG)
         config.register_shared('paths', {'bloc_search_paths': []})
         config.load()
         paths = config.section('paths')['bloc_search_paths']
@@ -235,7 +265,7 @@ class TestCliOverrides:
 
     def test_cli_value_overrides_file_value(self, tmp_cfg):
         tmp_cfg.write_text(json.dumps({'port': {'port': 'COM3', 'baud': '115.2K'}}))
-        config = Config(project_cfg=tmp_cfg, default_cfg=TEMPLATE_CFG)
+        config = Config(project_cfg=tmp_cfg, template_cfg=TEMPLATE_CFG)
         config.register_owned('port', OWNED_DEFAULTS)
         parser = config.base_arg_parser()
         config.add_cli_arg('--port', section='port', key='port',
@@ -245,7 +275,7 @@ class TestCliOverrides:
         assert config.section('port')['port'] == 'COM7'
 
     def test_cli_value_overrides_default(self, tmp_cfg):
-        config = Config(project_cfg=tmp_cfg, default_cfg=TEMPLATE_CFG)
+        config = Config(project_cfg=tmp_cfg, template_cfg=TEMPLATE_CFG)
         config.register_owned('port', OWNED_DEFAULTS)
         parser = config.base_arg_parser()
         config.add_cli_arg('--port', section='port', key='port',
@@ -256,7 +286,7 @@ class TestCliOverrides:
 
     def test_absent_cli_arg_does_not_override(self, tmp_cfg):
         tmp_cfg.write_text(json.dumps({'port': {'port': 'COM3', 'baud': '115.2K'}}))
-        config = Config(project_cfg=tmp_cfg, default_cfg=TEMPLATE_CFG)
+        config = Config(project_cfg=tmp_cfg, template_cfg=TEMPLATE_CFG)
         config.register_owned('port', OWNED_DEFAULTS)
         parser = config.base_arg_parser()
         config.add_cli_arg('--port', section='port', key='port',
@@ -266,20 +296,20 @@ class TestCliOverrides:
         assert config.section('port')['port'] == 'COM3'
 
     def test_add_cli_arg_raises_for_unregistered_section(self, tmp_cfg):
-        config = Config(project_cfg=tmp_cfg, default_cfg=TEMPLATE_CFG)
+        config = Config(project_cfg=tmp_cfg, template_cfg=TEMPLATE_CFG)
         parser = config.base_arg_parser()
         with pytest.raises(KeyError):
             config.add_cli_arg('--port', section='port', key='port')
 
     def test_add_cli_arg_raises_for_unknown_key(self, tmp_cfg):
-        config = Config(project_cfg=tmp_cfg, default_cfg=TEMPLATE_CFG)
+        config = Config(project_cfg=tmp_cfg, template_cfg=TEMPLATE_CFG)
         config.register_owned('port', OWNED_DEFAULTS)
         parser = config.base_arg_parser()
         with pytest.raises(KeyError):
             config.add_cli_arg('--foo', section='port', key='nonexistent')
 
     def test_add_cli_arg_raises_without_parser(self, tmp_cfg):
-        config = Config(project_cfg=tmp_cfg, default_cfg=TEMPLATE_CFG)
+        config = Config(project_cfg=tmp_cfg, template_cfg=TEMPLATE_CFG)
         config.register_owned('port', OWNED_DEFAULTS)
         with pytest.raises(RuntimeError):
             config.add_cli_arg('--port', section='port', key='port')
@@ -292,7 +322,7 @@ class TestCliOverrides:
 class TestSave:
 
     def test_owned_section_round_trips(self, tmp_cfg):
-        config = Config(project_cfg=tmp_cfg, default_cfg=TEMPLATE_CFG)
+        config = Config(project_cfg=tmp_cfg, template_cfg=TEMPLATE_CFG)
         config.register_owned('port', OWNED_DEFAULTS)
         config.load()
         config.section('port')['port'] = 'COM5'
@@ -304,7 +334,7 @@ class TestSave:
         tmp_cfg.write_text(json.dumps({
             'port': {'port': 'COM3', 'baud': '115.2K', 'obsolete_key': 'old'}
         }))
-        config = Config(project_cfg=tmp_cfg, default_cfg=TEMPLATE_CFG)
+        config = Config(project_cfg=tmp_cfg, template_cfg=TEMPLATE_CFG)
         config.register_owned('port', OWNED_DEFAULTS)
         config.load()
         config.save()
@@ -318,7 +348,7 @@ class TestSave:
                 'future_tool_key': 'some_value'
             }
         }))
-        config = Config(project_cfg=tmp_cfg, default_cfg=TEMPLATE_CFG)
+        config = Config(project_cfg=tmp_cfg, template_cfg=TEMPLATE_CFG)
         config.register_shared('paths', {'bloc_search_paths': []})
         config.load()
         config.save()
@@ -330,7 +360,7 @@ class TestSave:
             'port': {'port': 'COM3', 'baud': '115.2K'},
             'other_tool_section': {'some_key': 'some_value'}
         }))
-        config = Config(project_cfg=tmp_cfg, default_cfg=TEMPLATE_CFG)
+        config = Config(project_cfg=tmp_cfg, template_cfg=TEMPLATE_CFG)
         config.register_owned('port', OWNED_DEFAULTS)
         config.load()
         config.save()
@@ -339,7 +369,7 @@ class TestSave:
         assert data['other_tool_section']['some_key'] == 'some_value'
 
     def test_save_creates_project_config(self, tmp_cfg):
-        config = Config(project_cfg=tmp_cfg, default_cfg=TEMPLATE_CFG)
+        config = Config(project_cfg=tmp_cfg, template_cfg=TEMPLATE_CFG)
         config.register_owned('port', OWNED_DEFAULTS)
         config.load()
         config.save()
