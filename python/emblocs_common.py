@@ -9,6 +9,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Iterator
 
 from parse_common import ctx, OMIT
 
@@ -21,290 +22,344 @@ class Config:
     """
     Manages configuration data for EMBLOCS tools.
 
-    All tools share a single JSON config file.  Each consumer class
-    (or the tool's main script) registers sections before load() is
-    called.  Two kinds of sections are supported:
+    Configuration data is stored in a single nested dict (config.data)
+    and accessed using dotted names, e.g. 'scope.channel_00.units_per_div'.
+    Data items can be loaded from files or the command line, and saved
+    to files.
 
-    Owned sections are registered by exactly one consumer class.  On
-    save(), only the registered keys are written back; unrecognized keys
-    from the file are dropped.  This provides automatic housekeeping as
-    key names change over time.
+    Consumer classes register their keys by calling set_by_name() with
+    default values during initialization.  This establishes both the
+    existence and expected type of each key.  load_file() may be called
+    one or more times to merge file contents into config.data; later
+    calls take precedence over earlier ones for overlapping keys.
+    merge_cli() applies command line values; if called last, it gives
+    them highest precedence.
 
-    Shared sections are registered by the tool's main script and may be
-    read by any consumer.  On save(), all keys that were present in the
-    file are preserved, and registered keys are updated with current
-    values.  Unrecognized keys from the file are never dropped.  This
-    allows tools that register different subsets of a shared section to
-    coexist without clobbering each other's data.
-
-    Typical usage in a tool's main script:
+    Typical usage:
 
         config = Config()
-        config.register_shared('app', {'geometry': ''})
-        config.register_shared('paths', {'bloc_search_paths': []})
+
+        # register keys with defaults by calling set_by_name()
+        config.set_by_name('paths.bloc_search_paths', [])
+        config.set_by_name('text.font_size', 12)
+        # client class sets its own keys and CLI args
         SerPort.register_config(config)
-        Console.register_config(config)
-        parser = config.base_arg_parser(description="EMBLOCS GUI tool")
-        config.add_cli_arg('-p', '--port', help="serial port name",
-                           section='port', key='port')
-        args = parser.parse_args()
-        config.load(args)
+
+        # set up CLI args
+        # --cfg is not mapped to a config name, used to find the config file
+        config.add_cli_arg('--cfg', help="path to config file")
+        # --font-size is mapped to a config value
+        config.add_cli_arg('--font-size', name='text.font_size', help="font size for text window")
+        # --verbose is not, used only by the main program
+        config.add_cli_arg('--verbose', action='store_true', help="verbose output")
+
+        # parse CLI first so we can use --cfg to find the config file
+        args = config.parse_cli()
+
+        # load config file(s); caller decides policy
+        template = Path(__file__).parent.parent / 'emblocs_cfg.json'
+        if template.exists():
+            # load template fields and values first
+            config.load_file(template)
+        cfg_path = Path(args.cfg) if args.cfg else Path('emblocs_cfg.json')
+        # project config overrides template; if not found,
+        # one will be created by save_file() on exit
+        if cfg_path.exists():
+            # config file values override template
+            # config file can also add new fields
+            config.load_file(cfg_path)
+
+        # CLI values last so they override file values
+        config.merge_cli()
+
+        # ... use config ...
+
+        config.save_file(cfg_path)
 
     Typical usage in a consumer class:
 
         class SerPort:
-            _CONFIG_SECTION = 'port'
-            _CONFIG_DEFAULTS = {
-                'port': '',
-                'baud': '115.2K',
-            }
-
             @classmethod
             def register_config(cls, config):
-                config.register_owned(cls._CONFIG_SECTION, cls._CONFIG_DEFAULTS)
+                config.set_by_name('port.port', '')
+                config.set_by_name('port.baud', '115.2K')
+                config.add_cli_arg('-p', '--port', name='port.port',
+                                   help="serial port name")
+                config.add_cli_arg('-b', '--baud', name='port.baud',
+                                   help="baud rate")
 
             def __init__(self, config):
-                self.cfg = config.section('port')
+                self.cfg = config.get_by_name('port')
                 # access as self.cfg['port'], self.cfg['baud'], etc.
+                # or use config.get_by_name('port.port') directly
     """
 
-    def __init__(self,
-                 project_cfg: str | Path,
-                 template_cfg: str | Path | None = None ) -> None:
-        self._project_cfg:  Path = Path(project_cfg)
-        self._template_cfg: Path | None = Path(template_cfg) if template_cfg is not None else None
-        self._owned:       dict[str, dict]  = {}    # section -> defaults
-        self._shared:      dict[str, dict]  = {}    # section -> defaults
-        self._filedata:    dict             = {}    # raw JSON as read, for pass-through
-        self._cli_map:     list[tuple]      = []    # (dest, section, key) for CLI overrides
-        self._parser:      argparse.ArgumentParser | None = None
-        self.data:         dict[str, dict]  = {}    # live working copy of all sections
+    def __init__(self) -> None:
+        self.data:     dict                       = {}    # single source of truth
+        self._cli_map: list[tuple[str, str]]      = []    # (dest, name) for mapped args
+        self._args:    argparse.Namespace | None  = None  # saved by parse_cli()
+        self._parser:  argparse.ArgumentParser    = argparse.ArgumentParser()
 
     # ------------------------------------------------------------------
-    # Registration
+    # Name-based access
     # ------------------------------------------------------------------
 
-    def register_owned(self, section: str, defaults: dict) -> None:
+    def set_by_name(self, name: str, value) -> None:
         """
-        Register an owned section with its default values.
-        Must be called before load().
-        The section name must not already be registered as shared.
-        """
-        if section in self._shared:
-            raise ValueError(f"section '{section}' is already registered as shared")
-        self._owned[section] = dict(defaults)
-        self.data[section] = dict(defaults)
+        Set a config value using dotted name notation.
+        e.g. 'scope.channel_00.units_per_div'
 
-    def register_shared(self, section: str, defaults: dict) -> None:
+        If the name does not exist, it is created along with any
+        intermediate dicts needed to reach it.
+
+        If the name already exists, the new value is type-checked against
+        the existing value.  A type mismatch emits a warning and leaves
+        the existing value unchanged.  This protects registered defaults
+        from being overwritten by a file containing a wrongly-typed value,
+        while still allowing the value to be updated by a correctly-typed
+        file or CLI value.
+
+        bool is treated as distinct from int even though Python's bool
+        is a subclass of int.
         """
-        Register a shared section with its default values.
-        Must be called before load().
-        The section name must not already be registered as owned.
+        parts = name.split('.')
+        node = self.data
+        # traverse to the parent of the leaf, creating dicts as needed
+        for part in parts[:-1]:
+            if part not in node:
+                node[part] = {}
+            elif not isinstance(node[part], dict):
+                ctx.error(
+                    f"'{name}': '{part}' is already set as a leaf value; "
+                    f"cannot use it as an intermediate node",
+                    source=OMIT, lineno=OMIT, column=OMIT,
+                )
+                return
+            node = node[part]
+        # set or type-check the leaf
+        leaf = parts[-1]
+        if leaf not in node:
+            node[leaf] = value
+        else:
+            existing = node[leaf]
+            type_ok = (
+                isinstance(existing, bool) and isinstance(value, bool)
+            ) or (
+                not isinstance(existing, bool) and
+                type(value) is type(existing)
+            )
+            if type_ok:
+                node[leaf] = value
+            else:
+                ctx.warning(
+                    f"'{name}' has wrong type "
+                    f"(expected {type(existing).__name__}, "
+                    f"got {type(value).__name__}); "
+                    f"keeping current value {existing!r}",
+                    source=OMIT, lineno=OMIT, column=OMIT,
+                )
+
+    def get_by_name(self, name: str):
         """
-        if section in self._owned:
-            raise ValueError(f"section '{section}' is already registered as owned")
-        self._shared[section] = dict(defaults)
-        self.data[section] = dict(defaults)
+        Retrieve a value using dotted name notation.
+        e.g. 'scope.channel_00.units_per_div'
+
+        If the name resolves to a leaf value, that value is returned.
+        If the name resolves to a dict, that dict is returned; this
+        allows retrieval of an entire subtree, e.g. get_by_name('scope')
+        returns the entire scope section.
+        Raises KeyError if any component of the name is not found.
+        """
+        parts = name.split('.')
+        node = self.data
+        for part in parts:
+            if not isinstance(node, dict) or part not in node:
+                raise KeyError(f"config name '{name}' not found")
+            node = node[part]
+        return node
+
+    def name_exists(self, name: str) -> bool:
+        """
+        Return True if the given dotted name exists in config.data,
+        False otherwise.
+        """
+        try:
+            self.get_by_name(name)
+            return True
+        except KeyError:
+            return False
 
     # ------------------------------------------------------------------
-    # Access
+    # Traversal
     # ------------------------------------------------------------------
 
-    def section(self, name: str) -> dict:
+    def _traverse(self, d: dict, prefix: str = '') -> Iterator[tuple[str, object]]:
         """
-        Return a live reference to a registered section.
-        Raises KeyError if the section has not been registered.
-        Consumer classes that own a section may read and write through
-        this reference.  Consumer classes that only read a shared section
-        should treat the returned dict as read-only by convention.
+        Recursively yield (name, value) pairs for every leaf in d,
+        where name is the full dotted path to the leaf.
+        Dicts are traversed; all other values are treated as leaves.
         """
-        if name not in self.data:
-            raise KeyError(f"config section '{name}' has not been registered")
-        return self.data[name]
+        for key, val in d.items():
+            full_name = f"{prefix}.{key}" if prefix else key
+            if isinstance(val, dict):
+                yield from self._traverse(val, full_name)
+            else:
+                yield full_name, val
+
+    def items(self, prefix: str = '') -> Iterator[tuple[str, object]]:
+        """
+        Yield (name, value) pairs for every leaf in config.data,
+        where name is the full dotted path to the leaf.
+        If prefix is supplied, only yield items under that subtree.
+        Raises KeyError if prefix is supplied but not found.
+        """
+        if prefix:
+            subtree = self.get_by_name(prefix)
+            if not isinstance(subtree, dict):
+                yield prefix, subtree
+                return
+            yield from self._traverse(subtree, prefix)
+        else:
+            yield from self._traverse(self.data)
 
     # ------------------------------------------------------------------
-    # CLI argument parser
+    # Command line parsing
     # ------------------------------------------------------------------
-
-    def base_arg_parser(self, **kwargs) -> argparse.ArgumentParser:
-        """
-        Create, store, and return an ArgumentParser.
-        The caller may add additional arguments to the returned parser before
-        calling parse_args().  Any keyword arguments are forwarded to
-        ArgumentParser(), e.g. description="my tool".
-        Must be called before add_cli_arg().
-        """
-        self._parser = argparse.ArgumentParser(**kwargs)
-        return self._parser
 
     def add_cli_arg(self, *flags: str,
-                    section: str,
-                    key: str,
-                    help: str = '') -> None:
+                    name: str | None = None,
+                    **kwargs) -> None:
         """
-        Add a CLI argument to the parser and record its mapping to a config key.
-        base_arg_parser() must be called before this method.
-        The type of the argument is inferred from the registered default value
-        for section/key.  load() will apply any non-None CLI value to the
-        config data automatically after merging the file.
+        Add a CLI argument to the internal parser.
 
-        flags are passed directly to parser.add_argument(), so both short
-        and long forms are supported:
-            config.add_cli_arg('-p', '--port', section='port', key='port')
-            config.add_cli_arg('--port', section='port', key='port')
+        If name is supplied, the argument is mapped to that config item
+        using dotted name notation, e.g. name='scope.time_per_div'.
+        merge_cli() will apply its value to the corresponding location
+        in config.data.  The type of the argument is inferred from the
+        current value at that name unless overridden by a 'type' kwarg.
+        The name may refer to any depth in the config tree.
 
-        The dest name in the resulting args namespace is derived from section
-        and key as '<section>__<key>', avoiding any ambiguity from argparse's
-        own dest-derivation rules.
+        If name is omitted, the argument is added to the parser but not
+        mapped to any config item.  It will appear in the args object
+        returned by parse_cli() and is available for the caller to use
+        directly.
 
-        section and key must already be registered before calling this method.
+        Positional arguments are supported, but cannot be mapped to
+        config data.  If it is necessary to save a positional argument
+        value to config data, extract the value from the Namespace
+        returned by parse_cli() and use set_by_name() to store it.
+
+        flags and all other kwargs are passed through to
+        parser.add_argument(), supporting the full argparse API including
+        action, choices, nargs, required, metavar, etc.
+
+        Examples:
+            config.add_cli_arg('-p', '--port', name='port.port')
+            config.add_cli_arg('--time-per-div', name='scope.time_per_div')
+            config.add_cli_arg('--verbose', action='store_true')
+            config.add_cli_arg('--cfg', help="path to config file")
         """
-        if self._parser is None:
-            raise RuntimeError("base_arg_parser() must be called before add_cli_arg()")
-        if section not in self.data:
-            raise KeyError(f"config section '{section}' has not been registered")
-        if key not in self.data[section]:
-            raise KeyError(f"key '{key}' not found in config section '{section}'")
-        dest = f"{section}__{key}"
-        default_val = self.data[section][key]
-        # infer type from default; bool must be checked before int since
-        # bool is a subclass of int in Python
-        if isinstance(default_val, bool):
-            arg_type = lambda s: s.lower() not in ('0', 'false', 'no', 'off')
-        elif isinstance(default_val, int):
-            arg_type = int
-        elif isinstance(default_val, float):
-            arg_type = float
-        elif isinstance(default_val, list):
-            arg_type = str   # individual list items supplied as strings on CLI
-        else:
-            arg_type = str
-        self._parser.add_argument(*flags, dest=dest, type=arg_type,
-                                  default=None, help=help)
-        self._cli_map.append((dest, section, key))
-
-    # ------------------------------------------------------------------
-    # Load
-    # ------------------------------------------------------------------
-
-    def load(self, args: argparse.Namespace | None = None) -> None:
-        """
-        Read the config file and merge values onto registered defaults.
-        If the project config file exists it is read; otherwise the default
-        config file is read.  save() always writes to the project config file.
-        After merging the file, any CLI arguments registered via add_cli_arg()
-        that are not None are applied as overrides.
-        Reports info messages for registered keys not found in the file.
-        Must be called after all register_owned(), register_shared(), and
-        add_cli_arg() calls, and after parse_args().
-        """
-        cfg_to_read = None
-        if self._project_cfg.exists():
-            cfg_to_read = self._project_cfg
-        else:
-            ctx.info(f"project config {self._project_cfg.as_posix()!r} not found",
-                     source=OMIT)
-        if not cfg_to_read and self._template_cfg:
-            if self._template_cfg.exists():
-                cfg_to_read = self._template_cfg
-                ctx.info(f"using template {self._template_cfg.as_posix()!r}",
-                    source=OMIT)
-            else:
-                ctx.warning(f"config template {self._template_cfg.as_posix()!r} not found",
-                    source=OMIT)
-        if not cfg_to_read:
-            ctx.info(f"using built-in defaults", source=OMIT)
-        # read config file
-        if cfg_to_read is not None:
-            ctx.push(source=str(cfg_to_read))
+        if name is not None:
+            # mapped arg: validate name and infer type
             try:
-                with open(cfg_to_read, 'r', encoding='utf-8') as f:
-                    self._filedata = json.load(f)
-            except json.JSONDecodeError as e:
-                ctx.error(f"JSON parse error: {e.msg}", lineno=e.lineno, column=e.colno)
-            except OSError as e:
-                ctx.error(f"could not read config file: {e}", lineno=OMIT, column=OMIT)
-            if ctx.no_errors():
-                # merge file data onto defaults for all registered sections
-                self._merge(self._owned)
-                self._merge(self._shared)
-            ctx.summarize()
-            ctx.pop()
-        # apply CLI overrides last so they take precedence over file values
-        if args is not None:
-            for dest, section, key in self._cli_map:
-                val = getattr(args, dest, None)
-                if val is not None:
-                    self.data[section][key] = val
+                current_val = self.get_by_name(name)
+            except KeyError:
+                raise KeyError(f"config name '{name}' not found; "
+                               f"call set_by_name() before add_cli_arg()")
+            if isinstance(current_val, dict):
+                raise ValueError(f"config name '{name}' refers to a dict, "
+                                 f"not a leaf value; CLI args must map to leaf values")
+            dest = name.replace('.', '__')
+            # infer type from current value unless caller supplied one;
+            # bool must be checked before int since bool is a subclass of int
+            if 'type' not in kwargs and 'action' not in kwargs:
+                if isinstance(current_val, bool):
+                    kwargs['type'] = lambda s: s.lower() not in ('0', 'false', 'no', 'off')
+                elif isinstance(current_val, int):
+                    kwargs['type'] = int
+                elif isinstance(current_val, float):
+                    kwargs['type'] = float
+                else:
+                    kwargs['type'] = str
+            self._parser.add_argument(*flags, dest=dest, default=None, **kwargs)
+            self._cli_map.append((dest, name))
+        else:
+            # unmapped arg: pass through to argparse unchanged
+            self._parser.add_argument(*flags, **kwargs)
 
-    def _merge(self, registry: dict[str, dict]) -> None:
+    def parse_cli(self, args: list[str] | None = None) -> argparse.Namespace:
         """
-        For each section in registry, merge file values onto defaults.
-        Only keys present in the defaults are copied; unknown file keys
-        are left in _filedata for pass-through on save but do not appear
-        in self.data.  Reports info for each registered key not found
-        in the file.
+        Parse the command line and save the result for merge_cli().
+        Returns the args namespace for immediate use by the caller,
+        e.g. to retrieve a config file path before calling load_file().
+        If args is provided, it is parsed instead of sys.argv; this is
+        useful for testing.
         """
-        for section, defaults in registry.items():
-            file_section = self._filedata.get(section, {})
-            for key, default_val in defaults.items():
-                if key not in file_section:
-                    ctx.info(
-                        f"section '{section}': key '{key}' not found in file; "
-                        f"using default {default_val!r}",
-                        lineno=OMIT, column=OMIT,
-                    )
-                    # default is already in self.data[section]; nothing to copy
-                    continue
-                file_val = file_section[key]
-                # type must match default to guard against malformed config;
-                # bool must be checked before int since bool is a subclass of int
-                if isinstance(default_val, bool):
-                    if not isinstance(file_val, bool):
-                        ctx.warning(
-                            f"section '{section}': key '{key}' has wrong type in file "
-                            f"(expected bool, got {type(file_val).__name__}); "
-                            f"using default {default_val!r}",
-                            lineno=OMIT, column=OMIT,
-                        )
-                        continue
-                elif type(file_val) is not type(default_val):
-                    ctx.warning(
-                        f"section '{section}': key '{key}' has wrong type in file "
-                        f"(expected {type(default_val).__name__}, "
-                        f"got {type(file_val).__name__}); using default {default_val!r}",
-                        lineno=OMIT, column=OMIT,
-                    )
-                    continue
-                self.data[section][key] = file_val
+        self._args = self._parser.parse_args(args)
+        return self._args
+
+    def merge_cli(self) -> None:
+        """
+        Apply saved CLI values to config.data.
+        Only mapped args (those registered with a name) are merged;
+        unmapped args are ignored.
+        parse_cli() must be called before merge_cli().
+        CLI values take precedence over any values loaded from files.
+        """
+        if self._args is None:
+            raise RuntimeError("parse_cli() must be called before merge_cli()")
+        for dest, name in self._cli_map:
+            val = getattr(self._args, dest, None)
+            if val is not None:
+                self.set_by_name(name, val)
 
     # ------------------------------------------------------------------
-    # Save
+    # Load and save
     # ------------------------------------------------------------------
 
-    def save(self) -> None:
+    def load_file(self, path: str | Path) -> bool:
         """
-        Write current config data back to the config file.
-
-        Owned sections: only registered keys are written; any keys that
-        were in the file but are not registered are dropped (housekeeping).
-
-        Shared sections: all keys from the original file are preserved;
-        registered keys are updated with current values.  Unregistered
-        keys from the file pass through unchanged.
+        Read a config file and merge its contents into config.data.
+        Traverses the file's JSON tree and calls set_by_name() for each
+        leaf, so type checking and default preservation apply automatically.
+        May be called more than once; later calls take precedence over
+        earlier ones for overlapping keys.
+        Reports an error and returns False if the file is not found or
+        cannot be parsed.  Returns True on success.
         """
-        # owned sections: replace entirely with registered keys only
-        for section in self._owned:
-            self._filedata[section] = dict(self.data[section])
-        # shared sections: update file data with current values, preserving
-        # any keys we don't know about
-        for section in self._shared:
-            if section not in self._filedata:
-                self._filedata[section] = {}
-            self._filedata[section].update(self.data[section])
-        # write
+        path = Path(path)
+        ctx.push(source=str(path))
+        ok = True
         try:
-            with open(self._project_cfg, 'w', encoding='utf-8') as f:
-                json.dump(self._filedata, f, indent=4)
+            with open(path, 'r', encoding='utf-8') as f:
+                filedata = json.load(f)
+        except FileNotFoundError:
+            ctx.error(f"config file {path.as_posix()!r} not found",
+                      source=OMIT)
+            ok = False
+        except json.JSONDecodeError as e:
+            ctx.error(f"JSON parse error: {e.msg}", lineno=e.lineno, column=e.colno)
+            ok = False
         except OSError as e:
-            print(f"error writing config file '{self._project_cfg}': {e}", file=sys.stderr)
+            ctx.error(f"could not read config file: {e}", lineno=OMIT, column=OMIT)
+            ok = False
+        if ok:
+            for name, value in self._traverse(filedata):
+                self.set_by_name(name, value)
+        ctx.summarize()
+        ctx.pop()
+        return ok
+
+    def save_file(self, path: str | Path) -> None:
+        """
+        Write all of config.data to the given path as JSON.
+        The entire contents of config.data are written; no filtering
+        is applied.
+        """
+        path = Path(path)
+        try:
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(self.data, f, indent=4)
+        except OSError as e:
+            print(f"error writing config file {path.as_posix()!r}: {e}",
+                  file=sys.stderr)
