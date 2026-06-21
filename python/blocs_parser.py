@@ -167,7 +167,7 @@ def cmd_blockdef(tokens: list[Token], design: Design) -> tuple[BlockDef | None, 
     # callback to get BlockSpec
     assert _get_block_spec is not None, "no block spec callback registered"
     ctx.set(token=specname_tok)
-    spec = _get_block_spec(specname_tok.text, Design)
+    spec = _get_block_spec(specname_tok.text, design)
     if spec is None:
         # error already reported by _get_block_spec
         return None, 0

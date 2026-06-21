@@ -156,6 +156,12 @@ python/tests/
   capture the actual output, paste it as the expected string. Never use fragment
   matching (`assert "fragment" in message`).
 
+- **Make the messages accessible** - when using the "REPLACE_ME" style of
+  message test, the assert should report both strings in their entirety:
+  ```
+  assert actual == expected, f"\nEXPECT: {expected!r}\nACTUAL: {actual!r}\n"
+  ```
+
 - **Assert both message and result** — for failure cases, assert both the exact
   error message AND that the return value is `None`:
 ```python
@@ -173,6 +179,10 @@ python/tests/
 
 - **Generated test files** — write to `tests/data/tmp/` for predictable paths
   in error messages. This directory is in `.gitignore`.
+
+- **Conservative mock functions** - if monkeypatching or callback functions are
+  used in tests, they should validate all arguments that the receive, even if
+  they don't use them.
 
 ### 3.3 Code Style
 

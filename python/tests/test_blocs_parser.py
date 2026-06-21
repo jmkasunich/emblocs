@@ -29,6 +29,7 @@ def clean_context():
     ctx.clear()
 
 def block_spec_getter(name: str, design: Design) -> BlockSpec | None:
+    assert isinstance(design, Design), f"expected Design instance, got {type(design)}"
     bloc_path = GOOD_DIR / f"{name}.bloc"
     if not bloc_path.is_file():
         ctx.error(f"'{name}.bloc' not found on block search path")
