@@ -114,7 +114,7 @@ instance, signal, or thread names.
 
 Block specs are loaded implicitly by `blockdef` commands: when a `blockdef`
 command names a block spec that has not yet been loaded, the toolchain
-searches (see Section 5.1.2) for the corresponding `.bloc` file and loads it.
+searches (see Section 5.2.2) for the corresponding `.bloc` file and loads it.
 If the same block spec name is referenced by multiple `blockdef` commands,
 the `.bloc` file is loaded only once.
 
@@ -191,7 +191,35 @@ directly. A first token that is a qualified name (`block.pin` or
 `block.function`) unambiguously identifies a pin or function modification
 command.
 
-### 5.1 Block Definition Creation
+### 5.1 Block Search Path
+
+    search <path>
+
+Adds a directory to the block search path, making `.bloc` files in that
+directory available to subsequent `blockdef` commands.  Multiple `search`
+commands may appear anywhere in a `.blocs` file; directories are searched
+in the order in which they were added.
+
+`<path>` may be:
+
+- A relative path (e.g. `./custom_blocks`, `../shared`) — resolved
+  relative to the directory containing the `.blocs` file
+- An absolute path — used as-is
+- `$EMBLOCS/...` — resolved relative to the EMBLOCS installation root
+- `$VAR/...` — resolved relative to the environment variable `VAR`
+
+The directory must exist at the time the `search` command is processed;
+a non-existent path is an error.  A `blockdef` that fails to find its
+`.bloc` file will report the current search path in the error message.
+
+Examples:
+
+    search .                          # always search the project directory
+    search $EMBLOCS/src/components    # standard EMBLOCS component library
+    search $MY_BSP/drivers            # board support package (env var)
+    search ../shared_blocks           # relative to project directory
+
+### 5.2 Block Definition Creation
 
     blockdef <def-name> <spec-name> [PARAM=value...]
 
@@ -207,7 +235,7 @@ multiple block definitions (referred to as `variants`, see below).
 Block definitions are immutable once created. A `blockdef` command
 must appear before any `block` command that instantiates that definition.
 
-#### 5.1.1 Block Variants
+#### 5.2.1 Block Variants
 
 Every `blockdef` command produces exactly one block definition, which is
 a **variant** of its block spec. For block specs with no parameters, only
@@ -238,21 +266,17 @@ case it is common to use the same name for both `<def-name>` and
 the blockdef namespace (Section 3.2) are independent, so re-using the name
 does not cause a collision.
 
-#### 5.1.2 Block Search Path
+#### 5.2.2 Block Search Path
 
-The toolchain searches for `<spec-name>.bloc` in the following locations,
-in order:
+The toolchain searches for `<spec-name>.bloc` in the directories added
+by `search` commands, in the order they were added. See Section 5.1 for
+the full description of the `search` command and supported path forms.
 
-1. The directory containing the `.blocs` file being compiled
-2. Paths listed in `emblocs.json` under `bloc_search_paths`, in order
+A `blockdef` command that cannot find its `.bloc` file reports an error
+that includes the current search path, to help diagnose missing `search`
+commands or misspelled block names.
 
-Paths in `bloc_search_paths` may be absolute, relative (resolved against
-the `.blocs` file directory), or prefixed with `$EMBLOCS` (resolved against
-the emblocs installation root).  Searches are not recursive; to search in
-both `$EMBLOCS/src/components` and `$EMBLOCS/src/componets/special` you
-must put both paths in the list.
-
-### 5.2 Block Instantiation
+### 5.3 Block Instantiation
 
     block <instance-name> <def-name>
 
@@ -266,7 +290,7 @@ Example:
 
     block pid1 pid_controller
 
-### 5.3 Signal Creation
+### 5.4 Signal Creation
 
     signal <sig-name> <type> [subcommand...]
 
@@ -281,7 +305,7 @@ it to two pins:
 
     signal velocity float =0.0 +encoder.output +pid1.feedback
 
-### 5.4 Thread Creation
+### 5.5 Thread Creation
 
     thread <thread-name> <period-ns> [subcommand...]
 
@@ -294,30 +318,30 @@ Example — a 1 kHz thread running two functions in order:
 
     thread fast_loop 1000000 +pid1.compute +pwm_out.update
 
-### 5.5 Modification Commands
+### 5.6 Modification Commands
 
 Existing objects are modified by naming them as the first token, followed by
 subcommands. Four forms are supported.
 
-#### 5.5.1 Signal Modification
+#### 5.6.1 Signal Modification
 
     <sig-name> [subcommand...]
 
 Permitted subcommands: `=value`, `+block.pin`, `-block.pin`, `-+block.pin`
 
-#### 5.5.2 Thread Modification
+#### 5.6.2 Thread Modification
 
     <thread-name> [subcommand...]
 
 Permitted subcommands: `+block.func`, `-block.func`, `-+block.func`
 
-#### 5.5.3 Pin Modification
+#### 5.6.3 Pin Modification
 
     <blockname>.<pinname> [subcommand...]
 
 Permitted subcommands: `=value`, `+sig-name`, `-`, `-+sig-name`
 
-#### 5.5.4 Function Modification
+#### 5.6.4 Function Modification
 
     <blockname>.<funcname> [subcommand...]
 
@@ -431,6 +455,8 @@ read-ahead. The following ordering rules apply:
 
 ### 7.1 Required Ordering
 
+- A `search` command must appear before any `blockdef` command that
+  relies on the added path to locate its `.bloc` file.
 - A `blockdef` command must appear before any `block` command that references
   its `<def-name>`.
 - A `block` command must appear before any signal, thread, pin, or function
@@ -443,7 +469,9 @@ read-ahead. The following ordering rules apply:
 Violations of these rules manifest as name resolution errors (see Section
 8.2): the parser encounters an unknown name and rejects the command
 immediately, without read-ahead to determine whether the name will be defined
-later.
+later.  Similarly, a `blockdef` command that appears before the `search`
+command providing its `.bloc` file path will fail with a file-not-found
+error.
 
 ### 7.2 Dynamic Mode
 
@@ -473,6 +501,7 @@ same line are not rolled back (see Section 6.1).
 | Type errors | Pin-signal type mismatch, value out of range for type |
 | Direction/driver errors | Connecting a second `out` pin to a signal, using `+` on an already-connected pin or function |
 | Illegal write errors | Writing `=value` to a signal with an `out` driver, writing `=value` to a connected pin |
+| File errors | `.bloc` file not found on search path, search path directory does not exist |
 
 ### 8.3 Error Reporting
 
@@ -497,7 +526,8 @@ logical-line    ::= physical-line { '\' newline physical-line } newline
 
 physical-line   ::= [ command ] [ '#' comment-text ]
 
-command         ::= blockdef-cmd
+command         ::= search-cmd
+                  | blockdef-cmd
                   | block-cmd
                   | signal-cmd
                   | thread-cmd
@@ -505,6 +535,9 @@ command         ::= blockdef-cmd
                   | thread-mod-cmd
                   | pin-mod-cmd
                   | func-mod-cmd
+
+search-cmd      ::= 'search' path
+path            ::= token  (* see Section 5.1 for expansion rules *)
 
 blockdef-cmd    ::= 'blockdef' identifier identifier { param }
 param           ::= identifier '=' expression
@@ -560,6 +593,9 @@ A single PID controller reading an encoder and driving a PWM output, running
 at 1 kHz.
 
 ```
+# Block search paths
+search $EMBLOCS/src/components
+
 # Block type registrations
 blockdef pid_controller  pid
 blockdef encoder_input   encoder
@@ -609,6 +645,8 @@ Registering and using a parameterized multiplexor with one channel and
 three inputs:
 
 ```
+search $EMBLOCS/src/components
+
 blockdef mux3 components/mux.bloc NCHANNELS=1 NINPUTS=3
 
 block source_select mux3
