@@ -5,7 +5,7 @@ import pytest
 from pathlib import Path
 from parse_common import (Token, ctx)
 from blocs_parser import (
-    lex_lines, set_get_block_spec, unlink_no_arg_handler,
+    lex_lines, set_get_block_spec, set_expand_path, unlink_no_arg_handler,
     parse_blocs, parse_blocs_string, parse_blocs_file,
 )
 from bloc_parser import parse_bloc_file
@@ -35,10 +35,19 @@ def block_spec_getter(name: str, design: Design) -> BlockSpec | None:
         return None
     return parse_bloc_file(bloc_path.as_posix())
 
+def path_expander(raw: str) -> Path | None:
+    normalized = raw.replace("\\", "/")
+    if normalized.startswith("/"):
+        return Path(normalized).resolve()
+    return (PYTHON_DIR / normalized).resolve()
+
 @pytest.fixture(autouse=True)
-def set_block_spec_callback():
+def set_callbacks():
     set_get_block_spec(block_spec_getter)
+    set_expand_path(path_expander)
     yield
+    set_get_block_spec(None)
+    set_expand_path(None)
 
 @pytest.fixture
 def test_blocs(tmp_dir) -> Path:
@@ -238,6 +247,87 @@ class TestLexLines:
         assert result[0][0] == Token("signal", 1, 1)
         assert result[0][1] == Token("foo",    1, 8)
         assert result[0][2] == Token("float",  1, 12)
+
+# ---------------------------------------------------------------------------
+# cmd_search tests
+# ---------------------------------------------------------------------------
+
+class TestSearchCommand:
+
+    def test_search_relative_path(self, capsys):
+        blocs_str = "search .\n"
+        design = Design(abs_path=BLOCS_SRC)
+        result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert result is True
+        assert design.search_paths == [PYTHON_DIR.resolve()]
+
+    def test_search_absolute_path(self, capsys):
+        blocs_str = f"search {GOOD_DIR.as_posix()}\n"
+        design = Design(abs_path=BLOCS_SRC)
+        result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert result is True
+        assert design.search_paths == [GOOD_DIR.resolve()]
+
+    def test_search_multiple(self, capsys):
+        blocs_str = (
+            f"search .\n"
+            f"search {GOOD_DIR.as_posix()}\n"
+        )
+        design = Design(abs_path=BLOCS_SRC)
+        result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        assert actual == "test.blocs: 0 error(s), 0 warning(s), 0 info(s)"
+        assert result is True
+        assert design.search_paths == [PYTHON_DIR.resolve(), GOOD_DIR.resolve()]
+
+    def test_search_no_argument(self, capsys):
+        blocs_str = "search\n"
+        design = Design(abs_path=BLOCS_SRC)
+        result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        expected = (
+            "test.blocs:1: error: 'search' requires exactly one path argument\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert actual == expected, (f"ACTUAL:   {actual!r}\n")
+        assert result is False
+
+    def test_search_extra_argument(self, capsys):
+        blocs_str = f"search . extra\n"
+        design = Design(abs_path=BLOCS_SRC)
+        result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        expected = (
+            "test.blocs:1: error: 'search' requires exactly one path argument\n"
+            "test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert actual == expected, (f"ACTUAL:   {actual!r}\n")
+        assert result is False
+
+    def test_search_nonexistent_path(self, capsys):
+        blocs_str = "search /no/such/directory\n"
+        design = Design(abs_path=BLOCS_SRC)
+        result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        expected = (
+            f"test.blocs:1: error: search path not found: {Path('/no/such/directory').resolve().as_posix()!r}\n"
+            f"test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert actual == expected, (f"\nEXPECT: {expected!r}\nACTUAL: {actual!r}\n")
+        assert result is False
+
+    def test_search_file_not_directory(self, capsys):
+        bloc_file = GOOD_DIR / "simple.bloc"
+        blocs_str = f"search {bloc_file.as_posix()}\n"
+        design = Design(abs_path=BLOCS_SRC)
+        result = parse_blocs_string(blocs_str, design, source=BLOCS_SRC)
+        actual = capsys.readouterr().err.strip()
+        expected = (
+            f"test.blocs:1: error: search path not found: {Path(GOOD_DIR / 'simple.bloc').as_posix()!r}\n"
+            f"test.blocs: 1 error(s), 0 warning(s), 0 info(s)")
+        assert actual == expected, (f"\nEXPECT: {expected!r}\nACTUAL: {actual!r}\n")
+        assert result is False
 
 # ---------------------------------------------------------------------------
 # cmd_blockdef tests

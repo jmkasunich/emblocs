@@ -98,7 +98,7 @@ def get_value(text: str, value_type: PinType) -> int | float | None:
 
 
 # ---------------------------------------------------------------------------
-# Bloc spec callback
+# Bloc spec callbacks
 # ---------------------------------------------------------------------------
 
 # when a blockdef command is encountered, we use a callback
@@ -110,10 +110,41 @@ def set_get_block_spec(handler: Callable[[str, Design], BlockSpec | None]) -> No
     global _get_block_spec
     _get_block_spec = handler
 
+# when a search command is encountered, we use a callback
+# to resolve and verify the path
+_expand_path: Callable[[str], Path | None] | None = None
+
+def set_expand_path(handler: Callable[[str], Path | None]) -> None:
+    global _expand_path
+    _expand_path = handler
 
 # ---------------------------------------------------------------------------
 # Command handlers
 # ---------------------------------------------------------------------------
+
+def cmd_search(tokens: list[Token], design: Design) -> tuple[None, int]:
+    """
+    Handle the 'search' command.
+    Syntax: search <path>
+    Adds a resolved path to design.search_paths.
+    Returns (None, n_tokens) — search never produces a target object.
+    """
+    if len(tokens) != 2:
+        ctx.error("'search' requires exactly one path argument", column=OMIT)
+        return None, 0
+    path_tok = tokens[1]
+    ctx.set(token=path_tok)
+    # callback to expand paths
+    assert _expand_path is not None, "no path expander callback registered"
+    resolved = _expand_path(path_tok.text)
+    if resolved is None:
+        # error already reported by _expand_path
+        return None, 0
+    if not resolved.is_dir():
+        ctx.error(f"search path not found: {resolved.as_posix()!r}", column=OMIT)
+        return None, 0
+    design.search_paths.append(resolved)
+    return None, 2
 
 def cmd_blockdef(tokens: list[Token], design: Design) -> tuple[BlockDef | None, int]:
     """
@@ -134,6 +165,7 @@ def cmd_blockdef(tokens: list[Token], design: Design) -> tuple[BlockDef | None, 
         ctx.error(f"invalid source block name {specname_tok.text!r}", token=specname_tok)
         return None, 0
     # callback to get BlockSpec
+    assert _get_block_spec is not None, "no block spec callback registered"
     ctx.set(token=specname_tok)
     spec = _get_block_spec(specname_tok.text, Design)
     if spec is None:
@@ -346,6 +378,7 @@ def set_handler(arg: str, target: DesignObject, design: Design) -> bool:
 # ---------------------------------------------------------------------------
 
 CMD_DISPATCH = {
+    "search":   cmd_search,
     "blockdef": cmd_blockdef,
     "block":    cmd_block,
     "signal":   cmd_signal,
@@ -389,7 +422,8 @@ def parse_command(tokens: list[Token], design: Design) -> None:
         # create the target object
         target, n_tokens = handler(tokens, design)
         if target is None:
-            # handler alredy reported an error
+            # handler already reported an error,
+            # or command does not support subcommands
             return
         subcommand_tokens = tokens[n_tokens:]
         target_name = target.name

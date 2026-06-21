@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 import pytest
+from pathlib import Path
 from emblocs import (
     Design,
     BlockSpec, ParamSpec, DimSpec, PinSpec, FunctSpec, Statement,
@@ -1227,3 +1228,23 @@ class TestDesignStr:
         assert 'block  s1' in result
         assert 'signal  vel' in result
         assert 'thread  fast' in result
+
+class TestDesignSearchPaths:
+    """Tests for Design.search_paths field"""
+
+    def test_search_paths_initially_empty(self):
+        design = Design(abs_path="test")
+        assert design.search_paths == []
+
+    def test_search_paths_can_append(self):
+        design = Design(abs_path="test")
+        p = Path("/some/path")
+        design.search_paths.append(p)
+        assert design.search_paths == [p]
+        assert len(design.search_paths) == 1
+
+    def test_search_paths_in_str(self):
+        design = Design(abs_path="test")
+        design.search_paths.append(Path("/some/path"))
+        result = str(design)
+        assert "search  /some/path" in result

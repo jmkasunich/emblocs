@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import Union
 from dataclasses import dataclass, field
 from enum import Enum, auto
+from pathlib import Path
 import textwrap
 
 
@@ -634,6 +635,7 @@ class Design:
 
     Fields:
         abs_path    -- absolute path to the .blocs file this was parsed from
+        search_path -- list of paths to search for .bloc files (from search cmds)
         block_specs -- dict of BlockSpec keyed by .bloc file name
         block_defs  -- dict of BlockDef keyed by variant name
         blocks      -- dict of BlockInstance keyed by instance name
@@ -643,6 +645,7 @@ class Design:
                        objects in the design, O(1) search and uniqueness checks
     """
     abs_path:      str
+    search_paths:  list[Path]               = field(default_factory=list)
     block_specs:   dict[str, BlockSpec]     = field(default_factory=dict)
     block_defs:    dict[str, BlockDef]      = field(default_factory=dict)
     blocks:        dict[str, BlockInstance] = field(default_factory=dict)
@@ -653,6 +656,8 @@ class Design:
 
     def __str__(self) -> str:
         lines = [f"Design: {self.abs_path}"]
+        for p in self.search_paths:
+            lines.append(_indent_child(f"search  {p.as_posix()}"))
         if recurse:
             for bs in self.block_specs.values():
                 lines.append(_indent_child(str(bs)))
