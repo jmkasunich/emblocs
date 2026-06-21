@@ -39,10 +39,11 @@ emblocs/
         blocs_parser.py
         emblocs.py
         enblocs_output.py
+        enblocs_common.py
         expressions.py
         parse_common.py
         tests/          <- new test infrastructure using pytest
-            5-7 test files
+            test_xxx.py <- approximately one per .py file in python/
             data/
                 bad/
                     sample files with various errors

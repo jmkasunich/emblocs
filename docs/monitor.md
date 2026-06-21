@@ -9,6 +9,9 @@ what belongs in the monitor versus what belongs in a block.
 This document is a design record, not a finished specification. It will
 be reorganized and merged into the main documentation at a future date.
 
+The runtime tool is very much a work in progress - nothing in this document
+should be considered as cast-in-stone.
+
 ---
 
 ## 1. Design Principles
@@ -40,7 +43,9 @@ Many capabilities that would require dedicated monitor protocol support in
 other frameworks are naturally expressed as blocks in EMBLOCS:
 
 - **Oscilloscope** — a block with N raw input pins that runs in a thread
-  and emits binary packets containing sampled signal values.
+  and emits binary packets containing sampled signal values.  Note that
+  the task of displaying these packets as traces on a screen will be
+  handled by the monitor.
 - **Performance measurement** — a `perf_timer` block with `start` and
   `stop` functions and a `clocks` output pin. Place `perf_timer.start`
   before and `perf_timer.stop` after the code under test in a thread.
