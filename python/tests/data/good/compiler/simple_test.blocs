@@ -1,0 +1,6 @@
+# minimal test system for blocs_compiler tests
+
+search .
+
+blockdef simple simple
+block b1 simple
