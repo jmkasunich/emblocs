@@ -1,0 +1,175 @@
+#! /usr/bin/env python3
+
+import tkinter as tk
+from tkinter import ttk
+import argparse
+import json
+#import tkinter.font as tkfont
+
+from bl_console import Console
+from bl_command import Command
+from bl_serial import SerPort
+from bl_scope import Scope
+
+
+class EmblocsGUI:
+    def __init__(self, master, config):
+        self.master = master
+        self.master.title("EMBLOCS")
+
+        self.cfgdata = config.data
+        g = self.cfgdata['app']['geometry']
+        if g != '':
+            self.master.geometry(g)
+
+        self.port_ctrl = SerPort(master, config)
+        self.notebook = ttk.Notebook(master)
+        self.cmd_frame = Command(master, config, callback=self.command_callback)
+
+        self.port_ctrl.grid(row=0, column=0, sticky='ew')
+        self.notebook.grid(row=1, column=0, sticky='nsew')
+        self.cmd_frame.grid(row=2, column=0, sticky='ew')
+
+        self.master.grid_rowconfigure(0, weight=0)
+        self.master.grid_rowconfigure(1, weight=1)
+        self.master.grid_rowconfigure(0, weight=0)
+        self.master.grid_columnconfigure(0, weight=1)
+
+        self.tab_console = Console(self.notebook, config)
+        self.tab_scope = Scope(self.notebook, config)
+        self.tab_meters = ttk.Label(self.notebook, text="Meters")
+
+        self.tab_console.pack(fill='both', expand=True)
+        self.tab_scope.pack(fill='both', expand=True)
+        self.tab_meters.pack(fill='both', expand=True)
+
+        tab_padding=(3,0,3,3)
+
+        self.notebook.add(self.tab_console, text="Console", padding=tab_padding)
+        self.notebook.add(self.tab_scope, text="Scope", padding=tab_padding)
+        self.notebook.add(self.tab_meters, text="Meters", padding=tab_padding)
+
+        # this is purely personal preference
+        self.style = ttk.Style()
+        self.style.theme_use("clam")
+#        self.style.theme_use("alt")
+
+        self.port_ctrl.after(100, self.update_console)
+
+    def on_close(self):
+        # capture window geometry
+        self.cfgdata['app']['geometry'] = self.master.geometry()
+        self.master.destroy()
+
+    def update_console(self) :
+        # process any pending text lines
+        while True :
+            text_tuple = self.port_ctrl.get_rx_text()
+            if text_tuple :
+                timestamp, text = text_tuple
+                self.tab_console.append(text, timestamp, is_tx=False)
+            else :
+                break
+        # also look for binary packets
+        while True:
+            packet_tuple = self.port_ctrl.get_rx_packet()
+            if packet_tuple:
+                timestamp, packet = packet_tuple
+                addr = packet.get_addr()
+                len = packet.get_data_len()
+                # data = packet.get_data_bytes()
+                info = f"<pkt addr={addr} len={len}>\n".encode('ascii')
+                self.tab_console.append(info, timestamp, is_tx=False)
+            else:
+                break
+        # schedule next poll
+        self.port_ctrl.after(100, self.update_console)
+
+    def command_callback(self, command):
+        print(f"command_callback called with {command=}")
+        self.tab_console.append(command.encode('ascii', errors='replace'), None, is_tx=True)
+        self.port_ctrl.put_tx_text(command)
+
+    def send_packet(self, addr, data):
+        """Convenience wrapper to queue a packet through the port control."""
+        self.port_ctrl.put_tx_packet(addr, data)
+
+
+class AppConfig:
+    """Class for managing application config (args and JSON config file)"""
+
+    def __init__(self):
+        self.data={}
+        # define fields that will be in the config file, and their default values
+        self.data['app']={}
+        self.data['app']['geometry']=''
+        self.data['text']={}
+        self.data['text']['font_family']='courier'
+        self.data['text']['font_size']=12
+        SerPort.add_config_data(self)
+        Console.add_config_data(self)
+        Scope.add_config_data(self)
+        # other class members
+        self.cfgfile='emblocs.json'
+
+    def read(self):
+        # parse command line first in case it calls out a non-standard config file
+        arg_parser = argparse.ArgumentParser(description="emblocs dev tool")
+        # define the command line arguments
+        arg_parser.add_argument('-c', '--cfgfile', help=f"use CFGFILE instead of {self.cfgfile}")
+        arg_parser.add_argument('-p', '--port', help="serial port name")
+        arg_parser.add_argument('-b', '--baud', help=f"baud rate, default {self.data['port']['baud']}")
+        args = arg_parser.parse_args()
+        if args.cfgfile:
+            self.cfgfile = args.cfgfile
+        # parse the config file
+        filedata = {}
+        try:
+            with open(self.cfgfile, 'r', encoding='utf-8') as cfgfile:
+                filedata = json.load(cfgfile)
+        except FileNotFoundError:
+            print(f"Warning: config file '{self.cfgfile}' was not found.")
+        except OSError as e:
+            print(f"Error reading config file '{self.cfgfile}': {e}")
+        except json.JSONDecodeError as e:
+            print(f"Error decoding config file '{self.cfgfile}': {e}")
+        self.copy_matching_keys(filedata, self.data)
+        # apply the command line args last so they override config file values
+        if args.port:
+            self.data['port']['port'] = args.port
+        if args.baud:
+            self.data['port']['baud'] = args.baud
+
+    def write(self):
+        try:
+            with open(self.cfgfile, 'w') as json_file:
+                json.dump(self.data, json_file, indent=4)
+        except OSError as e:
+            print(f"Error writing to config file '{self.cfgfile}': {e}")
+
+    def copy_matching_keys(self, source :dict, dest :dict):
+        '''
+        source and dest are both dicts (maybe nested)
+        for each key that exists in both dicts, copy
+        the value from source to dest, recursing if
+        the values are also dicts
+        '''
+        for key in dest.keys():
+            if isinstance(dest[key], dict):
+                if key in source and isinstance(source[key], dict):
+                    self.copy_matching_keys(source[key], dest[key])
+            else:
+                if key in source:
+                    dest[key] = source[key]
+
+
+if __name__ == "__main__":
+    config = AppConfig()
+    config.read()
+    root = tk.Tk()
+    app = EmblocsGUI(root, config)
+    root.protocol("WM_DELETE_WINDOW", app.on_close)
+    root.mainloop()
+    app.port_ctrl.disconnect_ignore_widgets()
+    config.write()
+
