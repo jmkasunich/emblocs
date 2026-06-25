@@ -50,11 +50,12 @@ extern const char * const bl_replies[];
 /***************************************************************
  * Packet buffers
  * One receive buffer, one transmit buffer.
- * Sized for maximum payload (250 bytes data + 2 bytes CRC-16 +
- * 1 byte type + headroom).
+ * Base packet size is based on serial.c limit
+ * Payload size allows for 2-byte CRC + 1 byte packet type
  **************************************************************/
 
 #define BL_PKT_BUF_SIZE     254
+#define BL_PKT_PAYLOAD_SIZE (BL_PKT_BUF_SIZE-3)
 
 static ser_packet_t rx_pkt;
 static uint8_t      rx_buf[BL_PKT_BUF_SIZE];
@@ -67,7 +68,8 @@ static uint8_t      tx_buf[BL_PKT_BUF_SIZE];
 
 // send a constant string reply; str must be null-terminated
 // and already start with the reply type
-static void send_const_reply( const char *str ) {
+static void send_const_reply( const char *str )
+{
     uint8_t len = 0;
     // if transmit buffer is not idle, drop the reply
     if ( ser_packet_get_state(&tx_pkt) != SP_IDLE ) {
@@ -84,17 +86,87 @@ static void send_const_reply( const char *str ) {
 }
 
 // handle requests that cannot be served from bl_replies[]
-static void handle_complex_request( uint8_t req_type, ser_packet_t *pkt ) {
+static void handle_complex_request( uint8_t req_type, ser_packet_t *pkt )
+{
     // TODO: multi-packet responses (blockspec metadata chunks etc.)
     (void)req_type;
     (void)pkt;
 }
 
+// handle strings that don't fit in one packet
+static void send_long_str( uint8_t rep_type, uint8_t pkt_num, char *str)
+{
+    int pkt_start = pkt_num * BL_PKT_PAYLOAD_SIZE;
+    int i = 0;
+    while ( i < pkt_start ) {
+        if ( str[i++] == '\0' ) {
+            // string ends before requested packet
+            // send "end" reply with no data
+            tx_buf[0] = rep_type;
+            ser_packet_set_len(&tx_pkt, 1);
+            ser_packet_crc_encode(&tx_pkt);
+            ser_packet_put(&tx_pkt);
+            return;
+        }
+    }
+    int j = 0;
+    while ( j < BL_PKT_PAYLOAD_SIZE ) {
+        if ( str[i] == '\0' ) {
+            // string ends within requested packet
+            // send "end" reply with data
+            tx_buf[0] = rep_type;
+            ser_packet_set_len(&tx_pkt, j+1);
+            ser_packet_crc_encode(&tx_pkt);
+            ser_packet_put(&tx_pkt);
+            return;
+        }
+        // copy to buffer
+        tx_buf[j++] = str[i++];
+    }
+    // string ends beyond requested packet
+    // send "more" reply with data
+    tx_buf[0] = rep_type + 1;
+    ser_packet_set_len(&tx_pkt, j+1);
+    ser_packet_crc_encode(&tx_pkt);
+    ser_packet_put(&tx_pkt);
+    return;
+}
+
+#define INTS_PER_PACKET (BL_PKT_PAYLOAD_SIZE/4)
+// handle arrays of 32-bit values that don't fit in one packet
+// this was going to be used to send all params in a lump, but might take a different
+// approach where each blockdef pulls its own params from the big lump and sends them
+static void send_multiple_uints( uint8_t rep_type, uint8_t pkt_num, uint32_t *data, uint16_t data_count)
+{
+    int i = pkt_num * INTS_PER_PACKET;;
+    int j = 0;
+    while ( ( i < data_count ) && ( j < INTS_PER_PACKET ) ) {
+        for ( int b = 0 ; b < 4 ; b++ ) {
+            tx_buf[j*4+b] = (data[j] >> b) & 0xFF;
+        }
+        j++;
+        i++;
+    }
+    if ( i < data_count ) {
+        // more data follows, send "more" reply with data
+        tx_buf[0] = rep_type + 1;
+    } else {
+        // no more data, send "end" reply with data
+        tx_buf[0] = rep_type;
+    }
+    ser_packet_set_len(&tx_pkt, j*4+1);
+    ser_packet_crc_encode(&tx_pkt);
+    ser_packet_put(&tx_pkt);
+    return;
+}
+
+
 /***************************************************************
  * API
  **************************************************************/
 
-void bl_monitor_init( void ) {
+void bl_monitor_init( void )
+{
     // initialize packet buffers
     ser_packet_init_buf(&rx_pkt, rx_buf, BL_PKT_BUF_SIZE);
     ser_packet_init_buf(&tx_pkt, tx_buf, BL_PKT_BUF_SIZE);
@@ -104,7 +176,8 @@ void bl_monitor_init( void ) {
     ser_packet_listen(&rx_pkt);
 }
 
-void bl_monitor_poll( void ) {
+void bl_monitor_poll( void )
+{
     uint8_t req_type, reply_idx;
     const char *reply;
     // check if a packet has been received
