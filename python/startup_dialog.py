@@ -11,7 +11,7 @@ from emblocs_common import Config
 
 def _make_recent_entry(path: Path) -> dict:
     return {
-        'path': str(path),
+        'path': path.as_posix(),
         'last_opened': datetime.now().isoformat(),
     }
 
