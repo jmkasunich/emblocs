@@ -3,7 +3,6 @@
  * bundle.h - library for bundling string and multiple binary
  *            packet channels onto a single stream
  * 
- * 
  **************************************************************/
 
 #ifndef BUNDLE_H
@@ -16,13 +15,18 @@
 /*****************************************************************
  * Program Interface
  *
- * This module supports an string channel as well as up to 128
+ * This module supports a string channel as well as up to 128
  * binary packet channels which can coexist on the same port.
  * String data is limited to the 7-bit ASCII character set and
  * is sent character-by-character.  Binary packets are
  * higher priority, and are transparently injected into the
- * serial stream at any time.  The protocol allows the two
- * streams to be separated at the receiving node.
+ * serial stream at any time.  The protocol allows all channels
+ * to be separated at the receiving node.
+ *
+ * Transmitting can be referred to as "bundling" since it
+ * bundles multiple channels into a single stream.  Receiving
+ * can be referred to as "unbundling" since it takes a single
+ * stream and splits it into multiple channels.
  *
  * The module provides independent buffers for the string
  * channel and for binary packets.  Binary packets have a
@@ -33,17 +37,12 @@
  * The protocol works by limiting the string channel to values
  * between 0x01 and 0x7F.  Values of 0x80 and higher are used
  * to indicate the start of a binary packet as well as the
- * packet address.  Binary packets use COBS (constant overhead
+ * channel number.  Binary packets use COBS (constant overhead
  * byte stuffing) to avoid including zeros in the packet, at
  * the expense of one extra byte per packet.  A value of zero
  * indicates the end of a binary packet, and can be followed
  * by either string data or another binary packet.
  *
- * Transmitting can be referred to as "bundling" since it
- * bundles multiple channels into a single stream.  Receiving
- * can be referred to as "unbundling" since it takes a single
- * stream and splits it into multiple channels.
- * 
  * The transmit and receive functions are completely decoupled.
  * Transmitting is done by a bdl_tx_t object, while receiving
  * is done by a bdl_rx_t object.  Each stands alone, although
@@ -53,26 +52,24 @@
  * packets, as described below.
  */
 
- typedef enum {
-    BDL_TX_CHAR_MODE = 0,
+typedef struct bdl_packet_s bdl_packet_t;
+
+typedef enum {
+    BDL_TX_STRING_MODE = 0,
     BDL_TX_SEND_COBS_BYTE,
     BDL_TX_SEND_DATA_BYTE
 } bdl_tx_state_t;
 
+// all fields are private; use bdl_* functions to access
 typedef struct bdl_tx_s {
-    // all fields are private; use bdl_* functions to access
-    // string channel transmit buffer (caller-supplied via bdl_string_set_tx_buffer())
     volatile char      *string_buf;
     uint32_t            string_buf_size;
     uint32_t            string_in;
     uint32_t            string_out;
-    // packet transmit list; pkt_root is the sentinel node
     bdl_packet_t        pkt_root;
-    bdl_packet_t       *pkt_current;    // packet currently being transmitted
-    uint8_t             pkt_data_index; // byte index into current packet's data
-    // tx state machine
+    bdl_packet_t       *pkt_current;
+    uint8_t             pkt_data_index;
     bdl_tx_state_t      tx_state;
-    // hardware callback - set via bdl_set_start_tx_callback()
     void              (*start_tx)(void);
 } bdl_tx_t;
 
@@ -84,20 +81,16 @@ typedef enum {
     BDL_RX_GET_DATA_BYTE
 } bdl_rx_state_t;
 
+// all fields are private; use bdl_* functions to access
 typedef struct bdl_rx_s {
-    // all fields are private; use bdl_* functions to access
-    // string channel receive buffer (caller-supplied via bdl_string_set_rx_buffer())
     volatile char      *string_buf;
     uint32_t            string_buf_size;
     uint32_t            string_in;
     uint32_t            string_out;
-    // packet receive list; pkt_root is the sentinel node
     bdl_packet_t        pkt_root;
-    bdl_packet_t       *pkt_current;    // packet currently being received
-    uint8_t             pkt_byte_count; // bytes received so far in current packet
-    // rx state machine
+    bdl_packet_t       *pkt_current;
+    uint8_t             pkt_byte_count;
     bdl_rx_state_t      rx_state;
-    // error counter - read via bdl_packet_rx_error_count()
     uint32_t            error_count;
 } bdl_rx_t;
 
@@ -152,8 +145,8 @@ void bdl_init_rx(bdl_rx_t *bdl, const bdl_rx_config_t *cfg);
  * String Interface:
  *
  * The module uses separate receive and transmit buffers.
- * The buffers are provided by the user during setup; call
- * bdl_string_set_XX_buffer() to pass a buffer to the object.
+ * The buffers are provided by the user during setup; see
+ * the Setup section above.
  *
  * The receive buffer is designed to feed a single consumer,
  * and the transmit buffer is designed to be fed by a single
@@ -199,8 +192,8 @@ bool bdl_string_can_put(bdl_tx_t *bdl);
  * data buffer for the lifetime of the application.  The bundle
  * machinery temporarily takes ownership during transmit or receive
  * (while state != BP_IDLE) and returns it when the operation
- * completes.  The caller may access the data buffer directly at
- * any time when state == BP_IDLE.
+ * completes.  The caller may access the data buffer directly
+ * when state == BP_IDLE.
  * 
  * 'bdl_packet_init_buf(*p, *buf, len)' initializes packet 'p'
  * to use buffer 'buf' which must be of length 'len' (1 to 254
@@ -235,19 +228,13 @@ typedef struct bdl_packet_s {
 void bdl_packet_init_buf(bdl_packet_t *p, uint8_t *buf, uint8_t len);
 
 static inline bdl_packet_state_t bdl_packet_get_state(bdl_packet_t *p)
-{
-    return p->state;
-}
+{ return p->state; }
 
 static inline uint8_t bdl_packet_get_chan(bdl_packet_t *p)
-{
-    return p->header & 0x7F;
-}
+{ return p->header & 0x7F; }
 
 static inline uint8_t bdl_packet_get_len(bdl_packet_t *p)
-{
-    return p->data_len;
-}
+{ return p->data_len; }
 
 void bdl_packet_set_chan(bdl_packet_t *p, uint8_t chan);
 void bdl_packet_set_len(bdl_packet_t *p, uint8_t len);
@@ -328,9 +315,9 @@ void bdl_packet_rx_error_reset(bdl_rx_t *bdl);
  * will typically disable the transmit interrupt.
  *
  * The driver must provide a function to start transmission,
- * perhaps by enabling a transmit interrupt or similar.
- * Call bdl_set_start_tx_callback() during setup to register
- * this callback.
+ * typically by enabling a transmit interrupt or similar.
+ * This function must be provided during setup; see the
+ * Setup section above.
  * 
  * This module will call the callback in thread context when
  * there is data to be sent.  The callback should re-enable
