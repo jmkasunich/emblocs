@@ -1,16 +1,16 @@
 # bundle.py
-# Multiplexed string and binary packet channel over a shared byte stream.
+# Multiplexed string and binary packet data over a shared byte stream.
 #
-# Bundle accepts str (string channel) and addressed binary packets from
-# callers, multiplexes them into a single outgoing byte stream.  Binary
-# packets take priority over string channel data.
+# Bundle accepts strings (string channel) and addressed binary packets
+# from callers, then multiplexes them into a single outgoing byte stream.
+# Binary packets take priority over string channel data.
 #
 # Unbundle reads an incoming byte stream, demultiplexes into a string
-# channel queue and per-address packet queues.  String channel data is
+# channel queue and per-channel packet queues.  String channel data is
 # delivered to the queue as it arrives.
 #
-# Binary packets can optionally include a CRC; if so, packets with bad
-# CRCs are dropped and counted.  The string channel has no error detection.
+# Binary packets include a CRC; packets with bad CRCs are dropped and
+# counted.  The string channel has no error detection.
 #
 # The string channel can transmit only ASCII characters; non-ASCII will
 # result in a UnicodeEncodeError exception.  This is an inherent
@@ -18,16 +18,11 @@
 # are seven bits to manage string/binary transitions.
 #
 # The COBS encoding variant in use limits the binary packet length to
-# 254 bytes.  Binary packets with CRC are limited to 252 bytes.
-# Packets that are too large will raise ValueError.
+# 254 bytes.  Packet payloads are limited to 252 bytes to allow for the
+# 2-byte CRC.  Packets that are too large will raise ValueError.
 #
 # There are 128 binary packet channels, numbered 0x00 to 0x7F (0 to 127).
-# Only one listener is allowed per channel.  Each binary packet channel
-# must be configured with configure_channel() before use; this establishes
-# whether CRC is used on that channel.  On Bundle, configure_channel() must
-# be called before send_packet().  On Unbundle, configure_channel() must be
-# called before listen().  Attempting to use an unconfigured channel raises
-# ValueError.
+# Only one listener is allowed per channel.
 #
 # Both classes take an open io.RawIOBase-compatible stream (e.g. a
 # pyserial.Serial) at init time.  Port lifecycle is the caller's
@@ -36,7 +31,7 @@
 #
 # Wire format:
 #   String channel:  bytes 0x00-0x7F, sent as-is
-#   Packet start:    0x80 | (addr & 0x7F)
+#   Packet start:    0x80 | (chan & 0x7F)
 #   Packet payload:  COBS-encoded data bytes
 #   Packet end:      0x00
 
@@ -91,18 +86,18 @@ def _cobs_decode(data: bytes) -> bytes:
 
 # ---------------------------------------------------------------------------
 # CRC-16-CCITT
-# Polynomial 0x1021, initial value 0xFFFF, no reflection.
+# Polynomial 0x1021, uses provided seed (must be non-zero), no reflection.
 # ---------------------------------------------------------------------------
 
-def _crc16_append(data: bytes) -> bytes:
+def _crc16_append(seed: int, data: bytes) -> bytes:
     """
     Append 2-byte little-endian CRC-16-CCITT to data.
     """
-    crc = binascii.crc_hqx(data, 0xFFFF)
+    crc = binascii.crc_hqx(data, seed & 0xFFFF)
     return data + bytes([crc & 0xFF, crc >> 8])
 
 
-def _crc16_verify(data: bytes) -> tuple[bool, bytes]:
+def _crc16_verify(seed: int, data: bytes) -> tuple[bool, bytes]:
     """
     Verify CRC-16-CCITT appended to data.
     Returns (True, payload) on success, (False, b'') on failure.
@@ -112,11 +107,19 @@ def _crc16_verify(data: bytes) -> tuple[bool, bytes]:
         return False, b''
     payload = data[:-2]
     crc_recv = data[-2] | (data[-1] << 8)
-    crc_calc = binascii.crc_hqx(payload, 0xFFFF)
+    crc_calc = binascii.crc_hqx(payload, seed & 0xFFFF)
     if crc_calc != crc_recv:
         return False, b''
     return True, payload
 
+def _crc_seed(channel: int) -> int:
+    """
+    Compute the per-channel CRC seed.  Must match bundle.c's seed formula
+    exactly for interoperability: (header << 8) | (~header & 0xFF), where
+    header = 0x80 | channel.
+    """
+    header = 0x80 | channel
+    return (header << 8) | ((~header) & 0xFF)
 
 # ---------------------------------------------------------------------------
 # Regex to detect "special" characters in string mode
@@ -139,8 +142,7 @@ class Bundle:
         self._stream:    io.RawIOBase | None = None
         self._on_error:  Callable[[Exception], None] | None = None
         self._str_queue  = queue.Queue()     # queue of bytes (encoded str)
-        self._pkt_queue  = queue.Queue()     # queue of (addr, data) tuples
-        self._channels:  dict[int, bool] = {}   # ( channel, crc )
+        self._pkt_queue  = queue.Queue()     # queue of (chan, data) tuples
         self._stop_flag  = False
         self._tx_event   = threading.Event()
         self._thread     = None
@@ -178,17 +180,6 @@ class Bundle:
         self._thread = None
         self._stream = None
 
-    def configure_channel(self, addr: int, crc: bool = True) -> None:
-        """
-        Configure a binary packet channel.
-        Must be called before send_packet() on this channel.
-        addr must be 0-127.  crc=True means CRC-16 is appended to all
-        outgoing packets on this channel.
-        """
-        if addr < 0 or addr > 127:
-            raise ValueError(f"channel address {addr} out of range 0-127")
-        self._channels[addr] = crc
-
     def write_ascii(self, data: str) -> None:
         """
         Queue a string for transmission on the string channel.
@@ -197,22 +188,18 @@ class Bundle:
         self._str_queue.put(data.encode('ascii'))
         self._tx_event.set()
 
-    def send_packet(self, addr: int, data: bytes) -> None:
+    def send_packet(self, chan: int, data: bytes) -> None:
         """
         Queue a binary packet for transmission on the given channel.
-        configure_channel() must have been called for this addr.
-        Maximum data length is 252 bytes if channel uses CRC, 254 otherwise.
-        Raises ValueError if channel is unconfigured or data is too long.
+        Maximum data length is 252 bytes.
+        Raises ValueError on bad channel number or if data is too long.
         """
-        if addr not in self._channels:
-            raise ValueError(f"channel {addr} not configured; call configure_channel() first")
-        crc = self._channels[addr]
-        max_len = 252 if crc else 254
-        if len(data) > max_len:
-            raise ValueError(f"packet data length {len(data)} exceeds maximum {max_len} for channel {addr}")
-        if crc:
-            data = _crc16_append(data)
-        self._pkt_queue.put((addr, data))
+        if chan < 0 or chan > 127:
+            raise ValueError(f"channel number {chan} must be 0-127")
+        if len(data) > 252:
+            raise ValueError(f"packet data length {len(data)} exceeds 252")
+        data = _crc16_append(_crc_seed(chan), data)
+        self._pkt_queue.put((chan, data))
         self._tx_event.set()
 
     def _tx_worker(self) -> None:
@@ -225,8 +212,8 @@ class Bundle:
                 # drain packet queue first (higher priority)
                 while True:
                     try:
-                        addr, data = self._pkt_queue.get_nowait()
-                        header = bytes([0x80 | (addr & 0x7F)])
+                        chan, data = self._pkt_queue.get_nowait()
+                        header = bytes([0x80 | (chan & 0x7F)])
                         encoded = _cobs_encode(data)
                         self._stream.write(header + encoded + b'\x00')
                     except queue.Empty:
@@ -249,15 +236,14 @@ class Bundle:
 class Unbundle:
     """
     Demultiplexes an incoming byte stream into a string channel queue and
-    per-address binary packet queues.
+    per-channel binary packet queues.
 
     String channel data is delivered to the string queue as it arrives.
 
-    Binary packet channels must be configured with configure_channel()
-    before registering a listener with listen().  Packets are delivered
-    as bytes objects containing the decoded payload (CRC bytes removed
-    if channel uses CRC).  Packets with bad CRCs or other errors are
-    silently dropped and counted in bad_pkt_count.
+    Binary packet channels are registered by calling listen().
+    Packets are delivered as bytes objects containing the decoded payload
+    (CRC bytes removed).  Packets with bad CRCs or other errors are
+    silently dropped and counted in error_count.
     """
 
     _RX_BUF_SIZE = 30
@@ -268,10 +254,9 @@ class Unbundle:
         self._thread        = None
         self._stop_flag     = False
         self._str_queue     = None          # set by listen_str()
-        self._channels:     dict[int, tuple[bool, queue.Queue | None, Callable | None]] = {}
-                            # channel: (crc, queue, callback)
+        self._channels:     dict[int, tuple[queue.Queue | None, Callable | None]] = {}
         self._channels_lock = threading.Lock()
-        self.bad_pkt_count  = 0
+        self.error_count    = 0
 
     def start(self, stream: io.RawIOBase,
             on_error: Callable[[Exception], None]) -> None:
@@ -317,22 +302,9 @@ class Unbundle:
         self._thread = None
         self._stream = None
 
-    def reset_counter(self) -> None:
-        """Reset bad packet counter to zero."""
-        self.bad_pkt_count = 0
-
-    def configure_channel(self, addr: int, crc: bool = True) -> None:
-        """
-        Configure a binary packet channel.
-        Must be called before listen() on this channel.
-        addr must be 0-127.  crc=True means incoming packets on this
-        channel are expected to carry a CRC-16; packets with bad CRCs
-        are dropped and counted in bad_pkt_count.
-        """
-        if addr < 0 or addr > 127:
-            raise ValueError(f"channel address {addr} out of range 0-127")
-        with self._channels_lock:
-            self._channels[addr] = (crc, None, None)
+    def reset_error_count(self) -> None:
+        """Reset error counter to zero."""
+        self.error_count = 0
 
     def listen_str(self, q: queue.Queue) -> None:
         """
@@ -348,65 +320,57 @@ class Unbundle:
         """Unregister the queue for the string channel."""
         self._str_queue = None
 
-    def listen(self, addr: int,
+    def listen(self, chan: int,
             q: queue.Queue | None = None,
             callback: Callable[[bytes], None] | None = None) -> None:
         """
         Register a queue or callback for packets on the given channel.
-        configure_channel() must have been called for this addr.
         Exactly one of q or callback must be provided.
         If q is provided, packets are delivered via q.put(payload).
         If callback is provided, it is called directly in _rx_worker's
         thread context and must return quickly.  Exceptions in the
         callback will propagate up and result in a call to on_error.
-        Raises ValueError if channel is unconfigured, already has a
-        listener, or neither/both of q and callback are provided.
+        Raises ValueError on a bad channel number, if the channel
+        already has a listener, or neither/both of q and callback
+        are provided.
         """
+        if chan < 0 or chan > 127:
+            raise ValueError(f"channel number {chan} must be 0-127")
         if (q is None) == (callback is None):
             raise ValueError("exactly one of q or callback must be provided")
-        if addr not in self._channels:
-            raise ValueError(f"channel {addr} not configured; call configure_channel() first")
         with self._channels_lock:
-            crc, existing_q, existing_cb = self._channels[addr]
-            if existing_q is not None or existing_cb is not None:
-                raise ValueError(f"channel {addr} already has a listener; call unlisten() first")
-            self._channels[addr] = (crc, q, callback)
+            if chan in self._channels:
+                raise ValueError(f"channel {chan} already has a listener; call unlisten() first")
+            self._channels[chan] = (q, callback)
 
-    def unlisten(self, addr: int) -> None:
-        """Unregister the queue for the given channel."""
+    def unlisten(self, chan: int) -> None:
+        """Unregister the queue/callback for the given channel."""
         with self._channels_lock:
-            if addr in self._channels:
-                crc, _, _ = self._channels[addr]
-                self._channels[addr] = (crc, None, None)
+            self._channels.pop(chan, None)
 
     def _queue_str(self, data: bytes | bytearray | memoryview) -> None:
         """Deliver string data directly to the string queue if a listener is registered."""
         if self._str_queue is not None:
             self._str_queue.put(bytes(data).decode('ascii', errors='replace'))
 
-    def _deliver_packet(self, addr: int, encoded: bytes) -> None:
-        """COBS-decode, optionally CRC-check, and deliver packet to registered queue."""
+    def _deliver_packet(self, chan: int, encoded: bytes) -> None:
+        """COBS-decode, CRC-check, and deliver packet to registered queue."""
         with self._channels_lock:
-            entry = self._channels.get(addr)
+            entry = self._channels.get(chan)
         if entry is None:
             # unregistered channel - discard
-            self.bad_pkt_count += 1
+            self.error_count += 1
             return
-        crc, q, callback = entry
-        if q is None and callback is None:
-            # configured but no listener yet - discard
-            self.bad_pkt_count += 1
-            return
+        q, callback = entry
         try:
             payload = _cobs_decode(encoded)
         except Exception:
-            self.bad_pkt_count += 1
+            self.error_count += 1
             return
-        if crc:
-            ok, payload = _crc16_verify(payload)
-            if not ok:
-                self.bad_pkt_count += 1
-                return
+        ok, payload = _crc16_verify(_crc_seed(chan), payload)
+        if not ok:
+            self.error_count += 1
+            return
         if callback is not None:
             callback(payload)
         else:
@@ -417,7 +381,7 @@ class Unbundle:
         rx_buf   = bytearray(self._RX_BUF_SIZE)
         pkt_buf = bytearray(256)  # preallocate for largest packet
         pkt_buf.clear()
-        pkt_addr = 0
+        pkt_chan = 0
         state    = 'string'     # 'string' or 'packet'
         try:
             while not self._stop_flag:
@@ -444,7 +408,7 @@ class Unbundle:
                             char  = rx_buf[index]
                             self._queue_str(rx_buf[bp:index])
                         # packet start found at index
-                        pkt_addr = char & 0x7F
+                        pkt_chan = char & 0x7F
                         pkt_buf.clear()
                         bp = index + 1
                         state = 'packet'
@@ -455,7 +419,7 @@ class Unbundle:
                             # no terminator yet; accumulate packet data
                             pkt_buf.extend(rx_buf[bp:data_len])
                             if len(pkt_buf) > 255:
-                                self.bad_pkt_count += 1
+                                self.error_count += 1
                                 pkt_buf.clear()
                                 state = 'string'
                             bp = data_len
@@ -464,9 +428,9 @@ class Unbundle:
                             pkt_buf.extend(rx_buf[bp:index])
                             bp = index + 1
                             if len(pkt_buf) > 255:
-                                self.bad_pkt_count += 1
+                                self.error_count += 1
                             else:
-                                self._deliver_packet(pkt_addr, bytes(pkt_buf))
+                                self._deliver_packet(pkt_chan, bytes(pkt_buf))
                             pkt_buf.clear()
                             # remainder of rx_buf might be string data
                             # next pass of loop will handle it
