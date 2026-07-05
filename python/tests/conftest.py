@@ -3,6 +3,9 @@ from __future__ import annotations
 import os
 import pytest
 from pathlib import Path
+import ctypes
+import platform
+import subprocess
 
 def pytest_configure(config):
     config.addinivalue_line(
@@ -41,6 +44,42 @@ def tmp_dir():
     """Predictable temp directory for test files; excluded from git."""
     TMP_DIR.mkdir(exist_ok=True)
     return TMP_DIR
+
+
+# ---------------------------------------------------------------------------
+# Bundle C library infrastructure
+# ---------------------------------------------------------------------------
+
+BUNDLE_BUILD_DIR = TMP_DIR / "bundle"
+
+def _bundle_dll_path() -> Path:
+    system = platform.system()
+    if system == "Windows":
+        name = "bundle.dll"
+    elif system == "Darwin":
+        name = "bundle.dylib"
+    else:
+        name = "bundle.so"
+    return TMP_DIR / name
+
+@pytest.fixture(scope="session")
+def bundle_dll():
+    """Configures, builds, and loads the Bundle C shared library."""
+    subprocess.run(
+        ["cmake", "-S", str(TESTS_DIR), "-B", str(BUNDLE_BUILD_DIR), "-G", "Ninja"],
+        check=True, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+    )
+    subprocess.run(
+        ["cmake", "--build", str(BUNDLE_BUILD_DIR)],
+        check=True, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+    )
+    return ctypes.CDLL(str(_bundle_dll_path()))
+
+@pytest.fixture(scope="session")
+def bundle_api(bundle_dll):
+    from bundle_capi import BundleCAPI
+    return BundleCAPI(bundle_dll)
+
 
 # ---------------------------------------------------------------------------
 # Hardware test infrastructure
