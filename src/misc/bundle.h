@@ -3,17 +3,6 @@
  * bundle.h - library for bundling string and multiple binary
  *            packet channels onto a single stream
  * 
- **************************************************************/
-
-#ifndef BUNDLE_H
-#define BUNDLE_H
-
-#include <stdint.h>
-#include <stdbool.h>
-#include <stddef.h>
-
-/*****************************************************************
- * Program Interface
  *
  * This module supports a string channel as well as up to 128
  * binary packet channels which can coexist on the same port.
@@ -44,19 +33,49 @@
  * indicates the end of a binary packet, and can be followed
  * by either string data or another binary packet.
  *
- * The transmit and receive functions are completely decoupled.
- * Transmitting is done by a bdl_tx_t object, while receiving
- * is done by a bdl_rx_t object.  Each stands alone, although
- * they are often used in pairs.
- *
  * The module provides separate APIs for string data and binary
- * packets, as described below.
+ * packets, as described below.  The APIs support polling as
+ * well as callbacks for RTOS environments.
  */
 
- /* bdl_packet_state_t and bdl_packet_t are defined here to
-  * avoid a forward reference.  See the "Binary Packet Interface"
-  * section below for full documentation of packets.
-  */
+#ifndef BUNDLE_H
+#define BUNDLE_H
+
+#include <stdint.h>
+#include <stdbool.h>
+#include <stddef.h>
+
+
+/*****************************************************************
+ * Binary Packet Interface - Packet structures:
+ *
+ * Binary packets are buffered using bdl_packet_t structures.
+ * These structures and their associated buffers can be
+ * statically declared or dynamically allocated.  The application
+ * should declare or allocate a bdl_packet_t struct and a buffer,
+ * then call bdl_packet_init_buf() once to associate the buffer
+ * with the struct.
+ *
+ * The caller owns both the bdl_packet_t struct and its associated
+ * data buffer for the lifetime of the application.  The bundle
+ * machinery temporarily takes ownership during transmit or receive
+ * (while state != BP_IDLE) and returns it when the operation
+ * completes.  The caller may access the data buffer directly
+ * when state == BP_IDLE.
+ *
+ * 'bdl_packet_init_buf(*p, *buf, len)' initializes packet 'p'
+ * to use buffer 'buf' which must be of length 'len' (2 to 254
+ * bytes).  The usable payload is 2 bytes less than 'len', to
+ * allow for the 16-bit CRC that is added on transmit.
+ *
+ * The application should never directly access the packet struct;
+ * getters and setters are provided for members that the API might
+ * need to access.
+ *
+ * The application must never access a packet or its data buffer
+ * unless 'bdl_packet_get_state()' returns BP_IDLE.
+ *
+ */
 
  typedef enum {
     BP_IDLE = 0,
@@ -73,9 +92,35 @@ typedef struct bdl_packet_s {
     uint8_t *data;              // pointer to the actual data
     struct bdl_packet_s *next;  // used for buffer list management - private
     struct bdl_packet_s *prev;  // used for buffer list management - private
+    void (*callback)(struct bdl_packet_s *p);  // packet completion - private
 } bdl_packet_t;
 
-/* module interface definitions start here */
+void bdl_packet_init_buf(bdl_packet_t *p, uint8_t *buf, uint8_t len);
+
+static inline bdl_packet_state_t bdl_packet_get_state(bdl_packet_t *p)
+{ return p->state; }
+
+static inline uint8_t bdl_packet_get_chan(bdl_packet_t *p)
+{ return p->header & 0x7F; }
+
+static inline uint8_t bdl_packet_get_len(bdl_packet_t *p)
+{ return p->data_len; }
+
+static inline uint8_t *bdl_packet_get_buffer(bdl_packet_t *p)
+{ return p->data; }
+
+void bdl_packet_set_chan(bdl_packet_t *p, uint8_t chan);
+void bdl_packet_set_len(bdl_packet_t *p, uint8_t len);
+
+/*****************************************************************
+ * Core Data Structures:
+ *
+ * The transmit and receive functions are completely decoupled.
+ * Transmitting is done by a bdl_tx_t object, while receiving
+ * is done by a bdl_rx_t object.  Each stands alone, although
+ * they are often used in pairs.
+ *
+ */
 
 typedef enum {
     BDL_TX_STRING_MODE = 0,
@@ -89,12 +134,13 @@ typedef struct bdl_tx_s {
     uint32_t            string_buf_size;
     uint32_t            string_in;
     uint32_t            string_out;
+    void              (*string_not_full)(void);
     bdl_packet_t        pkt_root;
     bdl_packet_t       *pkt_current;
     uint8_t             pkt_data_index;
     bdl_tx_state_t      tx_state;
     uint16_t          (*crc16)(uint16_t seed, const uint8_t *data, uint8_t len);
-    void              (*start_tx)(void);
+    void              (*tx_bytes_available)(void);
 } bdl_tx_t;
 
 
@@ -111,6 +157,7 @@ typedef struct bdl_rx_s {
     uint32_t            string_buf_size;
     uint32_t            string_in;
     uint32_t            string_out;
+    void              (*string_avail)(void);
     bdl_packet_t        pkt_root;
     bdl_packet_t       *pkt_current;
     uint8_t             pkt_byte_count;
@@ -123,18 +170,19 @@ typedef struct bdl_rx_s {
 /*****************************************************************
  * Setup
  *
- * Both transmit and receive objects need setup before they
- * can be used.  Both require string buffers, the location
- * and size of which are determined by the user; details are
- * in the String Interface section below.
+ * Both transmit and receive objects need setup before they can
+ * be used.  Both require string buffers, the location and size
+ * of which are determined by the user.  Optional string buffer
+ * callbacks are also available and configured during setup.
+ * See the "String Interface" section below for more details.
  *
  * Both transmit and receive objects need a pointer to a CRC
  * computation function.  See the "CRC Computation" section
  * below for more details.
  *
- * The transmit object also requires a 'start_tx' callback as
- * part of the hardware interface; see the Hardware Interface
- * section below for details.
+ * The transmit object supports an optional 'tx_bytes_available'
+ * callback as part of the hardware interface.  See the "Hardware
+ * Interface" section below for details.
  * 
  * To initialize each object, declare instances of the structs
  * below, set their values, and call the init functions.
@@ -145,10 +193,11 @@ typedef struct bdl_rx_s {
  *   static bdl_tx_t my_tx;
  *
  *   const bdl_tx_config_t my_tx_cfg = {
- *       .string_buf      = tx_buf,
- *       .string_buf_size = sizeof(tx_buf),
- *       .crc16           = bdl_crc16_lookup,
- *       .start_tx        = my_uart_start_tx,
+ *       .string_buf          = tx_buf,
+ *       .string_buf_size     = sizeof(tx_buf),
+ *       .string_not_full     = NULL,
+ *       .crc16               = bdl_crc16_lookup,
+ *       .tx_bytes_available  = my_uart_start_tx
  *   };
  *   bdl_init_tx(&my_tx, &my_tx_cfg);
  * 
@@ -157,8 +206,9 @@ typedef struct bdl_rx_s {
 typedef struct {
     char      *string_buf;
     size_t     string_buf_size;
+    void     (*string_not_full)(void);
     uint16_t (*crc16)(uint16_t seed, const uint8_t *data, uint8_t len);
-    void     (*start_tx)(void);
+    void     (*tx_bytes_available)(void);
 } bdl_tx_config_t;
 
 void bdl_init_tx(bdl_tx_t *bdl, const bdl_tx_config_t *cfg);
@@ -167,6 +217,7 @@ void bdl_init_tx(bdl_tx_t *bdl, const bdl_tx_config_t *cfg);
 typedef struct {
     char      *string_buf;
     size_t     string_buf_size;
+    void     (*string_avail)(void);
     uint16_t (*crc16)(uint16_t seed, const uint8_t *data, uint8_t len);
 } bdl_rx_config_t;
 
@@ -180,35 +231,105 @@ void bdl_init_rx(bdl_rx_t *bdl, const bdl_rx_config_t *cfg);
  * The buffers are provided by the user during setup; see
  * the Setup section above.
  *
+ * The buffers support optional callbacks which can be set
+ * by setting the appropriate field in the 'bdl_xx_config_t'
+ * structure and then calling 'bdl_xx_init()' with the struct.
+ *
+ * The receiver's 'string_avail()' callback will be called when
+ * 'bdl_put_rx_byte()' places a byte in the buffer.  The
+ * transmitter's 'string_not_full()' callback will be called
+ * when 'bdl_get_tx_byte()' removes a byte from the buffer.
+ * Both callbacks are called in the context of the hardware
+ * interface functions and thus should be thread-safe or
+ * ISR-safe depending on the hardware layer implementation.
+ *
  * The receive buffer is designed to feed a single consumer,
  * and the transmit buffer is designed to be fed by a single
  * source.  The following functions are not necessarily
  * re-entrant or thread-safe:
  *
- * 'bdl_string_get_nb()' is a non-blocking read of the receive
- * buffer; it returns '\0' if there is no data available.
- * 'bdl_string_get_bl()' is a blocking read of the receive
- * buffer; it busy-waits if no data is available.
- * 'bdl_string_can_get()' is non-blocking and returns true if
- * there is data in the receive buffer.
+ */
+
+// non-blocking read - returns '\0' if no data available
+char bdl_string_get_nb(bdl_rx_t *bdl);
+// blocking read - busy waits if no data available
+char bdl_string_get_bl(bdl_rx_t *bdl);
+// returns true if data is available
+bool bdl_string_can_get(bdl_rx_t *bdl);
+
+// non-blocking write - returns false and discards 'c' if buffer full
+bool bdl_string_put_nb(bdl_tx_t *bdl, char c);
+// blocking write - busy waits if buffer full
+void bdl_string_put_bl(bdl_tx_t *bdl, char c);
+// returns true if buffer not full
+bool bdl_string_can_put(bdl_tx_t *bdl);
+
+
+ /*****************************************************************
+ * Binary Packet Interface - Sending and Receiving:
  *
- * 'bdl_string_put_nb()' is a non-blocking write to the transmit
- * buffer; if the buffer is full it returns false and discards
- * the data.
- * 'bdl_string_put_bl()' is a blocking write to the transmit
- * buffer; it busy-waits if the buffer is full.
- * 'bdl_string_can_put()' is non-blocking and returns true if
- * there is space in the transmit buffer.
+ * To send a packet, write data into the buffer, call the setter
+ * functions for data length and channel number (if needed), then
+ * call 'bdl_packet_put()'.
+ *
+ * 'bdl_packet_put()' will compute and append a CRC, queue the
+ * packet for transmission, set the state to 'BP_TX_WAIT' and
+ * return.  The packet state will later cycle through 'BP_TX_BUSY'
+ * and eventually become 'BP_IDLE' at which point the packet has
+ * been transmitted and the structure and buffer may be reused.
+ *
+ * If the 'callback' argument of 'bdl_packet_put' was non-NULL,
+ * the callback will be called from 'bdl_get_tx_byte()' with a
+ * pointer to the completed packet when 'bdl_get_tx_bytes()'
+ * consumes the last byte of the packet.  Since the callback is
+ * called in the context of the hardware interface function, it
+ * should be thread-safe or ISR-safe depending on the hardware
+ * layer implementation.
+ *
+ * The transmit process will not change data length or channel
+ * number, so to send repeat packets of the same length to the
+ * same channel the application can just call 'bdl_packet_put()'
+ * each time.
+ *
+ * To receive a packet, call the channel number setter function
+ * (if needed), then call 'bdl_packet_listen()'.
+ *
+ * 'bdl_packet_listen()' adds the packet to the receiver queues,
+ * zeros 'data_len', sets the state to 'BP_RX_WAIT', then returns.
+ * If/when a matching packet arrives, the state will cycle through
+ * 'BP_RX_BUSY' and eventually become 'BP_RX_DONE'.
+ *
+ * If the 'callback' argument of 'bdl_packet_listen' was non-NULL,
+ * the callback will be called from 'bdl_put_rx_byte()' with a
+ * pointer to the newly received packet when 'bdl_put_rx_byte()'
+ * stores the last byte of the packet.  Since the callback is
+ * called in the context of the hardware interface function, it
+ * should be thread-safe or ISR-safe depending on the hardware
+ * layer implementation.
+ *
+ * Once the state is 'BP_RX_DONE', call 'bdl_packet_get()' to
+ * decode the data, check the CRC, and set the state to 'BP_IDLE'.
+ * If a CRC error occurs, 'bdl_packet_get()' will return FALSE and
+ * the error counter will be incremented.
+ * If 'bdl_packet_get()' returns TRUE, the structure and buffer
+ * contain valid data that can be read.  Call the data length
+ * getter to determine how many bytes are available in the buffer.
+ * 
+ * Regardless of the 'bdl_packet_get()' return value, the packet
+ * state will become BP_IDLE, and it can be re-used for transmit
+ * or receive.  The receive process will not change the channel,
+ * so to repeatedly listen for packets on the same channel the
+ * application can just call 'bdl_packet_listen()' each time.
  *
  */
 
-char bdl_string_get_nb(bdl_rx_t *bdl);
-char bdl_string_get_bl(bdl_rx_t *bdl);
-bool bdl_string_can_get(bdl_rx_t *bdl);
+void bdl_packet_put(bdl_tx_t *bdl, bdl_packet_t *p,
+                     void (*callback)(struct bdl_packet_s *p));
 
-bool bdl_string_put_nb(bdl_tx_t *bdl, char c);
-void bdl_string_put_bl(bdl_tx_t *bdl, char c);
-bool bdl_string_can_put(bdl_tx_t *bdl);
+void bdl_packet_listen(bdl_rx_t *bdl, bdl_packet_t *p,
+                     void (*callback)(struct bdl_packet_s *p));
+
+bool bdl_packet_get(bdl_rx_t *bdl, bdl_packet_t *p);
 
 
 /*****************************************************************
@@ -236,104 +357,6 @@ bool bdl_string_can_put(bdl_tx_t *bdl);
 
 uint16_t bdl_crc16_bitwise(uint16_t seed, const uint8_t *data, uint8_t len);
 uint16_t bdl_crc16_lookup(uint16_t seed, const uint8_t *data, uint8_t len);
-
-
-/*****************************************************************
- * Binary Packet Interface - Packet structures:
- *
- * Binary packets are buffered using bdl_packet_t structures.
- * These structures and their associated buffers can be
- * statically declared or dynamically allocated.  The application
- * should declare or allocate a bdl_packet_t struct and a buffer,
- * then call bdl_packet_init_buf() once to associate the buffer
- * with the struct.
- *
- * The caller owns both the bdl_packet_t struct and its associated
- * data buffer for the lifetime of the application.  The bundle
- * machinery temporarily takes ownership during transmit or receive
- * (while state != BP_IDLE) and returns it when the operation
- * completes.  The caller may access the data buffer directly
- * when state == BP_IDLE.
- * 
- * 'bdl_packet_init_buf(*p, *buf, len)' initializes packet 'p'
- * to use buffer 'buf' which must be of length 'len' (2 to 254
- * bytes).  The usable payload is 2 bytes less than 'len', to
- * allow for the 16-bit CRC that is added on transmit.
- *
- * The application should never directly access the packet struct;
- * getters and setters are provided for members that the API might
- * need to access.
- *
- * The application must never access a packet or its data buffer
- * unless 'bdl_packet_get_state()' returns BP_IDLE.
- *
- * bdl_packet_t and bdl_packet_state_t are defined in the "Program
- * Interface" section above to avoid a forward reference.
- *
- */
-
-void bdl_packet_init_buf(bdl_packet_t *p, uint8_t *buf, uint8_t len);
-
-static inline bdl_packet_state_t bdl_packet_get_state(bdl_packet_t *p)
-{ return p->state; }
-
-static inline uint8_t bdl_packet_get_chan(bdl_packet_t *p)
-{ return p->header & 0x7F; }
-
-static inline uint8_t bdl_packet_get_len(bdl_packet_t *p)
-{ return p->data_len; }
-
-void bdl_packet_set_chan(bdl_packet_t *p, uint8_t chan);
-void bdl_packet_set_len(bdl_packet_t *p, uint8_t len);
-
-
- /*****************************************************************
- * Binary Packet Interface - Sending and Receiving:
- *
- * To send a packet, write data into the buffer, call the setter
- * functions for data length and channel number (if needed), then
- * call 'bdl_packet_put()'.
- *
- * 'bdl_packet_put()' will compute and append a CRC, queue the
- * packet for transmission, set the state to 'BP_TX_WAIT' and
- * return.  The packet state will later cycle through 'BP_TX_BUSY'
- * and eventually become 'BP_IDLE' at which point the packet has
- * been transmitted and the structure and buffer may be reused.
- *
- * The transmit process will not change data length or channel
- * number, so to send repeat packets of the same length to the
- * same channel the application can just call 'bdl_packet_put()'
- * each time.
- *
- * To receive a packet, call the channel number setter function
- * (if needed), then call 'bdl_packet_listen()'.
- *
- * 'bdl_packet_listen()' adds the packet to the receiver queues,
- * zeros 'data_len', sets the state to 'BP_RX_WAIT', then returns.
- * If/when a matching packet arrives, the state will cycle through
- * 'BP_RX_BUSY' and eventually become 'BP_RX_DONE'.
- *
- * Once the state is 'BP_RX_DONE', call 'bdl_packet_get()' to
- * decode the data, check the CRC, and set the state to 'BP_IDLE'.
- * If a CRC error occurs, 'bdl_packet_get()' will return FALSE and
- * the error counter will be incremented.
- * If 'bdl_packet_get()' returns TRUE, the structure and buffer
- * contain valid data that can be read.  Call the data length
- * getter to determine how many bytes are available in the buffer.
- * 
- * Regardless of the 'bdl_packet_get()' return value, the packet
- * state will become BP_IDLE, and it can be re-used for transmit
- * or receive.  The receive process will not change the channel,
- * so to repeatedly listen for packets on the same channel the
- * application can just call 'bdl_packet_listen()' each time.
- *
- */
-
-void bdl_packet_put(bdl_tx_t *bdl, bdl_packet_t *p);
-
-void bdl_packet_listen(bdl_rx_t *bdl, bdl_packet_t *p);
-bool bdl_packet_get(bdl_rx_t *bdl, bdl_packet_t *p);
-
 
  /*****************************************************************
  * Receive Error Counter:
@@ -376,16 +399,21 @@ void bdl_reset_error_count(bdl_rx_t *bdl);
  * When bdl_get_tx_byte() returns >255, the hardware driver
  * will typically disable the transmit interrupt.
  *
- * The driver must provide a function to start transmission,
- * typically by enabling a transmit interrupt or similar.
- * This function must be provided during setup; see the
- * Setup section above.
+ * The driver can provide an optional callback at setup that
+ * can be used to re-enable an interrupt or otherwise resume
+ * transmission when data becomes available.  If callback
+ * 'tx_bytes_available' is non-NULL, it will be called from
+ * 'bdl_string_put_xx()' or 'bdl_packet_put()' after the 'put'
+ * function has written byte(s) to the output buffer.
  * 
- * This module will call the callback in thread context when
- * there is data to be sent.  The callback should re-enable
- * the 'transmit buffer empty" interrupt, at which point the
- * transmit interrupt handler will call bdl_get_tx_byte()
- * repeatedly until it again returns a value > 255.
+ * The callback can re-enable a 'transmitter-ready' interrupt,
+ * which in turn would repeatedly invoke 'bdl_get_tx_byte()'
+ * until it again returns a value > 255, at which time the
+ * interrupt would be disabled.  Or, for a polled system it
+ * could simply call 'bdl_get_tx_byte()' repeatedly until it
+ * again returns a value > 255.  In any case, if the callback
+ * blocks, then 'bdl_string_put_xx()' or 'bdl_packet_put()'
+ * will also block.
  */
 
 void bdl_put_rx_byte(bdl_rx_t *bdl, uint8_t data);

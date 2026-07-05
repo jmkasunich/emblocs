@@ -127,6 +127,7 @@ void bdl_packet_init_buf(bdl_packet_t *p, uint8_t *buf, uint8_t len)
     p->cobs_byte = 0;
     p->prev = p;
     p->next = p;
+    p->callback = NULL;
 }
 
 void bdl_packet_set_chan(bdl_packet_t *p, uint8_t chan)
@@ -158,6 +159,7 @@ void bdl_init_rx(bdl_rx_t *bdl, const bdl_rx_config_t *cfg)
     bdl->string_buf_size = cfg->string_buf_size;
     bdl->string_in = 0;
     bdl->string_out = 0;
+    bdl->string_avail = cfg->string_avail;
     bdl->crc16 = cfg->crc16;
     bdl->pkt_current = NULL;
     bdl->pkt_byte_count = 0;
@@ -169,6 +171,7 @@ void bdl_init_rx(bdl_rx_t *bdl, const bdl_rx_config_t *cfg)
     bdl->pkt_root.data = NULL;
     bdl->pkt_root.prev = &(bdl->pkt_root);
     bdl->pkt_root.next = &(bdl->pkt_root);
+    bdl->pkt_root.callback = NULL;
 }
 
 char bdl_string_get_nb(bdl_rx_t *bdl)
@@ -197,13 +200,15 @@ bool bdl_string_can_get(bdl_rx_t *bdl)
     return ( bdl->string_buf[bdl->string_out] != 0 );
 }
 
-void bdl_packet_listen(bdl_rx_t *bdl, bdl_packet_t *p)
+void bdl_packet_listen(bdl_rx_t *bdl, bdl_packet_t *p,
+                        void (*callback)(struct bdl_packet_s *p))
 {
     assert(p->state == BP_IDLE);
     assert(p->data != NULL);
     assert(p->header >= 128);
     p->data_len = 0;
     p->state = BP_RX_WAIT;
+    p->callback = callback;
     // insert at head of list
     // this makes less frequently used buffers drift towards the tail
     // so frequently used ones are found faster
@@ -296,6 +301,9 @@ void bdl_put_rx_byte(bdl_rx_t *bdl, uint8_t data)
                 if ( bdl->string_buf[bdl->string_in] == 0 ) {
                     bdl->string_buf[bdl->string_in] = data;
                     bdl->string_in = NEXT(bdl->string_in, bdl->string_buf_size);
+                    if ( bdl->string_avail != NULL ) {
+                        bdl->string_avail();
+                    }
                 }
             }
             break;
@@ -331,6 +339,9 @@ void bdl_put_rx_byte(bdl_rx_t *bdl, uint8_t data)
                 p->prev = p->next = p;
                 // critical region end
                 p->state = BP_RX_DONE;
+                if ( p->callback != NULL ) {
+                    p->callback(p);
+                }
                 bdl->rx_state = BDL_RX_STRING_MODE;
             } else if ( p->data_len >= p->max_len ) {
                 // packet too long for buffer - discard remainder
@@ -360,13 +371,13 @@ void bdl_init_tx(bdl_tx_t *bdl, const bdl_tx_config_t *cfg)
     assert(cfg->string_buf != NULL);
     assert(cfg->string_buf_size >= 2);
     assert(cfg->crc16 != NULL);
-    assert(cfg->start_tx != NULL);
     bdl->tx_state = BDL_TX_STRING_MODE;
     bdl->string_buf = cfg->string_buf;
     bdl->string_buf_size = cfg->string_buf_size;
     bdl->string_in = 0;
     bdl->string_out = 0;
-    bdl->start_tx = cfg->start_tx;
+    bdl->string_not_full = cfg->string_not_full;
+    bdl->tx_bytes_available = cfg->tx_bytes_available;
     bdl->crc16 = cfg->crc16;
     bdl->pkt_current = NULL;
     bdl->pkt_data_index = 0;
@@ -378,6 +389,7 @@ void bdl_init_tx(bdl_tx_t *bdl, const bdl_tx_config_t *cfg)
     bdl->pkt_root.data = NULL;
     bdl->pkt_root.prev = &(bdl->pkt_root);
     bdl->pkt_root.next = &(bdl->pkt_root);
+    bdl->pkt_root.callback = NULL;
 }
 
 bool bdl_string_put_nb(bdl_tx_t *bdl, char c)
@@ -385,7 +397,9 @@ bool bdl_string_put_nb(bdl_tx_t *bdl, char c)
     if ( bdl->string_buf[bdl->string_in] == 0 ) {
         bdl->string_buf[bdl->string_in] = c & 0x7F;
         bdl->string_in = NEXT(bdl->string_in, bdl->string_buf_size);
-        bdl->start_tx();
+        if ( bdl->tx_bytes_available != NULL ) {
+            bdl->tx_bytes_available();
+        }
         return true;
     }
     return false;
@@ -396,7 +410,9 @@ void bdl_string_put_bl(bdl_tx_t *bdl, char c)
     while ( bdl->string_buf[bdl->string_in] != 0 );
     bdl->string_buf[bdl->string_in] = c & 0x7F;
     bdl->string_in = NEXT(bdl->string_in, bdl->string_buf_size);
-    bdl->start_tx();
+    if ( bdl->tx_bytes_available != NULL ) {
+        bdl->tx_bytes_available();
+    }
 }
 
 bool bdl_string_can_put(bdl_tx_t *bdl)
@@ -404,7 +420,8 @@ bool bdl_string_can_put(bdl_tx_t *bdl)
     return ( bdl->string_buf[bdl->string_in] == 0 );
 }
 
-void bdl_packet_put(bdl_tx_t *bdl, bdl_packet_t *p)
+void bdl_packet_put(bdl_tx_t *bdl, bdl_packet_t *p,
+                     void (*callback)(struct bdl_packet_s *p))
 {
     uint16_t crc;
     uint8_t len;
@@ -415,6 +432,7 @@ void bdl_packet_put(bdl_tx_t *bdl, bdl_packet_t *p)
     assert(p->header >= 128);
     assert(bdl->crc16 != NULL);
     p->state = BP_TX_WAIT;
+    p->callback = callback;
     // compute and append CRC
     len = p->data_len;
     crc = bdl->crc16(_crc_seed(p->header), p->data, len);
@@ -446,7 +464,9 @@ void bdl_packet_put(bdl_tx_t *bdl, bdl_packet_t *p)
     p->prev->next = p;
     bdl->pkt_root.prev = p;
     __enable_irq();
-    bdl->start_tx();
+    if ( bdl->tx_bytes_available != NULL ) {
+        bdl->tx_bytes_available();
+    }
 }
 
 uint32_t bdl_get_tx_byte(bdl_tx_t *bdl)
@@ -475,6 +495,9 @@ uint32_t bdl_get_tx_byte(bdl_tx_t *bdl)
                 // send a character
                 bdl->string_buf[bdl->string_out] = 0;
                 bdl->string_out = NEXT(bdl->string_out, bdl->string_buf_size);
+                if ( bdl->string_not_full != NULL ) {
+                    bdl->string_not_full();
+                }
                 return data;
             } else {
                 // nothing to send
@@ -493,6 +516,9 @@ uint32_t bdl_get_tx_byte(bdl_tx_t *bdl)
             } else {
                 // end of packet, send terminator byte
                 bdl->pkt_current->state = BP_IDLE;
+                if ( bdl->pkt_current->callback != NULL ) {
+                    bdl->pkt_current->callback(bdl->pkt_current);
+                }
                 bdl->tx_state = BDL_TX_STRING_MODE;
                 return 0;
             }
@@ -508,7 +534,58 @@ uint32_t bdl_get_tx_byte(bdl_tx_t *bdl)
 
 // for automated testing only
 #ifdef BDL_BUILD_TESTS
-size_t bdl_test_sizeof_packet(void) { return sizeof(bdl_packet_t); }
-size_t bdl_test_sizeof_rx(void)     { return sizeof(bdl_rx_t); }
-size_t bdl_test_sizeof_tx(void)     { return sizeof(bdl_tx_t); }
+
+#include <string.h> // memcpy()
+
+// need sizes of structs so Python can reserve memory for them
+size_t bdl_test_sizeof_packet(void)    { return sizeof(bdl_packet_t); }
+size_t bdl_test_sizeof_tx(void)        { return sizeof(bdl_tx_t); }
+size_t bdl_test_sizeof_rx(void)        { return sizeof(bdl_rx_t); }
+size_t bdl_test_sizeof_tx_config(void) { return sizeof(bdl_tx_config_t); }
+size_t bdl_test_sizeof_rx_config(void) { return sizeof(bdl_rx_config_t); }
+
+
+// wrappers for inline functions - needed to be callable from Python
+bdl_packet_state_t bdl_test_packet_get_state(bdl_packet_t *p) { return bdl_packet_get_state(p); }
+uint8_t bdl_test_packet_get_chan(bdl_packet_t *p) { return bdl_packet_get_chan(p); }
+uint8_t bdl_test_packet_get_len(bdl_packet_t *p)  { return bdl_packet_get_len(p); }
+
+// copies up to out_buf_size bytes of the packet's decoded payload into
+// out_buf; data_len may be less than out_buf_size, caller should not
+// assume otherwise
+void bdl_test_packet_read_data(bdl_packet_t *p, uint8_t *out_buf, uint8_t out_buf_size)
+{
+    uint8_t n = p->data_len < out_buf_size ? p->data_len : out_buf_size;
+    memcpy(out_buf, p->data, n);
+}
+
+// test-only constructors: fill in a bdl_tx_config_t / bdl_rx_config_t from
+// individual arguments, so the test harness never needs to know either
+// struct's field layout
+void bdl_test_make_tx_config(bdl_tx_config_t *out, char *string_buf, size_t string_buf_size,
+                              uint16_t (*crc16)(uint16_t, const uint8_t *, uint8_t),
+                              void (*tx_bytes_available)(void),
+                              void (*string_not_full)(void))
+{
+    out->string_buf = string_buf;
+    out->string_buf_size = string_buf_size;
+    out->crc16 = crc16;
+    out->tx_bytes_available = tx_bytes_available;
+    out->string_not_full = string_not_full;
+}
+
+void bdl_test_make_rx_config(bdl_rx_config_t *out, char *string_buf, size_t string_buf_size,
+                              uint16_t (*crc16)(uint16_t, const uint8_t *, uint8_t),
+                              void (*string_avail)(void))
+{
+    out->string_buf = string_buf;
+    out->string_buf_size = string_buf_size;
+    out->crc16 = crc16;
+    out->string_avail = string_avail;
+}
+
+// make the CRC seed macro visible to Python
+uint16_t bdl_test_crc_seed(uint8_t header) { return _crc_seed(header); }
+
+
 #endif

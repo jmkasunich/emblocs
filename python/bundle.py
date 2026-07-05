@@ -1,41 +1,53 @@
-# bundle.py
-# Multiplexed string and binary packet data over a shared byte stream.
-#
-# Bundle accepts strings (string channel) and addressed binary packets
-# from callers, then multiplexes them into a single outgoing byte stream.
-# Binary packets take priority over string channel data.
-#
-# Unbundle reads an incoming byte stream, demultiplexes into a string
-# channel queue and per-channel packet queues.  String channel data is
-# delivered to the queue as it arrives.
-#
-# Binary packets include a CRC; packets with bad CRCs are dropped and
-# counted.  The string channel has no error detection.
-#
-# The string channel can transmit only ASCII characters; non-ASCII will
-# result in a UnicodeEncodeError exception.  This is an inherent
-# limitation of the protocol, which uses the fact that ASCII characters
-# are seven bits to manage string/binary transitions.
-#
-# The COBS encoding variant in use limits the binary packet length to
-# 254 bytes.  Packet payloads are limited to 252 bytes to allow for the
-# 2-byte CRC.  Packets that are too large will raise ValueError.
-#
-# There are 128 binary packet channels, numbered 0x00 to 0x7F (0 to 127).
-# Only one listener is allowed per channel.
-#
-# Both classes take an open io.RawIOBase-compatible stream (e.g. a
-# pyserial.Serial) at init time.  Port lifecycle is the caller's
-# responsibility.  Call start() to begin the background thread, stop() to
-# end it.
-#
-# Wire format:
-#   String channel:  bytes 0x00-0x7F, sent as-is
-#   Packet start:    0x80 | (chan & 0x7F)
-#   Packet payload:  COBS-encoded data bytes
-#   Packet end:      0x00
+"""
+bundle.py
 
-import io
+Multiplexed string and binary packet data over a shared byte stream.
+
+Bundle accepts strings (string channel) and addressed binary packets
+from callers, then multiplexes them into a single outgoing byte stream.
+Binary packets take priority over string channel data.
+
+Unbundle reads an incoming byte stream, demultiplexes into a string
+channel and per-channel packets.
+
+String channel data is delivered by a callback, registered by calling
+'listen_string()'.  The string channel has no error detection.
+
+Binary packets include a CRC; packets with bad CRCs are dropped and
+counted.  Good packets are delivered by a callback, registered by
+calling 'listen_packet()' for the channel desired.
+
+The string channel can transmit only ASCII characters; non-ASCII will
+result in a UnicodeEncodeError exception.  This is an inherent
+limitation of the protocol, which uses the fact that ASCII characters
+are seven bits to manage string/binary transitions.
+
+The COBS encoding variant in use limits the binary packet length to
+254 bytes.  Packet payloads are limited to 252 bytes to allow for the
+2-byte CRC.  Packets that are too large will raise ValueError.
+
+There are 128 binary packet channels, numbered 0x00 to 0x7F (0 to 127).
+Only one listener is allowed per channel.
+
+
+Wire format:
+  String channel:  bytes 0x00-0x7F, sent as-is
+  Packet start:    0x80 | (chan & 0x7F)
+  Packet payload:  COBS-encoded data bytes
+  Packet end:      0x00
+
+Wire side API:
+
+For transmit, calling get_tx_bytes() will return either a packet, a
+chunk of string data, or '' if there is nothing to send.  A callback
+can be configured to trigger when bytes are avaiable to send.
+
+For receive, calling put_rx_bytes(data) will split 'data' into string and
+packet channels.  Registered callbacks will be called in put_rx_bytes()
+context for each completed packet and for string channel data in 'data'.
+
+"""
+
 import queue
 import threading
 import binascii
@@ -138,96 +150,88 @@ class Bundle:
     outgoing byte stream.  Binary packets take priority over string data.
     """
 
+    # prevent binary packets from being delayed by long strings - packets
+    # can be injected on chunk boundaries
+    STRING_CHUNK_LEN = 24
+
     def __init__(self) -> None:
-        self._stream:    io.RawIOBase | None = None
-        self._on_error:  Callable[[Exception], None] | None = None
-        self._str_queue  = queue.Queue()     # queue of bytes (encoded str)
-        self._pkt_queue  = queue.Queue()     # queue of (chan, data) tuples
-        self._stop_flag  = False
-        self._tx_event   = threading.Event()
-        self._thread     = None
+        self._str_queue  = queue.Queue()     # queue of bytes (chunked str)
+        self._pkt_queue  = queue.Queue()     # queue of bytes (encoded packet)
+        self._tx_bytes_avail_callback: Callable[[], None] | None = None
 
-    def start(self, stream: io.RawIOBase,
-              on_error: Callable[[Exception], None]) -> None:
+    def set_tx_bytes_available_callback(self, callback: Callable[[], None] | None) -> None:
         """
-        Start the transmit background thread using the given stream.
-        If a stream error occurs, on_error is called with the stream
-        exception, in the context of the Bundle worker thread.  GUI
-        callers or other non-thread safe users of the class must relay
-        the error to their main thread in an appropriate manner.
-        The stream must already be open.
+        Sets a callback which will be invoked in send_string() or send_packet()
+        context when either of those functions has placed data in a queue for
+        transmission.  Can be used to trigger the actual wire transmission,
+        either by directly calling get_tx_bytes() until it returns '' (for a
+        single-threaded system), or by setting an event to wake up a separate
+        transmit thread which will call get_tx_bytes() until it returns ''.
+        Exceptions occurring within the callback will propagate back through
+        send_string() or send_packet() to the original caller.  If calling
+        send_string() and/or send_packet() from multiple threads, then the
+        callback must be thread-safe.
+        Call with None to disable the callback.
         """
-        if self._thread is not None:
-            raise RuntimeError(f"start() called when already running")
-        self._stream    = stream
-        self._on_error  = on_error
-        self._stop_flag = False
-        self._tx_event.clear()
-        self._thread = threading.Thread(target=self._tx_worker, daemon=True)
-        self._thread.start()
+        self._tx_bytes_avail_callback = callback
 
-    def stop(self) -> None:
+    def send_string(self, data: str) -> None:
         """
-        Signal the transmit thread to stop and wait for it to finish.
-        Clears on_error so the callback does not fire during deliberate shutdown.
-        Does not close the stream; that is the caller's responsibility.
-        """
-        self._on_error  = None
-        self._stop_flag = True
-        self._tx_event.set()
-        if self._thread is not None and self._thread.is_alive():
-            self._thread.join()
-        self._thread = None
-        self._stream = None
-
-    def write_ascii(self, data: str) -> None:
-        """
-        Queue a string for transmission on the string channel.
+        Queue a string for transmission on the string channel.  The string
+        is split into STRING_CHUNK_LEN-sized chunks before queueing, so a
+        packet queued shortly after a long string is not stuck behind the
+        whole string in get_tx_bytes().
         Raises UnicodeEncodeError if data contains non-ASCII characters.
+        If the tx_bytes_available() callback is set, it will be called
+        before send_string returns; if that function blocks, then
+        send_string() will also block.  If calling send_string() from
+        multiple threads, then the callback must be thread-safe.  Note
+        that calling send_string() from multiple threads is not advised,
+        chunks of strings from different threads may be intermingled.
         """
-        self._str_queue.put(data.encode('ascii'))
-        self._tx_event.set()
+        encoded = data.encode('ascii')
+        for i in range(0, len(encoded), self.STRING_CHUNK_LEN):
+            self._str_queue.put(encoded[i:i + self.STRING_CHUNK_LEN])
+        if self._tx_bytes_avail_callback is not None:
+            self._tx_bytes_avail_callback()
 
     def send_packet(self, chan: int, data: bytes) -> None:
         """
-        Queue a binary packet for transmission on the given channel.
-        Maximum data length is 252 bytes.
+        Prepare and queue a binary packet for transmission on the given
+        channel.  Maximum data length is 252 bytes.
         Raises ValueError on bad channel number or if data is too long.
+        If the tx_bytes_available() callback is set, it will be called
+        before send_packet returns; if that function blocks, then
+        send_packet() will also block.  If calling send_packet() from
+        multiple threads, then the callback must be thread-safe.
         """
         if chan < 0 or chan > 127:
             raise ValueError(f"channel number {chan} must be 0-127")
         if len(data) > 252:
             raise ValueError(f"packet data length {len(data)} exceeds 252")
         data = _crc16_append(_crc_seed(chan), data)
-        self._pkt_queue.put((chan, data))
-        self._tx_event.set()
+        header = bytes([0x80 | (chan & 0x7F)])
+        self._pkt_queue.put(header + _cobs_encode(data) + b'\x00')
+        if self._tx_bytes_avail_callback is not None:
+            self._tx_bytes_avail_callback()
 
-    def _tx_worker(self) -> None:
+    def get_tx_bytes(self) -> bytes:
+        """
+        Return exactly one item ready for transmission: one fully framed
+        packet if any is queued, otherwise one string chunk, otherwise b''
+        if nothing is queued. Packets always take priority. Call repeatedly
+        until it returns b'' -- e.g. in a loop, or once per wire-ready
+        notification.
+        """
         try:
-            while True:
-                self._tx_event.wait()
-                self._tx_event.clear()
-                if self._stop_flag:
-                    return
-                # drain packet queue first (higher priority)
-                while True:
-                    try:
-                        chan, data = self._pkt_queue.get_nowait()
-                        header = bytes([0x80 | (chan & 0x7F)])
-                        encoded = _cobs_encode(data)
-                        self._stream.write(header + encoded + b'\x00')
-                    except queue.Empty:
-                        break
-                # then drain string queue
-                while True:
-                    try:
-                        data = self._str_queue.get_nowait()
-                        self._stream.write(data)
-                    except queue.Empty:
-                        break
-        except Exception as e:
-            if self._on_error is not None:
-                self._on_error(e)
+            return self._pkt_queue.get_nowait()
+        except queue.Empty:
+            pass
+        try:
+            return self._str_queue.get_nowait()
+        except queue.Empty:
+            pass
+        return b''
 
 # ---------------------------------------------------------------------------
 # Unbundle - incoming demultiplexer
@@ -235,133 +239,81 @@ class Bundle:
 
 class Unbundle:
     """
-    Demultiplexes an incoming byte stream into a string channel queue and
-    per-channel binary packet queues.
+    Demultiplexes an incoming byte stream into a string channel and
+    per-channel binary packets.
 
-    String channel data is delivered to the string queue as it arrives.
+    String channel data is delivered via callback, which is registered
+    by calling listen_string().
 
-    Binary packet channels are registered by calling listen().
-    Packets are delivered as bytes objects containing the decoded payload
-    (CRC bytes removed).  Packets with bad CRCs or other errors are
-    silently dropped and counted in error_count.
+    Binary packet channels are registered by calling listen_packet().
+    Packets are delivered via callback with the channel number and
+    the decoded payload (CRC bytes removed). Packets with bad CRCs
+    or other errors are silently dropped and counted in error_count.
     """
 
     _RX_BUF_SIZE = 30
 
     def __init__(self) -> None:
-        self._stream:       io.RawIOBase | None = None
-        self._on_error:     Callable[[Exception], None] | None = None
-        self._thread        = None
-        self._stop_flag     = False
-        self._str_queue     = None          # set by listen_str()
-        self._channels:     dict[int, tuple[queue.Queue | None, Callable | None]] = {}
-        self._channels_lock = threading.Lock()
-        self.error_count    = 0
-
-    def start(self, stream: io.RawIOBase,
-            on_error: Callable[[Exception], None]) -> None:
-        """
-        Start the receive background thread using the given stream.
-        The stream must implement readinto() and must not block indefinitely
-        when no data is available.
-        For pyserial.Serial, set a read timeout before calling start(). A
-        value of 0.01 to 0.1 seconds is recommended but other values
-        including zero will work.  None is not permitted.  Longer timeouts
-        will increase latency when traffic is light and doesn't fill the
-        receive buffer (_RX_BUF_SIZE).
-        File objects satisfy this requirement naturally.
-        Compatibility with other stream types (network sockets, asyncio
-        streams, pipes) has not been verified.
-        on_error is called with the stream exception if a stream error occurs,
-        in the context of the Unbundle worker thread.  GUI callers or other
-        non-thread-safe users of the class must relay the error to their main
-        thread in an appropriate manner.
-        Does not close the stream on error or stop; that is the caller's
-        responsibility.
-        """
-        if self._thread is not None:
-            raise RuntimeError(f"start() called when already running")
-        self._stream    = stream
-        self._on_error  = on_error
-        self._stop_flag = False
-        self._thread    = threading.Thread(target=self._rx_worker, daemon=True)
-        self._thread.start()
-
-    def stop(self) -> None:
-        """
-        Signal the receive thread to stop and wait for it to finish.
-        Clears on_error so the callback does not fire during deliberate
-        shutdown.  The thread will exit when the stream times out or
-        when the next data arrives, whichever comes first.
-        Does not close the stream; that is the caller's responsibility.
-        """
-        self._on_error  = None
-        self._stop_flag = True
-        if self._thread is not None and self._thread.is_alive():
-            self._thread.join()
-        self._thread = None
-        self._stream = None
+        self._string_callback: Callable[[bytes], None] | None = None
+        self._channels:        dict[int, Callable[[int, bytes], None]] = {}
+        self._channels_lock    = threading.Lock()
+        self.error_count       = 0
+        # RX state machine state, persists across put_rx_bytes() calls
+        self._state      = 'string'       # 'string' or 'packet'
+        self._pkt_buf    = bytearray()
+        self._pkt_chan   = 0
 
     def reset_error_count(self) -> None:
         """Reset error counter to zero."""
         self.error_count = 0
 
-    def listen_str(self, q: queue.Queue) -> None:
+    def listen_string(self, callback: Callable[[bytes], None]) -> None:
         """
-        Register a queue to receive string channel data.
-        Raises ValueError if the string channel already has a
-        listener queue.
+        Register a callback to receive string channel data.
+        Raises ValueError if callback is None or the string channel
+        already has a listener.
         """
-        if self._str_queue is not None:
-            raise ValueError("string channel already has a listener; call unlisten_str() first")
-        self._str_queue = q
+        if callback is None:
+            raise ValueError("callback must not be None")
+        if self._string_callback is not None:
+            raise ValueError("string channel already has a listener; call unlisten_string() first")
+        self._string_callback = callback
 
-    def unlisten_str(self) -> None:
-        """Unregister the queue for the string channel."""
-        self._str_queue = None
+    def unlisten_string(self) -> None:
+        """Unregister the callback for the string channel."""
+        self._string_callback = None
 
-    def listen(self, chan: int,
-            q: queue.Queue | None = None,
-            callback: Callable[[bytes], None] | None = None) -> None:
+    def listen_packet(self, chan: int, callback: Callable[[int, bytes], None]) -> None:
         """
-        Register a queue or callback for packets on the given channel.
-        Exactly one of q or callback must be provided.
-        If q is provided, packets are delivered via q.put(payload).
-        If callback is provided, it is called directly in _rx_worker's
-        thread context and must return quickly.  Exceptions in the
-        callback will propagate up and result in a call to on_error.
-        Raises ValueError on a bad channel number, if the channel
-        already has a listener, or neither/both of q and callback
-        are provided.
+        Register a callback for packets on the given channel. Called as
+        callback(chan, payload) once a packet is fully assembled and its
+        CRC verified. Called from within put_rx_bytes() and must return
+        quickly; exceptions propagate up through put_rx_bytes().
+        Raises ValueError on a bad channel number, if callback is None,
+        or if the channel already has a listener.
         """
         if chan < 0 or chan > 127:
             raise ValueError(f"channel number {chan} must be 0-127")
-        if (q is None) == (callback is None):
-            raise ValueError("exactly one of q or callback must be provided")
+        if callback is None:
+            raise ValueError("callback must not be None")
         with self._channels_lock:
             if chan in self._channels:
-                raise ValueError(f"channel {chan} already has a listener; call unlisten() first")
-            self._channels[chan] = (q, callback)
+                raise ValueError(f"channel {chan} already has a listener; call unlisten_packet() first")
+            self._channels[chan] = callback
 
-    def unlisten(self, chan: int) -> None:
-        """Unregister the queue/callback for the given channel."""
+    def unlisten_packet(self, chan: int) -> None:
+        """Unregister the callback for the given channel."""
         with self._channels_lock:
             self._channels.pop(chan, None)
 
-    def _queue_str(self, data: bytes | bytearray | memoryview) -> None:
-        """Deliver string data directly to the string queue if a listener is registered."""
-        if self._str_queue is not None:
-            self._str_queue.put(bytes(data).decode('ascii', errors='replace'))
-
     def _deliver_packet(self, chan: int, encoded: bytes) -> None:
-        """COBS-decode, CRC-check, and deliver packet to registered queue."""
+        """COBS-decode, CRC-check, and deliver packet to registered callback."""
         with self._channels_lock:
-            entry = self._channels.get(chan)
-        if entry is None:
+            callback = self._channels.get(chan)
+        if callback is None:
             # unregistered channel - discard
             self.error_count += 1
             return
-        q, callback = entry
         try:
             payload = _cobs_decode(encoded)
         except Exception:
@@ -371,71 +323,72 @@ class Unbundle:
         if not ok:
             self.error_count += 1
             return
-        if callback is not None:
-            callback(payload)
-        else:
-            q.put(payload)
+        callback(chan, payload)
 
-    def _rx_worker(self) -> None:
-        """Background thread: read chunks, demultiplex into string and packet channels."""
-        rx_buf   = bytearray(self._RX_BUF_SIZE)
-        pkt_buf = bytearray(256)  # preallocate for largest packet
-        pkt_buf.clear()
-        pkt_chan = 0
-        state    = 'string'     # 'string' or 'packet'
-        try:
-            while not self._stop_flag:
-                data_len = self._stream.readinto(rx_buf)
-                bp = 0
-                while bp < data_len:
-                    if state == 'string':
-                        if rx_buf[bp] >= 0x80:
-                            # packet start immediately - no regex needed
-                            # and no string data to save
-                            index = bp
-                            char  = rx_buf[bp]
-                        else:
-                            m = _SPECIAL.search(rx_buf, bp, data_len)
-                            if m is None:
-                                # no special byte
-                                # everything after bp is string data
-                                self._queue_str(rx_buf[bp:data_len])
-                                bp = data_len
-                                continue
-                            # packet start detected
-                            # everything before index is string data
-                            index = m.start()
-                            char  = rx_buf[index]
-                            self._queue_str(rx_buf[bp:index])
-                        # packet start found at index
-                        pkt_chan = char & 0x7F
-                        pkt_buf.clear()
-                        bp = index + 1
-                        state = 'packet'
+    def put_rx_bytes(self, data: bytes) -> None:
+        """
+        Process a chunk of received bytes, demultiplexing into string data
+        and binary packets and dispatching to registered listeners.
+
+        Packet callback(s) fires once per fully assembled packet, in the
+        order packets complete. The string callback fires just before
+        put_rx_bytes() returns, only if 'data' contained string channel
+        bytes (all of which are concatenated together for the callback).
+
+        Not thread-safe against concurrent calls to itself -- calls must be
+        serialized by the caller. Safe to call concurrently with
+        listen_packet()/unlisten_packet() from a different thread.
+        """
+        bp = 0
+        data_len = len(data)
+        string_out = bytearray()
+        while bp < data_len:
+            if self._state == 'string':
+                if data[bp] >= 0x80:
+                    # packet start immediately - no regex needed
+                    # and no string data to save
+                    index = bp
+                    char  = data[bp]
+                else:
+                    m = _SPECIAL.search(data, bp, data_len)
+                    if m is None:
+                        # no special byte
+                        # everything after bp is string data
+                        string_out.extend(data[bp:data_len])
+                        bp = data_len
+                        continue
+                    # packet start detected
+                    # everything before index is string data
+                    index = m.start()
+                    char  = data[index]
+                    string_out.extend(data[bp:index])
+                # packet start found at index
+                self._pkt_chan = char & 0x7F
+                self._pkt_buf.clear()
+                bp = index + 1
+                self._state = 'packet'
+            else:
+                # state == 'packet': scan for packet terminator (0x00)
+                index = data.find(0, bp, data_len)
+                if index == -1:
+                    # no terminator yet; accumulate packet data
+                    self._pkt_buf.extend(data[bp:data_len])
+                    if len(self._pkt_buf) > 255:
+                        self.error_count += 1
+                        self._pkt_buf.clear()
+                        self._state = 'string'
+                    bp = data_len
+                else:
+                    # terminator found; deliver packet
+                    self._pkt_buf.extend(data[bp:index])
+                    bp = index + 1
+                    if len(self._pkt_buf) > 255:
+                        self.error_count += 1
                     else:
-                        # state == 'packet': scan for packet terminator (0x00)
-                        index = rx_buf.find(0, bp, data_len)
-                        if index == -1:
-                            # no terminator yet; accumulate packet data
-                            pkt_buf.extend(rx_buf[bp:data_len])
-                            if len(pkt_buf) > 255:
-                                self.error_count += 1
-                                pkt_buf.clear()
-                                state = 'string'
-                            bp = data_len
-                        else:
-                            # terminator found; deliver packet
-                            pkt_buf.extend(rx_buf[bp:index])
-                            bp = index + 1
-                            if len(pkt_buf) > 255:
-                                self.error_count += 1
-                            else:
-                                self._deliver_packet(pkt_chan, bytes(pkt_buf))
-                            pkt_buf.clear()
-                            # remainder of rx_buf might be string data
-                            # next pass of loop will handle it
-                            state = 'string'
-        except Exception as e:
-            if self._on_error is not None:
-                self._on_error(e)
-
+                        self._deliver_packet(self._pkt_chan, bytes(self._pkt_buf))
+                    self._pkt_buf.clear()
+                    # remainder of rx_buf might be string data
+                    # next pass of loop will handle it
+                    self._state = 'string'
+        if string_out and self._string_callback is not None:
+            self._string_callback(bytes(string_out))
