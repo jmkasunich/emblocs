@@ -267,7 +267,7 @@ class Unbundle:
         """Reset error counter to zero."""
         self.error_count = 0
 
-    def listen_string(self, callback: Callable[[bytes], None]) -> None:
+    def listen_string(self, callback: Callable[[str], None]) -> None:
         """
         Register a callback to receive string channel data.
         Raises ValueError if callback is None or the string channel
@@ -391,4 +391,4 @@ class Unbundle:
                     # next pass of loop will handle it
                     self._state = 'string'
         if string_out and self._string_callback is not None:
-            self._string_callback(bytes(string_out))
+            self._string_callback(bytes(string_out).decode('ascii'))
