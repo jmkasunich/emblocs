@@ -21,9 +21,8 @@ writing tests:
     dangling-pointer bug. Keep it in a local variable for the test's
     duration.
   - Any Python callback passed to C must also be kept alive the
-    same way. BundleCAPI provides noop_void_callback, a single shared
-    no-op kept alive for the whole session, for the common case of
-    tests that don't need the callback to do anything.
+    same way. See register_callback() in conftest.py for one way
+    to address that.
 """
 
 import ctypes
@@ -54,8 +53,6 @@ class BundleCAPI:
         self.sizeof_rx        = lib.bdl_test_sizeof_rx()
         self.sizeof_tx_config = lib.bdl_test_sizeof_tx_config()
         self.sizeof_rx_config = lib.bdl_test_sizeof_rx_config()
-        # kept alive for the whole session; see module docstring
-        self._noop_funct = VOID_VOID_FUNC(lambda: None)
 
     def _bind(self):
         lib = self._lib
@@ -73,6 +70,11 @@ class BundleCAPI:
         lib.bdl_string_get_nb.restype  = ctypes.c_char
         lib.bdl_string_put_nb.argtypes = [ctypes.c_void_p, ctypes.c_char]
         lib.bdl_string_put_nb.restype  = ctypes.c_bool
+
+        lib.bdl_string_can_get.argtypes = [ctypes.c_void_p]
+        lib.bdl_string_can_get.restype  = ctypes.c_bool
+        lib.bdl_string_can_put.argtypes = [ctypes.c_void_p]
+        lib.bdl_string_can_put.restype  = ctypes.c_bool
 
         lib.bdl_packet_init_buf.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint8), ctypes.c_uint8]
         lib.bdl_packet_init_buf.restype  = None
@@ -149,11 +151,6 @@ class BundleCAPI:
         return cfg
 
     @property
-    def noop_void_callback(self):
-        """Shared no-op callback, kept alive for the whole session."""
-        return self._noop_funct
-
-    @property
     def crc16_lookup_ptr(self):
         """Real bdl_crc16_lookup, cast to a function pointer for use in a config."""
         return ctypes.cast(self._lib.bdl_crc16_lookup, CRC16_FUNC)
@@ -177,6 +174,12 @@ class BundleCAPI:
 
     def string_put_nb(self, tx, byte: int) -> bool:
         return self._lib.bdl_string_put_nb(tx, bytes([byte]))
+
+    def string_can_get(self, tx) -> bool:
+        return self._lib.bdl_string_can_get(tx)
+
+    def string_can_put(self, tx) -> bool:
+        return self._lib.bdl_string_can_put(tx)
 
     def packet_init_buf(self, pkt, buf: ctypes.Array, length: int) -> None:
         self._lib.bdl_packet_init_buf(pkt, ctypes.cast(buf, ctypes.POINTER(ctypes.c_uint8)), length)

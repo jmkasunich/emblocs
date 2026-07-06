@@ -2,8 +2,9 @@
 from __future__ import annotations
 import pytest
 import ctypes
-import io
-import time
+import random
+import binascii
+from conftest import register_callback
 from bundle import Bundle, Unbundle
 from bundle import _crc_seed as crc_seed
 from bundle_capi import PACKET_FUNC, VOID_VOID_FUNC, BdlPacketState
@@ -67,6 +68,172 @@ def python_rx():
 
 
 #-----------------------------------------------------------------------
+# Wrappers for some C API objects
+#-----------------------------------------------------------------------
+
+class CPacket:
+    """
+    Wrapper for bdl_packet_t structure.
+    'pool' is optional but recommended; declare an empty dict at the
+    start of a test, then pass it when creating a packet.  This serves
+    two purposes:
+      1) A packet address passed to a callback can be converted to
+         the corresponding CPacket object by obj = pool[address]
+      2) Packets in the pool will not be garbage collected until
+         the pool is destroyed at the end of the tests - solves
+         the lifetime problem.
+    """
+    def __init__(self, api, bufsize: int = 254, chan: int = None,
+                  data: bytes = None, pool: dict | None = None):
+        self.api = api
+        self.pkt = self.api.new_packet()
+        self.address = ctypes.addressof(self.pkt)
+        assert bufsize >= 2 and bufsize <= 254
+        self.bufsize = bufsize
+        self.buf = (ctypes.c_uint8 * bufsize)()
+        self.api.packet_init_buf(self.pkt, self.buf, bufsize)
+        if chan is not None:
+            self.set_chan(chan)
+        if data is not None:
+            self.write_data(data)
+        if pool is not None:
+            pool[self.address] = self
+
+    @property
+    def state(self):
+        return self.api.packet_get_state(self.pkt)
+
+    @property
+    def length(self):
+        return self.api.packet_get_len(self.pkt)
+
+    @property
+    def chan(self):
+        return self.api.packet_get_chan(self.pkt)
+
+    def set_length(self, length: int):
+        assert length >= 0 and length <= self.bufsize - 2
+        self.api.packet_set_len(self.pkt, length)
+
+    def set_chan(self, chan: int):
+        assert chan >= 0 and chan < 0x80
+        self.api.packet_set_chan(self.pkt, chan)
+
+    def write_data(self, data: bytes):
+        assert len(data) <= self.bufsize - 2
+        for i, v in enumerate(data):
+            self.buf[i] = v
+        self.set_length(len(data))
+
+    def read_data(self) -> bytes:
+        return self.api.packet_read_data(self.pkt)
+
+class CTx:
+    """
+    Wrapper for bdl_tx_t structure.  Creates the struct and the
+    required string buffer (of the specified size).  Calls
+    bdl_init_tx() with the specified callbacks.
+    'pool' is optional but recommended; declare an empty dict at the
+    start of a test, then pass it when creating an object.  This serves
+    two purposes:
+      1) An object address passed to a callback can be converted to
+         the corresponding CTx object by obj = pool[address]
+      2) Objects in the pool will not be garbage collected until
+         the pool is destroyed at the end of the tests - solves
+         the lifetime problem.
+    """
+    def __init__(self, api, string_bufsize: int, crc_funct=None,
+                  string_not_full_funct=None, tx_bytes_available_funct=None,
+                  pool: dict | None = None):
+        self.api = api
+        self.tx = self.api.new_tx()
+        self.address = ctypes.addressof(self.tx)
+        assert string_bufsize > 0
+        self.strbufsize = string_bufsize
+        self.strbuf = ctypes.create_string_buffer(string_bufsize)
+        self.crc16 = crc_funct if crc_funct is not None else api.crc16_lookup_ptr
+        self.snf_cb = register_callback(VOID_VOID_FUNC, string_not_full_funct, pool)
+        self.tba_cb = register_callback(VOID_VOID_FUNC, tx_bytes_available_funct, pool)
+        self.config = self.api.make_tx_config(self.strbuf, self.strbufsize, self.crc16,
+                                              self.tba_cb, self.snf_cb)
+        self.api.init_tx(self.tx, self.config)
+        if pool is not None:
+            pool[self.address] = self
+
+    def string_put_nb(self, byte: int) -> bool:
+        return self.api.string_put_nb(self.tx, byte)
+
+    def string_can_put(self) -> bool:
+        return self.api.string_can_put(self.tx)
+
+    def packet_put(self, packet: CPacket, registered_callback=None):
+        assert packet is not None
+        self.api.packet_put(self.tx, packet.pkt, registered_callback)
+
+    def get_tx_byte(self) -> int:
+        return self.api.get_tx_byte(self.tx)
+
+    def get_tx_bytes(self) -> bytes:
+        out = bytearray()
+        while 1:
+            b = self.api.get_tx_byte(self.tx)
+            if b > 255:
+                return bytes(out)
+            out.append(b)
+
+class CRx:
+    """
+    Wrapper for bdl_rx_t structure.  Creates the struct and the
+    required string buffer (of the specified size).  Calls
+    bdl_init_tx() with the specified callbacks.
+    'pool' is optional but recommended; declare an empty dict at the
+    start of a test, then pass it when creating an object.  This serves
+    two purposes:
+      1) An object address passed to a callback can be converted to
+         the corresponding CRx object by obj = pool[address]
+      2) Objects in the pool will not be garbage collected until
+         the pool is destroyed at the end of the tests - solves
+         the lifetime problem.
+    """
+    def __init__(self, api, string_bufsize: int, crc_funct=None,
+                  string_avail_funct=None, pool: dict | None = None):
+        self.api = api
+        self.rx = self.api.new_rx()
+        self.address = ctypes.addressof(self.rx)
+        assert string_bufsize > 0
+        self.strbufsize = string_bufsize
+        self.strbuf = ctypes.create_string_buffer(string_bufsize)
+        self.crc16 = crc_funct if crc_funct is not None else api.crc16_lookup_ptr
+        self.sa_cb = register_callback(VOID_VOID_FUNC, string_avail_funct, pool)
+        self.config = self.api.make_rx_config(self.strbuf, self.strbufsize,
+                                               self.crc16, self.sa_cb)
+        self.api.init_rx(self.rx, self.config)
+        if pool is not None:
+            pool[self.address] = self
+
+    def string_get_nb(self) -> int:
+        return self.api.string_get_nb(self.rx)
+
+    def string_can_get(self) -> bool:
+        return self.api.string_can_get(self.rx)
+
+    def packet_listen(self, packet: CPacket, registered_callback=None):
+        assert packet is not None
+        self.api.packet_listen(self.rx, packet.pkt, registered_callback)
+
+    def packet_get(self, packet: CPacket) -> bool:
+        assert packet is not None
+        return self.api.packet_get(self.rx, packet.pkt)
+
+    def put_rx_byte(self, byte: int):
+        self.api.put_rx_byte(self.rx, byte)
+
+    def put_rx_bytes(self, data: bytes):
+        for b in data:
+            self.api.put_rx_byte(self.rx, b)
+
+
+#-----------------------------------------------------------------------
 # Low-level tests of seed generation and CRC computation
 #-----------------------------------------------------------------------
 
@@ -89,7 +256,6 @@ def test_crc_seed_matches_python(bundle_api):
         )
         seeds[seed_py] = chan
 
-import binascii
 
 CRC_VECTORS = [
     # (seed, expected_crc, name) -- two independently published CRC-16
@@ -113,8 +279,6 @@ def test_crc16_bitwise_against_published_vectors(bundle_api, seed, expected):
 @pytest.mark.parametrize("seed, expected", CRC_VECTORS)
 def test_crc16_lookup_against_published_vectors(bundle_api, seed, expected):
     assert bundle_api.crc16_lookup(seed, b"123456789") == expected
-
-import random
 
 def test_crc16_implementations_agree_across_all_channel_seeds(bundle_api):
     """
@@ -152,7 +316,7 @@ def test_crc16_implementations_agree_random_data(bundle_api):
     get touched depends on the running CRC state, not just the raw
     input bytes); this exercises a much larger fraction, at realistic
     packet lengths. Fixed, seeded RNG for reproducibility. One seed;
-    seed; see test_crc16_implementations_agree_across_all_channel_seeds
+    see test_crc16_implementations_agree_across_all_channel_seeds
     for seed variation.
     """
     rng = random.Random(1234)
@@ -167,6 +331,70 @@ def test_crc16_implementations_agree_random_data(bundle_api):
             f"mismatch at length={length}: "
             f"bitwise={bw:#06x} lookup={lk:#06x} python={py:#06x}"
         )
+
+
+#-----------------------------------------------------------------------
+# Basic Transmit Tests
+#-----------------------------------------------------------------------
+
+def test_c_string_transmit(bundle_api, c_object_pool):
+    api = bundle_api
+    tx = CTx(api, 100, pool=c_object_pool)
+    test_string = "this is a nice long test string that C won't split into chunks"
+    test_bytes = test_string.encode('ascii')
+    for b in test_bytes:
+        assert tx.string_put_nb(b)
+    wire_bytes = tx.get_tx_bytes()
+    assert wire_bytes == test_bytes
+
+def test_py_string_transmit():
+    tx = Bundle()
+    test_string = "this is a nice long test string that should get split into chunks"
+    test_bytes = test_string.encode('ascii')
+    tx.send_string(test_string)
+    wire_bytes = bytearray()
+    while 1:
+        b = tx.get_tx_bytes()
+        if b == b'':
+            break
+        wire_bytes.extend(b)
+    wire_bytes = bytes(wire_bytes)
+    assert wire_bytes == test_bytes
+
+
+#-----------------------------------------------------------------------
+# Basic Receive Tests
+#-----------------------------------------------------------------------
+
+
+def test_c_string_receive(bundle_api, c_object_pool):
+    api = bundle_api
+    rx = CRx(api, 100, pool=c_object_pool)
+    test_string = "this is a test string"
+    wire_bytes = test_string.encode('ascii')
+    for b in wire_bytes:
+        rx.put_rx_byte(b)
+    received_bytes = bytearray()
+    while 1:
+        b = rx.string_get_nb();
+        if b == 0:
+            break
+        received_bytes.append(b)
+    received_string = received_bytes.decode('ascii')
+    assert received_string == test_string
+
+def test_py_string_receive():
+    received_strings = []
+    def string_callback(string: str):
+        received_strings.append(string)
+    rx = Unbundle()
+    test_string = "this is a test string"
+    wire_bytes = test_string.encode('ascii')
+    rx.listen_string(string_callback)
+    rx.put_rx_bytes(wire_bytes)
+    received_string = ''.join(received_strings)
+    assert received_string == test_string
+
 
 
 #-----------------------------------------------------------------------
