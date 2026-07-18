@@ -5,7 +5,7 @@ import ctypes
 import random
 import binascii
 from conftest import register_callback
-from bundle import Bundle, Unbundle
+from bundle import Bundle, Unbundle, _cobs_encode, _cobs_decode
 from bundle import _crc_seed as crc_seed
 from bundle_capi import PACKET_FUNC, VOID_VOID_FUNC, BdlPacketState
 
@@ -334,6 +334,50 @@ def test_crc16_implementations_agree_random_data(bundle_api):
 
 
 #-----------------------------------------------------------------------
+# Low-level tests of COBS encode/decode
+#  this tests the Python implementation
+#  the C implementation is inlined and not directly testable
+#  but is validated by C->Python and Python->C packet testing later
+#-----------------------------------------------------------------------
+
+COBS_VECTORS = [
+    pytest.param(bytes.fromhex("00"), bytes.fromhex("0101"), id="single_zero"),
+    pytest.param(bytes.fromhex("03"), bytes.fromhex("0203"), id="single_nonzero"),
+    pytest.param(bytes.fromhex("0000"), bytes.fromhex("010101"), id="two_zeros"),
+    pytest.param(bytes.fromhex("0204"), bytes.fromhex("030204"), id="two_nonzeros"),
+    pytest.param(bytes.fromhex("0005"), bytes.fromhex("010205"), id="zero_nonzero"),
+    pytest.param(bytes.fromhex("0500"), bytes.fromhex("020501"), id="nonzero_zero"),
+    pytest.param(bytes.fromhex("001100"), bytes.fromhex("01021101"), id="zero_data_zero"),
+    pytest.param(bytes.fromhex("00223344"), bytes.fromhex("0104223344"), id="leading_zero"),
+    pytest.param(bytes.fromhex("11220033"), bytes.fromhex("0311220233"), id="interior_zero"),
+    pytest.param(bytes.fromhex("11223344"), bytes.fromhex("0511223344"), id="no_zeros"),
+    pytest.param(bytes.fromhex("11223300"), bytes.fromhex("0411223301"), id="trailing_zero"),
+    pytest.param(bytes(range(1, 255)), bytes([0xFF]) + bytes(range(1, 255)), id="max_length_no_zeros"),
+    pytest.param(bytes(range(1, 100))+bytes([0x00])+bytes(range(101, 255)),
+                 bytes([100])+bytes(range(1, 100))+bytes([155])+bytes(range(101,255)), id="max_length_with_zero"),
+    pytest.param(bytes([0x00] * 254), bytes([0x01] * 255), id="max_length_all_zeros"),
+]
+
+@pytest.mark.parametrize("data, expected", COBS_VECTORS)
+def test_cobs_encode_matches_published_vectors(data, expected):
+    assert _cobs_encode(data) == expected
+
+@pytest.mark.parametrize("data, expected", COBS_VECTORS)
+def test_cobs_decode_matches_published_vectors(data, expected):
+    assert _cobs_decode(expected) == data
+
+#-----------------------------------------------------------------------
+# Helper function to make a packet in wire format
+#-----------------------------------------------------------------------
+
+def make_packet_wire_bytes(payload: bytes, chan: int) -> bytes:
+    crc = binascii.crc_hqx(payload, crc_seed(chan))
+    crcbytes = bytes([crc & 0xFF, (crc >> 8) & 0xFF])
+    header = 0x80 + chan
+    return bytes([header]) + _cobs_encode(payload + crcbytes) + bytes([0x00])
+
+
+#-----------------------------------------------------------------------
 # Basic Transmit Tests
 #-----------------------------------------------------------------------
 
@@ -360,6 +404,39 @@ def test_py_string_transmit():
         wire_bytes.extend(b)
     wire_bytes = bytes(wire_bytes)
     assert wire_bytes == test_bytes
+
+def test_c_packet_transmit(bundle_api, c_object_pool):
+    api = bundle_api
+    pkt = CPacket(api, bufsize=12, pool=c_object_pool)
+    chan = 5
+    payload = bytes([0x11, 0x00, 0xFF, 0x32, 0x00, 0x33])
+    pkt.set_chan(chan)
+    pkt.write_data(payload)
+    expected = make_packet_wire_bytes(payload, chan)
+    tx = CTx(api, 100, pool=c_object_pool)
+    tx.packet_put(pkt)
+    wire_bytes = tx.get_tx_bytes()
+    assert len(wire_bytes) == len(payload) + 5 # header, COBS byte, 2 CRC, terminator
+    assert 0x00 not in wire_bytes[0:-1]  # validate COBS encoding
+    assert wire_bytes == expected
+
+def test_py_packet_transmit():
+    chan = 5
+    payload = bytes([0x11, 0x00, 0xFF, 0x32, 0x00, 0x33])
+    expected = make_packet_wire_bytes(payload, chan)
+
+    tx = Bundle()
+    tx.send_packet(chan, payload)
+    wire_bytes = bytearray()
+    while 1:
+        b = tx.get_tx_bytes()
+        if b == b'':
+            break
+        wire_bytes.extend(b)
+    wire_bytes = bytes(wire_bytes)
+    assert len(wire_bytes) == len(payload) + 5 # header, COBS byte, 2 CRC, terminator
+    assert 0x00 not in wire_bytes[0:-1]  # validate COBS encoding
+    assert wire_bytes == expected
 
 
 #-----------------------------------------------------------------------
