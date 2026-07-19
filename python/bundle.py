@@ -126,12 +126,10 @@ def _crc16_verify(seed: int, data: bytes) -> tuple[bool, bytes]:
 
 def _crc_seed(channel: int) -> int:
     """
-    Compute the per-channel CRC seed.  Must match bundle.c's seed formula
-    exactly for interoperability: (header << 8) | (~header & 0xFF), where
-    header = 0x80 | channel.
+    Compute the per-channel CRC seed.  Must match bundle.c's seed
+    formula exactly for interoperability:
     """
-    header = 0x80 | channel
-    return (header << 8) | ((~header) & 0xFF)
+    return (channel << 8) | ((~channel) & 0xFF)
 
 # ---------------------------------------------------------------------------
 # Regex to detect "special" characters in string mode

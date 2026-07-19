@@ -208,9 +208,8 @@ class CRx:
 def test_crc_seed_matches_python(bundle_api):
     seeds = {}
     for chan in range(128):
-        header = 0x80 | chan
         seed_py = crc_seed(chan)
-        seed_c  =bundle_api.crc_seed(header)
+        seed_c  =bundle_api.crc_seed(chan)
         # C and Python must get the same key
         assert seed_py == seed_c
         # all zeros is a bad key for CRC-16
@@ -547,7 +546,7 @@ def test_c_packet_set_chan_asserts_bad_chan(bundle_api):
         pkt = CPacket(api, chan=5, data=b"abc", pool=pool)
         ''',
         should_assert= 'pkt.set_chan(128)',
-        expected_assert_text='chan <= 0x7F'
+        expected_assert_text='chan <= MAX_CHAN'
     )
 
 def test_c_packet_set_len_asserts_when_null(bundle_api):
@@ -584,18 +583,51 @@ def test_c_packet_set_len_asserts_bad_length(bundle_api):
 # fatal error handling - bdl_tx_t
 #-----------------------------------------------------------------------
 
-def test_c_tx_init_asserts_when_null(bundle_api):
+def test_c_tx_init_tx_asserts_when_null(bundle_api):
     assert_c_aborts(
         setup='',
         should_assert='api.init_tx(None, None)',
         expected_assert_text='bdl != NULL',
     )
 
-def test_c_tx_init_asserts_when_config_null(bundle_api):
+def test_c_tx_init_tx_asserts_when_config_null(bundle_api):
     assert_c_aborts(
         setup='tx = api.new_tx()',
         should_assert='api.init_tx(tx, None)',
         expected_assert_text='cfg != NULL',
+    )
+
+def test_c_init_tx_asserts_when_string_buf_null(bundle_api):
+    assert_c_aborts(
+        setup='''
+        tx = api.new_tx()
+        cfg = api.make_tx_config(None, 64, api.crc16_lookup_ptr)
+        ''',
+        should_assert='api.init_tx(tx, cfg)',
+        expected_assert_text='cfg->string_buf != NULL',
+    )
+
+def test_c_init_tx_asserts_when_string_buf_size_too_small(bundle_api):
+    assert_c_aborts(
+        setup='''
+        tx = api.new_tx()
+        strbuf = ctypes.create_string_buffer(64)
+        cfg = api.make_tx_config(strbuf, 1, api.crc16_lookup_ptr)
+        ''',
+        should_assert='api.init_tx(tx, cfg)',
+        expected_assert_text='cfg->string_buf_size >= 2',
+    )
+
+def test_c_init_tx_asserts_when_crc16_null(bundle_api):
+    assert_c_aborts(
+        setup='''
+        tx = api.new_tx()
+        strbuf = ctypes.create_string_buffer(64)
+        null_crc16 = ctypes.cast(None, CRC16_FUNC)
+        cfg = api.make_tx_config(strbuf, 64, null_crc16)
+        ''',
+        should_assert='api.init_tx(tx, cfg)',
+        expected_assert_text='cfg->crc16 != NULL',
     )
 
 def test_c_tx_string_put_nb_asserts_when_null(bundle_api):
@@ -645,18 +677,51 @@ def test_c_tx_get_tx_byte_asserts_when_null(bundle_api):
 # fatal error handling - bdl_rx_t
 #-----------------------------------------------------------------------
 
-def test_c_rx_init_asserts_when_null(bundle_api):
+def test_c_rx_init_rx_asserts_when_null(bundle_api):
     assert_c_aborts(
         setup='',
         should_assert='api.init_rx(None, None)',
         expected_assert_text='bdl != NULL',
     )
 
-def test_c_rx_init_asserts_when_config_null(bundle_api):
+def test_c_rx_init_rx_asserts_when_config_null(bundle_api):
     assert_c_aborts(
         setup='rx = api.new_rx()',
         should_assert='api.init_rx(rx, None)',
         expected_assert_text='cfg != NULL',
+    )
+
+def test_c_init_rx_asserts_when_string_buf_null(bundle_api):
+    assert_c_aborts(
+        setup='''
+        rx = api.new_rx()
+        cfg = api.make_rx_config(None, 64, api.crc16_lookup_ptr)
+        ''',
+        should_assert='api.init_rx(rx, cfg)',
+        expected_assert_text='cfg->string_buf != NULL',
+    )
+
+def test_c_init_rx_asserts_when_string_buf_size_too_small(bundle_api):
+    assert_c_aborts(
+        setup='''
+        rx = api.new_rx()
+        strbuf = ctypes.create_string_buffer(64)
+        cfg = api.make_rx_config(strbuf, 1, api.crc16_lookup_ptr)
+        ''',
+        should_assert='api.init_rx(rx, cfg)',
+        expected_assert_text='cfg->string_buf_size >= 2',
+    )
+
+def test_c_init_rx_asserts_when_crc16_null(bundle_api):
+    assert_c_aborts(
+        setup='''
+        rx = api.new_rx()
+        strbuf = ctypes.create_string_buffer(64)
+        null_crc16 = ctypes.cast(None, CRC16_FUNC)
+        cfg = api.make_rx_config(strbuf, 64, null_crc16)
+        ''',
+        should_assert='api.init_rx(rx, cfg)',
+        expected_assert_text='cfg->crc16 != NULL',
     )
 
 def test_c_rx_string_get_nb_asserts_when_null(bundle_api):

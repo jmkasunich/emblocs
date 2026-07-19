@@ -28,6 +28,12 @@
  */
 #define NEXT(index, size) (((index)+1) < (size) ? (index)+1 : 0)
 
+// constants for separating strings from start-of-packet bytes
+
+#define MAX_STRING_VALUE     (0x7F)
+#define START_OF_PACKET_MASK (0x80)
+#define MAX_CHAN             (0x7F)
+
 
 /***************************************************************
  * Public CRC computation functions
@@ -103,11 +109,9 @@ uint16_t bdl_crc16_lookup(uint16_t seed, const uint8_t *data, uint8_t len)
     return crc;
 }
 
-// Compute the per-channel CRC seed.  Must match bundle.py's seed
-// formula exactly for interoperability.  Note that we use
-// 'header' which is chan | 0x80, because the packet struct contains
-// header but not chan
-#define _crc_seed(header) (((header) << 8) | ((~(header)) & 0xFF))
+// Compute the per-channel CRC seed.  Must match bundle.py's
+// seed formula exactly for interoperability
+#define _crc_seed(chan) (((chan) << 8) | ((~(chan)) & 0xFF))
 
 /***************************************************************
  *
@@ -124,7 +128,7 @@ void bdl_packet_init_buf(bdl_packet_t *p, uint8_t *buf, uint8_t len)
     p->data = buf;
     p->max_len = len;
     p->data_len = 0;
-    p->header = 0;
+    p->chan = 0;
     p->state = BP_IDLE;
     p->cobs_byte = 0;
     p->prev = p;
@@ -136,8 +140,8 @@ void bdl_packet_set_chan(bdl_packet_t *p, uint8_t chan)
 {
     assert(p != NULL);
     assert(p->state == BP_IDLE);
-    assert(chan <= 0x7F );
-    p->header = chan | 0x80;
+    assert(chan <= MAX_CHAN );
+    p->chan = chan;
 }
 
 void bdl_packet_set_len(bdl_packet_t *p, uint8_t len)
@@ -174,7 +178,7 @@ void bdl_init_rx(bdl_rx_t *bdl, const bdl_rx_config_t *cfg)
     bdl->pkt_root.state = BP_IDLE;
     bdl->pkt_root.max_len = 0;
     bdl->pkt_root.data_len = 0;
-    bdl->pkt_root.header = 0;
+    bdl->pkt_root.chan = START_OF_PACKET_MASK;  // sentinel to mark root
     bdl->pkt_root.cobs_byte = 0;
     bdl->pkt_root.data = NULL;
     bdl->pkt_root.prev = &(bdl->pkt_root);
@@ -218,7 +222,7 @@ void bdl_packet_listen(bdl_rx_t *bdl, bdl_packet_t *p,
     assert(p != NULL);
     assert(p->state == BP_IDLE);
     assert(p->data != NULL);
-    assert(p->header >= 128);
+    assert(p->chan <= MAX_CHAN);
     p->data_len = 0;
     p->state = BP_RX_WAIT;
     p->callback = callback;
@@ -262,7 +266,7 @@ bool bdl_packet_get(bdl_rx_t *bdl, bdl_packet_t *p)
         return false;
     }
     len = p->data_len - 2;
-    crc_calc = bdl->crc16(_crc_seed(p->header), p->data, len);
+    crc_calc = bdl->crc16(_crc_seed(p->chan), p->data, len);
     // read received CRC little-endian
     crc_recv = (uint16_t)p->data[len] | ((uint16_t)p->data[len + 1] << 8);
     if ( crc_calc != crc_recv ) {
@@ -295,14 +299,15 @@ void bdl_put_rx_byte(bdl_rx_t *bdl, uint8_t data)
     assert(bdl != NULL);
     switch (bdl->rx_state) {
         case BDL_RX_STRING_MODE:
-            if ( data & 0x80 ) {
+            if ( data & START_OF_PACKET_MASK ) {
                 // start of packet character
+                int new_chan = data & MAX_CHAN;
                 // search listen list for matching buffer
                 p = bdl->pkt_root.next;
-                while ( ( p->header != 0 ) && ( p->header != data ) ) {
+                while ( ( p->chan <= MAX_CHAN ) && ( p->chan != new_chan ) ) {
                     p = p->next;
                 }
-                if ( p->header == data ) {
+                if ( p->chan == new_chan ) {
                     // match found, set up buffer for receive
                     p->data_len = 0;
                     p->state = BP_RX_BUSY;
@@ -404,7 +409,7 @@ void bdl_init_tx(bdl_tx_t *bdl, const bdl_tx_config_t *cfg)
     bdl->pkt_root.state = BP_IDLE;
     bdl->pkt_root.max_len = 0;
     bdl->pkt_root.data_len = 0;
-    bdl->pkt_root.header = 0;
+    bdl->pkt_root.chan = START_OF_PACKET_MASK;  // sentinel to mark root
     bdl->pkt_root.cobs_byte = 0;
     bdl->pkt_root.data = NULL;
     bdl->pkt_root.prev = &(bdl->pkt_root);
@@ -416,7 +421,7 @@ bool bdl_string_put_nb(bdl_tx_t *bdl, char c)
 {
     assert(bdl != NULL);
     if ( bdl->string_buf[bdl->string_in] == 0 ) {
-        bdl->string_buf[bdl->string_in] = c & 0x7F;
+        bdl->string_buf[bdl->string_in] = c & MAX_STRING_VALUE;
         bdl->string_in = NEXT(bdl->string_in, bdl->string_buf_size);
         if ( bdl->tx_bytes_available != NULL ) {
             bdl->tx_bytes_available();
@@ -430,7 +435,7 @@ void bdl_string_put_bl(bdl_tx_t *bdl, char c)
 {
     assert(bdl != NULL);
     while ( bdl->string_buf[bdl->string_in] != 0 );
-    bdl->string_buf[bdl->string_in] = c & 0x7F;
+    bdl->string_buf[bdl->string_in] = c & MAX_STRING_VALUE;
     bdl->string_in = NEXT(bdl->string_in, bdl->string_buf_size);
     if ( bdl->tx_bytes_available != NULL ) {
         bdl->tx_bytes_available();
@@ -454,13 +459,13 @@ void bdl_packet_put(bdl_tx_t *bdl, bdl_packet_t *p,
     assert(p->state == BP_IDLE);
     assert(p->data != NULL);
     assert(p->data_len <= (p->max_len-2)); // need room for CRC
-    assert(p->header >= 128);
+    assert(p->chan <= MAX_CHAN);
     assert(bdl->crc16 != NULL);
     p->state = BP_TX_WAIT;
     p->callback = callback;
     // compute and append CRC
     len = p->data_len;
-    crc = bdl->crc16(_crc_seed(p->header), p->data, len);
+    crc = bdl->crc16(_crc_seed(p->chan), p->data, len);
     p->data[len]     = (uint8_t)(crc & 0xFF);
     p->data[len + 1] = (uint8_t)(crc >> 8);
     p->data_len += 2;
@@ -516,7 +521,7 @@ uint32_t bdl_get_tx_byte(bdl_tx_t *bdl)
                 bdl->pkt_current = p;
                 bdl->tx_state = BDL_TX_SEND_COBS_BYTE;
                 // send the start of packet byte
-                return p->header;
+                return p->chan | START_OF_PACKET_MASK;
             } else if ( (data = bdl->string_buf[bdl->string_out]) != 0 ) {
                 // send a character
                 bdl->string_buf[bdl->string_out] = 0;
@@ -611,7 +616,7 @@ void bdl_test_make_rx_config(bdl_rx_config_t *out, char *string_buf, size_t stri
 }
 
 // make the CRC seed macro visible to Python
-uint16_t bdl_test_crc_seed(uint8_t header) { return _crc_seed(header); }
+uint16_t bdl_test_crc_seed(uint8_t chan) { return _crc_seed(chan); }
 
 
 #endif
