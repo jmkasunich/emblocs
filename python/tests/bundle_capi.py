@@ -68,8 +68,12 @@ class BundleCAPI:
 
         lib.bdl_string_get_nb.argtypes = [ctypes.c_void_p]
         lib.bdl_string_get_nb.restype  = ctypes.c_char
+        lib.bdl_string_get_bl.argtypes = [ctypes.c_void_p]
+        lib.bdl_string_get_bl.restype  = ctypes.c_char
         lib.bdl_string_put_nb.argtypes = [ctypes.c_void_p, ctypes.c_char]
         lib.bdl_string_put_nb.restype  = ctypes.c_bool
+        lib.bdl_string_put_bl.argtypes = [ctypes.c_void_p, ctypes.c_char]
+        lib.bdl_string_put_bl.restype  = ctypes.c_bool
 
         lib.bdl_string_can_get.argtypes = [ctypes.c_void_p]
         lib.bdl_string_can_get.restype  = ctypes.c_bool
@@ -172,8 +176,16 @@ class BundleCAPI:
         """Returns the next string-channel byte as an int, or 0 if none available."""
         return ord(self._lib.bdl_string_get_nb(rx))
 
+    def string_get_bl(self, rx) -> int:
+        """Returns the next string-channel byte as an int, or blocks if none available."""
+        return ord(self._lib.bdl_string_get_bl(rx))
+
     def string_put_nb(self, tx, byte: int) -> bool:
         return self._lib.bdl_string_put_nb(tx, bytes([byte]))
+
+    def string_put_bl(self, tx, byte: int) -> bool:
+        """ blocks if buffer full - call with caution """
+        return self._lib.bdl_string_put_bl(tx, bytes([byte]))
 
     def string_can_get(self, tx) -> bool:
         return self._lib.bdl_string_can_get(tx)
