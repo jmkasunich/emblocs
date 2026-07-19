@@ -4,68 +4,41 @@ import pytest
 import ctypes
 import random
 import binascii
-from conftest import register_callback
+from conftest import register_callback, assert_process_aborts, TESTS_DIR
 from bundle import Bundle, Unbundle, _cobs_encode, _cobs_decode
 from bundle import _crc_seed as crc_seed
 from bundle_capi import PACKET_FUNC, VOID_VOID_FUNC, BdlPacketState
 
-#-----------------------------------------------------------------------
-# Adapters to make C and Python APIs compatible (where practical)
-#-----------------------------------------------------------------------
-
-class _CapiRxAdapter:
-    """Wraps a C bdl_rx_t behind the same minimal interface as Unbundle."""
-    def __init__(self, api, rx):
-        self._api = api
-        self._rx = rx
-
-    def put_bytes(self, data: bytes) -> None:
-        for b in data:
-            self._api.put_rx_byte(self._rx, b)
-
-    @property
-    def error_count(self) -> int:
-        return self._api.get_error_count(self._rx)
-
-    def reset_error_count(self) -> None:
-        self._api.reset_error_count(self._rx)
-
-
-class _PythonRxAdapter:
-    """Wraps an Unbundle behind the same minimal interface, for symmetry
-    with _CapiRxAdapter."""
-    def __init__(self, ub):
-        self._ub = ub
-
-    def put_bytes(self, data: bytes) -> None:
-        self._ub.put_rx_bytes(data)
-
-    @property
-    def error_count(self) -> int:
-        return self._ub.error_count
-
-    def reset_error_count(self) -> None:
-        self._ub.reset_error_count()
-
 
 #-----------------------------------------------------------------------
-# Fixtures, using the above adapters
+# Prefix to provide imports, etc., when running tests in a subprocess
+#  (we run C tests that are supposed to assert() in a subprocess since
+#   the assert will kill that process)
 #-----------------------------------------------------------------------
 
-@pytest.fixture
-def capi_rx(bundle_api):
-    api = bundle_api
-    rx = api.new_rx()
-    string_buf = ctypes.create_string_buffer(64)
-    cfg = api.make_rx_config(string_buf, 64, api.crc16_lookup_ptr)
-    api.init_rx(rx, cfg)
-    return _CapiRxAdapter(api, rx)
+_ASSERT_PREFIX = f'''
+import ctypes, sys
+sys.path.insert(0, {str(TESTS_DIR)!r})
 
-@pytest.fixture
-def python_rx():
-    return _PythonRxAdapter(Unbundle())
+if sys.platform == "win32":
+    # Suppress Windows Error Reporting for this process. Without this, a
+    # real assert()-triggered abort() can cost several seconds of WER
+    # background processing before control returns to the parent, even
+    # though no dialog is ever visibly shown in this non-interactive
+    # context. SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX.
+    ctypes.windll.kernel32.SetErrorMode(0x0001 | 0x0002)
 
+from conftest import _bundle_dll_path
+from bundle_capi import BundleCAPI, PACKET_FUNC, VOID_VOID_FUNC, CRC16_FUNC
+from test_bundle import CPacket, CTx, CRx
+lib = ctypes.CDLL(str(_bundle_dll_path()))
+api = BundleCAPI(lib)
+'''
 
+def assert_c_aborts(setup: str, should_assert: str, expected_assert_text: str) -> None:
+    """Bundle-specific wrapper: `setup`/`should_assert` have ctypes, api,
+    and the shape constants already available via _ASSERT_PREFIX."""
+    assert_process_aborts(_ASSERT_PREFIX, setup, should_assert, expected_assert_text)
 
 #-----------------------------------------------------------------------
 # Wrappers for some C API objects
@@ -112,11 +85,9 @@ class CPacket:
         return self.api.packet_get_chan(self.pkt)
 
     def set_length(self, length: int):
-        assert length >= 0 and length <= self.bufsize - 2
         self.api.packet_set_len(self.pkt, length)
 
     def set_chan(self, chan: int):
-        assert chan >= 0 and chan < 0x80
         self.api.packet_set_chan(self.pkt, chan)
 
     def write_data(self, data: bytes):
@@ -148,7 +119,7 @@ class CTx:
         self.api = api
         self.tx = self.api.new_tx()
         self.address = ctypes.addressof(self.tx)
-        assert string_bufsize > 0
+        assert string_bufsize >= 2
         self.strbufsize = string_bufsize
         self.strbuf = ctypes.create_string_buffer(string_bufsize)
         self.crc16 = crc_funct if crc_funct is not None else api.crc16_lookup_ptr
@@ -167,7 +138,6 @@ class CTx:
         return self.api.string_can_put(self.tx)
 
     def packet_put(self, packet: CPacket, registered_callback=None):
-        assert packet is not None
         self.api.packet_put(self.tx, packet.pkt, registered_callback)
 
     def get_tx_byte(self) -> int:
@@ -200,7 +170,7 @@ class CRx:
         self.api = api
         self.rx = self.api.new_rx()
         self.address = ctypes.addressof(self.rx)
-        assert string_bufsize > 0
+        assert string_bufsize >= 2
         self.strbufsize = string_bufsize
         self.strbuf = ctypes.create_string_buffer(string_bufsize)
         self.crc16 = crc_funct if crc_funct is not None else api.crc16_lookup_ptr
@@ -218,11 +188,9 @@ class CRx:
         return self.api.string_can_get(self.rx)
 
     def packet_listen(self, packet: CPacket, registered_callback=None):
-        assert packet is not None
         self.api.packet_listen(self.rx, packet.pkt, registered_callback)
 
     def packet_get(self, packet: CPacket) -> bool:
-        assert packet is not None
         return self.api.packet_get(self.rx, packet.pkt)
 
     def put_rx_byte(self, byte: int):
@@ -415,7 +383,9 @@ def test_c_packet_transmit(bundle_api, c_object_pool):
     expected = make_packet_wire_bytes(payload, chan)
     tx = CTx(api, 100, pool=c_object_pool)
     tx.packet_put(pkt)
+    assert pkt.state == BdlPacketState.BP_TX_WAIT
     wire_bytes = tx.get_tx_bytes()
+    assert pkt.state == BdlPacketState.BP_IDLE
     assert len(wire_bytes) == len(payload) + 5 # header, COBS byte, 2 CRC, terminator
     assert 0x00 not in wire_bytes[0:-1]  # validate COBS encoding
     assert wire_bytes == expected
@@ -463,6 +433,7 @@ def test_c_string_receive(bundle_api, c_object_pool):
 def test_py_string_receive():
     received_strings = []
     def string_callback(string: str):
+        nonlocal received_strings
         received_strings.append(string)
     rx = Unbundle()
     test_string = "this is a test string"
@@ -472,131 +443,275 @@ def test_py_string_receive():
     received_string = ''.join(received_strings)
     assert received_string == test_string
 
-
-
-#-----------------------------------------------------------------------
-# Callback firing tests
-#-----------------------------------------------------------------------
-
-
-
-def test_c_rx_packet_callback_fires(bundle_api):
-    print()
+def test_c_packet_receive(bundle_api, c_object_pool):
     api = bundle_api
-    fired = []
+    pkt = CPacket(api, bufsize=12, pool=c_object_pool)
+    chan = 5
+    payload = bytes([0x11, 0x00, 0xFF, 0x32, 0x00, 0x33])
+    wire_bytes = make_packet_wire_bytes(payload, chan)
+    pkt.set_chan(chan)
+    rx = CRx(api, 100, pool=c_object_pool)
+    rx.packet_listen(pkt)
+    assert pkt.state == BdlPacketState.BP_RX_WAIT
+    rx.put_rx_bytes(wire_bytes)
+    assert pkt.state == BdlPacketState.BP_RX_DONE
+    assert rx.packet_get(pkt)
+    assert pkt.state == BdlPacketState.BP_IDLE
+    assert pkt.length == len(payload)
+    assert pkt.chan == chan
+    data = pkt.read_data()
+    assert data == payload
 
-    def callback(p):
-        s = api.packet_get_state(p)
-        c = api.packet_get_chan(p)
-        l = api.packet_get_len(p)
-        print(f"before: {p=}  {s=} {c=} {l=}")
-        if s is BdlPacketState.BP_RX_DONE:
-            api.packet_get(rx, p)
-            s = api.packet_get_state(p)
-            c = api.packet_get_chan(p)
-            l = api.packet_get_len(p)
-            d = api.packet_read_data(p)
-            print(f"after:  {p=}  {s=} {c=} {l=} {d=}")
-            print(f"data: {d[0]=} {d[1]=} {d[2]=}")
-        fired.append(1)
+def test_py_packet_receive():
+    chan = 5
+    payload = bytes([0x11, 0x00, 0xFF, 0x32, 0x00, 0x33])
+    wire_bytes = make_packet_wire_bytes(payload, chan)
+    received_chan = -1
+    received_data = bytes(0)
+    def packet_callback(chan: int, data: bytes):
+        nonlocal received_chan
+        nonlocal received_data
+        received_chan = chan
+        received_data = data
+    rx = Unbundle()
+    rx.listen_packet(chan, packet_callback)
+    rx.put_rx_bytes(wire_bytes)
+    assert received_chan == chan
+    assert received_data == payload
 
-    cb = PACKET_FUNC(callback)
-
-    rx = api.new_rx()
-    string_buf = ctypes.create_string_buffer(64)
-    cfg = api.make_rx_config(string_buf, 64, api.crc16_lookup_ptr)
-    api.init_rx(rx, cfg)
-
-    rx_pkt = api.new_packet()
-    rx_buf = (ctypes.c_uint8 * 32)()
-    api.packet_init_buf(rx_pkt, rx_buf, 32)
-    api.packet_set_chan(rx_pkt, 5)
-    callback = PACKET_FUNC(lambda p: fired.append(1))
-    api.packet_listen(rx, rx_pkt, cb)
-
-    tx = api.new_tx()
-    tx_string_buf = ctypes.create_string_buffer(64)
-    tx_cfg = api.make_tx_config(tx_string_buf, 64, api.crc16_lookup_ptr)
-    api.init_tx(tx, tx_cfg)
-
-    tx_pkt = api.new_packet()
-    tx_buf = (ctypes.c_uint8 * 32)()
-    api.packet_init_buf(tx_pkt, tx_buf, 32)
-    api.packet_set_chan(tx_pkt, 5)
-    api.packet_set_len(tx_pkt, 3)
-    tx_buf[0] = 0x42
-    tx_buf[1] = 0x43
-    tx_buf[2] = 0x44
-    api.packet_put(tx, tx_pkt)
-
-    while True:
-        b = api.get_tx_byte(tx)
-        if b > 255:
-            break
-        api.put_rx_byte(rx, b)
-
-    assert fired == [1]
-
-
-def test_c_tx_packet_callback_fires(bundle_api):
-    api = bundle_api
-    tx = api.new_tx()
-    string_buf = ctypes.create_string_buffer(64)
-    cfg = api.make_tx_config(string_buf, 64, api.crc16_lookup_ptr)
-    api.init_tx(tx, cfg)
-
-    fired = []
-    pkt = api.new_packet()
-    buf = (ctypes.c_uint8 * 32)()
-    api.packet_init_buf(pkt, buf, 32)
-    api.packet_set_chan(pkt, 5)
-    api.packet_set_len(pkt, 3)
-    buf[0] = 0x42
-    buf[1] = 0x43
-    buf[2] = 0x44
-    callback = PACKET_FUNC(lambda p: fired.append(1))
-    api.packet_put(tx, pkt, callback)
-
-    while True:
-        b = api.get_tx_byte(tx)
-        if b > 255:
-            break
-
-    assert fired == [1]
-
-def test_python_rx_packet_callback_fires():
-    ub = Unbundle()
-    fired = []
-    ub.listen_packet(5, lambda chan, payload: fired.append((chan, payload)))
-    bundle = Bundle()
-    bundle.send_packet(5, b"\x42")
-    wire = bytearray()
-    while True:
-        chunk = bundle.get_tx_bytes()
-        if not chunk:
-            break
-        wire += chunk
-    ub.put_rx_bytes(bytes(wire))
-    assert fired == [(5, b"\x42")]
 
 #-----------------------------------------------------------------------
-# Parameterized test
+# fatal error handling - bdl_packet_t
 #-----------------------------------------------------------------------
 
-# @pytest.mark.parametrize("fixture_name, trigger", [
-#     # C detects an unmatched channel at packet-start; a bare 0x80 with
-#     # nothing listening is enough. Python only detects it once a packet
-#     # is fully framed -- this is a deliberate, kept asymmetry (see
-#     # earlier discussion), not something the adapter should paper over.
-#     ("capi_rx", bytes([0x80])),
-#     ("python_rx", bytes([0x80, 0x01, 0x00])),
-# ])
-# def test_error_counter(fixture_name, trigger, request):
-#     rx = request.getfixturevalue(fixture_name)
-#     assert rx.error_count == 0
-#     rx.put_bytes(trigger)
-#     assert rx.error_count == 1
-#     rx.reset_error_count()
-#     assert rx.error_count == 0
 
+def test_c_packet_init_buf_asserts_when_null(bundle_api):
+    assert_c_aborts(
+        setup='',
+        should_assert='api.packet_init_buf(None, None, 32)',
+        expected_assert_text='p != NULL',
+    )
+
+def test_c_packet_init_buf_asserts_when_buf_null(bundle_api):
+    assert_c_aborts(
+        setup='pkt = api.new_packet()',
+        should_assert='api.packet_init_buf(pkt, None, 32)',
+        expected_assert_text='buf != NULL',
+    )
+
+def test_c_packet_init_buf_asserts_buf_too_small(bundle_api):
+    assert_c_aborts(
+        setup=
+        '''
+        pkt = api.new_packet()
+        buf = (ctypes.c_uint8 * 254)()
+        ''',
+        should_assert='api.packet_init_buf(pkt, buf, 1)',
+        expected_assert_text='len >= 2',
+    )
+
+def test_c_packet_init_buf_asserts_buf_too_large(bundle_api):
+    assert_c_aborts(
+        setup=
+        '''
+        pkt = api.new_packet()
+        buf = (ctypes.c_uint8 * 254)()
+        ''',
+        should_assert='api.packet_init_buf(pkt, buf, 255)',
+        expected_assert_text='len <= 254',
+    )
+
+def test_c_packet_set_chan_asserts_when_null(bundle_api):
+    assert_c_aborts(
+        setup='',
+        should_assert='api.packet_set_chan(None, 5)',
+        expected_assert_text='p != NULL',
+    )
+
+def test_c_packet_set_chan_asserts_when_not_idle(bundle_api):
+    assert_c_aborts(setup=
+        '''
+        pool = {}
+        pkt = CPacket(api, chan=5, data=b"abc", pool=pool)
+        tx = CTx(api, 100, pool=pool)
+        tx.packet_put(pkt)
+        ''',
+        should_assert= 'pkt.set_chan(6)',
+        expected_assert_text='p->state == BP_IDLE'
+    )
+
+def test_c_packet_set_chan_asserts_bad_chan(bundle_api):
+    assert_c_aborts(setup=
+        '''
+        pool = {}
+        pkt = CPacket(api, chan=5, data=b"abc", pool=pool)
+        ''',
+        should_assert= 'pkt.set_chan(128)',
+        expected_assert_text='chan <= 0x7F'
+    )
+
+def test_c_packet_set_len_asserts_when_null(bundle_api):
+    assert_c_aborts(
+        setup='',
+        should_assert='api.packet_set_len(None, 5)',
+        expected_assert_text='p != NULL',
+    )
+
+def test_c_packet_set_len_asserts_when_not_idle(bundle_api):
+    assert_c_aborts(setup=
+        '''
+        pool = {}
+        pkt = CPacket(api, chan=5, data=b"abc", pool=pool)
+        tx = CTx(api, 100, pool=pool)
+        tx.packet_put(pkt)
+        ''',
+        should_assert= 'pkt.set_length(6)',
+        expected_assert_text='p->state == BP_IDLE'
+    )
+
+def test_c_packet_set_len_asserts_bad_length(bundle_api):
+    assert_c_aborts(setup=
+        '''
+        pool = {}
+        pkt = CPacket(api, chan=5, bufsize=20, data=b"abc", pool=pool)
+        ''',
+        should_assert= 'pkt.set_length(19)',
+        expected_assert_text='len <= (p->max_len - 2)'
+    )
+
+
+#-----------------------------------------------------------------------
+# fatal error handling - bdl_tx_t
+#-----------------------------------------------------------------------
+
+def test_c_tx_init_asserts_when_null(bundle_api):
+    assert_c_aborts(
+        setup='',
+        should_assert='api.init_tx(None, None)',
+        expected_assert_text='bdl != NULL',
+    )
+
+def test_c_tx_init_asserts_when_config_null(bundle_api):
+    assert_c_aborts(
+        setup='tx = api.new_tx()',
+        should_assert='api.init_tx(tx, None)',
+        expected_assert_text='cfg != NULL',
+    )
+
+def test_c_tx_string_put_nb_asserts_when_null(bundle_api):
+    assert_c_aborts(
+        setup='',
+        should_assert='api.string_put_nb(None, 0x41)',
+        expected_assert_text='bdl != NULL',
+    )
+
+def test_c_tx_string_put_bl_asserts_when_null(bundle_api):
+    assert_c_aborts(
+        setup='',
+        should_assert='api.string_put_bl(None, 0x41)',
+        expected_assert_text='bdl != NULL',
+    )
+
+def test_c_tx_string_can_put_asserts_when_null(bundle_api):
+    assert_c_aborts(
+        setup='',
+        should_assert='api.string_can_put(None)',
+        expected_assert_text='bdl != NULL',
+    )
+
+def test_c_tx_packet_put_asserts_when_null(bundle_api):
+    assert_c_aborts(
+        setup='',
+        should_assert='api.packet_put(None, None, None)',
+        expected_assert_text='bdl != NULL',
+    )
+
+def test_c_tx_packet_put_asserts_when_packet_null(bundle_api):
+    assert_c_aborts(
+        setup='tx = api.new_tx()',
+        should_assert='api.packet_put(tx, None, None)',
+        expected_assert_text='p != NULL',
+    )
+
+def test_c_tx_get_tx_byte_asserts_when_null(bundle_api):
+    assert_c_aborts(
+        setup='',
+        should_assert='api.get_tx_byte(None)',
+        expected_assert_text='bdl != NULL',
+    )
+
+
+#-----------------------------------------------------------------------
+# fatal error handling - bdl_rx_t
+#-----------------------------------------------------------------------
+
+def test_c_rx_init_asserts_when_null(bundle_api):
+    assert_c_aborts(
+        setup='',
+        should_assert='api.init_rx(None, None)',
+        expected_assert_text='bdl != NULL',
+    )
+
+def test_c_rx_init_asserts_when_config_null(bundle_api):
+    assert_c_aborts(
+        setup='rx = api.new_rx()',
+        should_assert='api.init_rx(rx, None)',
+        expected_assert_text='cfg != NULL',
+    )
+
+def test_c_rx_string_get_nb_asserts_when_null(bundle_api):
+    assert_c_aborts(
+        setup='',
+        should_assert='api.string_get_nb(None)',
+        expected_assert_text='bdl != NULL',
+    )
+
+def test_c_rx_string_get_bl_asserts_when_null(bundle_api):
+    assert_c_aborts(
+        setup='',
+        should_assert='api.string_get_nb(None)',
+        expected_assert_text='bdl != NULL',
+    )
+
+def test_c_rx_string_can_get_asserts_when_null(bundle_api):
+    assert_c_aborts(
+        setup='',
+        should_assert='api.string_can_get(None)',
+        expected_assert_text='bdl != NULL',
+    )
+
+def test_c_rx_packet_listen_asserts_when_null(bundle_api):
+    assert_c_aborts(
+        setup='',
+        should_assert='api.packet_listen(None, None, None)',
+        expected_assert_text='bdl != NULL',
+    )
+
+def test_c_rx_packet_listen_asserts_when_packet_null(bundle_api):
+    assert_c_aborts(
+        setup='rx = api.new_rx()',
+        should_assert='api.packet_listen(rx, None, None)',
+        expected_assert_text='p != NULL',
+    )
+
+def test_c_rx_packet_get_asserts_when_null(bundle_api):
+    assert_c_aborts(
+        setup='',
+        should_assert='api.packet_get(None, None)',
+        expected_assert_text='bdl != NULL',
+    )
+
+def test_c_rx_packet_get_asserts_when_packet_null(bundle_api):
+    assert_c_aborts(
+        setup='rx = api.new_rx()',
+        should_assert='api.packet_get(rx, None)',
+        expected_assert_text='p != NULL',
+    )
+
+def test_c_rx_put_rx_byte_asserts_when_null(bundle_api):
+    assert_c_aborts(
+        setup='',
+        should_assert='api.put_rx_byte(None, 0x41)',
+        expected_assert_text='bdl != NULL',
+    )
 

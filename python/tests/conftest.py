@@ -1,12 +1,14 @@
 # python/tests/conftest.py
 from __future__ import annotations
 import os
+import sys
 import pytest
 from pathlib import Path
 import ctypes
 import platform
 import subprocess
 import inspect
+import textwrap
 
 def pytest_configure(config):
     config.addinivalue_line(
@@ -102,6 +104,85 @@ def register_callback(shape, function, pool=None):
         pool[address] = cb
     return cb
 
+# ---------------------------------------------------------------------------
+# Subprocess isolation for code expected to trigger a C assert()
+# ---------------------------------------------------------------------------
+
+_MARKER_PREFIX_DONE = "___BUNDLE_TEST_PREFIX_OK___"
+_MARKER_SETUP_DONE  = "___BUNDLE_TEST_SETUP_OK___"
+
+def run_in_subprocess(prefix: str, setup: str, should_assert: str) -> subprocess.CompletedProcess:
+    """
+    Runs, as one fresh Python subprocess: `prefix` (shared boilerplate,
+    e.g. loading the library), a marker print, `setup` (test-specific
+    code that must succeed but isn't itself under test), a second marker
+    print, then `should_assert` (the code expected to crash). Returns the
+    completed process. See assert_process_aborts() for how the two
+    markers let a caller tell apart three different kinds of failure that
+    would otherwise all just look like "nonzero exit code".
+    """
+    code = (
+        textwrap.dedent(prefix)
+        + f"\nprint({_MARKER_PREFIX_DONE!r}, flush=True)\n"
+        + textwrap.dedent(setup)
+        + f"\nprint({_MARKER_SETUP_DONE!r}, flush=True)\n"
+        + textwrap.dedent(should_assert)
+    )
+    return subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True, text=True, stdin=subprocess.DEVNULL,
+    )
+
+
+def assert_process_aborts(prefix: str, setup: str, should_assert: str,
+                           expected_assert_text: str) -> subprocess.CompletedProcess:
+    """
+    Asserts that `should_assert` crashes the child process, with three
+    distinct failure modes reported separately rather than collapsed
+    into one generic "test failed":
+      - prefix marker absent  -> common infrastructure failed (wrong DLL
+                                  path, import error) -- an environment
+                                  problem, not a test bug
+      - setup marker absent   -> test-specific setup failed -- a bug in
+                                  `setup`, unrelated to whether the real
+                                  assert works
+      - clean exit (marker present) -> `should_assert` ran to completion
+                                  without crashing -- the real, useful
+                                  failure: the expected assert is missing
+      - nonzero exit (both markers present) -> passes
+    """
+    result = run_in_subprocess(prefix, setup, should_assert)
+    if _MARKER_PREFIX_DONE not in result.stdout:
+        raise AssertionError(
+            f"common test infrastructure failed before test-specific setup "
+            f"even ran -- likely an environment problem (DLL path, import), "
+            f"not a test bug.\nstdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+    if _MARKER_SETUP_DONE not in result.stdout:
+        raise AssertionError(
+            f"test-specific setup failed before reaching the code expected "
+            f"to assert -- check 'setup' for a bug.\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+    if result.returncode == 1:
+        raise AssertionError(
+            f"'should_assert' raised an ordinary Python exception (exit code 1) "
+            f"rather than triggering a genuine C assert -- check 'should_assert' "
+            f"for a typo or logic error; this is not the crash we're looking for.\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+    assert result.returncode != 0, (
+        f"setup completed successfully, but 'should_assert' ran to "
+        f"completion without crashing -- expected the C library to abort "
+        f"here.\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    assert expected_assert_text in result.stderr, (
+        f"the process crashed (returncode {result.returncode}), but "
+        f"{expected_assert_text!r} was not found in stderr -- likely a "
+        f"different assert fired than the one expected.\n"
+        f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    return result
 
 # ---------------------------------------------------------------------------
 # Bundle C library infrastructure
