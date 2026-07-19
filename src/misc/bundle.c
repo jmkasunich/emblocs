@@ -117,6 +117,8 @@ uint16_t bdl_crc16_lookup(uint16_t seed, const uint8_t *data, uint8_t len)
 
 void bdl_packet_init_buf(bdl_packet_t *p, uint8_t *buf, uint8_t len)
 {
+    assert(p != NULL);
+    assert(buf != NULL);
     assert(len <= 254);
     assert(len >= 2);
     p->data = buf;
@@ -132,12 +134,16 @@ void bdl_packet_init_buf(bdl_packet_t *p, uint8_t *buf, uint8_t len)
 
 void bdl_packet_set_chan(bdl_packet_t *p, uint8_t chan)
 {
+    assert(p != NULL);
+    assert(p->state == BP_IDLE);
     assert(chan <= 0x7F );
     p->header = chan | 0x80;
 }
 
 void bdl_packet_set_len(bdl_packet_t *p, uint8_t len)
 {
+    assert(p != NULL);
+    assert(p->state == BP_IDLE);
     assert(len <= (p->max_len - 2));  // allow room for CRC
     p->data_len = len;
 }
@@ -150,6 +156,8 @@ void bdl_packet_set_len(bdl_packet_t *p, uint8_t len)
 
 void bdl_init_rx(bdl_rx_t *bdl, const bdl_rx_config_t *cfg)
 {
+    assert(bdl != NULL);
+    assert(cfg != NULL);
     assert(cfg->string_buf != NULL);
     assert(cfg->string_buf_size >= 2);
     assert(cfg->crc16 != NULL);
@@ -178,6 +186,7 @@ char bdl_string_get_nb(bdl_rx_t *bdl)
 {
     char c;
 
+    assert(bdl != NULL);
     if ( (c = bdl->string_buf[bdl->string_out]) != 0 ) {
         bdl->string_buf[bdl->string_out] = 0;
         bdl->string_out = NEXT(bdl->string_out, bdl->string_buf_size);
@@ -189,6 +198,7 @@ char bdl_string_get_bl(bdl_rx_t *bdl)
 {
     char c;
 
+    assert(bdl != NULL);
     while ( (c = bdl->string_buf[bdl->string_out]) == 0 );
     bdl->string_buf[bdl->string_out] = 0;
     bdl->string_out = NEXT(bdl->string_out, bdl->string_buf_size);
@@ -197,12 +207,15 @@ char bdl_string_get_bl(bdl_rx_t *bdl)
 
 bool bdl_string_can_get(bdl_rx_t *bdl)
 {
+    assert(bdl != NULL);
     return ( bdl->string_buf[bdl->string_out] != 0 );
 }
 
 void bdl_packet_listen(bdl_rx_t *bdl, bdl_packet_t *p,
                         void (*callback)(struct bdl_packet_s *p))
 {
+    assert(bdl != NULL);
+    assert(p != NULL);
     assert(p->state == BP_IDLE);
     assert(p->data != NULL);
     assert(p->header >= 128);
@@ -226,6 +239,8 @@ bool bdl_packet_get(bdl_rx_t *bdl, bdl_packet_t *p)
     uint16_t crc_calc, crc_recv;
     uint8_t len;
 
+    assert(bdl != NULL);
+    assert(p != NULL);
     assert(p->state == BP_RX_DONE);
     assert(p->data != NULL);
     assert(p->data_len <= p->max_len);
@@ -262,11 +277,13 @@ bool bdl_packet_get(bdl_rx_t *bdl, bdl_packet_t *p)
 
 uint32_t bdl_get_error_count(bdl_rx_t *bdl)
 {
+    assert(bdl != NULL);
     return bdl->error_count;
 }
 
 void bdl_reset_error_count(bdl_rx_t *bdl)
 {
+    assert(bdl != NULL);
     bdl->error_count = 0;
 }
 
@@ -275,6 +292,7 @@ void bdl_put_rx_byte(bdl_rx_t *bdl, uint8_t data)
 {
     bdl_packet_t *p;
 
+    assert(bdl != NULL);
     switch (bdl->rx_state) {
         case BDL_RX_STRING_MODE:
             if ( data & 0x80 ) {
@@ -368,6 +386,8 @@ void bdl_put_rx_byte(bdl_rx_t *bdl, uint8_t data)
 
 void bdl_init_tx(bdl_tx_t *bdl, const bdl_tx_config_t *cfg)
 {
+    assert(bdl != NULL);
+    assert(cfg != NULL);
     assert(cfg->string_buf != NULL);
     assert(cfg->string_buf_size >= 2);
     assert(cfg->crc16 != NULL);
@@ -394,6 +414,7 @@ void bdl_init_tx(bdl_tx_t *bdl, const bdl_tx_config_t *cfg)
 
 bool bdl_string_put_nb(bdl_tx_t *bdl, char c)
 {
+    assert(bdl != NULL);
     if ( bdl->string_buf[bdl->string_in] == 0 ) {
         bdl->string_buf[bdl->string_in] = c & 0x7F;
         bdl->string_in = NEXT(bdl->string_in, bdl->string_buf_size);
@@ -407,6 +428,7 @@ bool bdl_string_put_nb(bdl_tx_t *bdl, char c)
 
 void bdl_string_put_bl(bdl_tx_t *bdl, char c)
 {
+    assert(bdl != NULL);
     while ( bdl->string_buf[bdl->string_in] != 0 );
     bdl->string_buf[bdl->string_in] = c & 0x7F;
     bdl->string_in = NEXT(bdl->string_in, bdl->string_buf_size);
@@ -417,6 +439,7 @@ void bdl_string_put_bl(bdl_tx_t *bdl, char c)
 
 bool bdl_string_can_put(bdl_tx_t *bdl)
 {
+    assert(bdl != NULL);
     return ( bdl->string_buf[bdl->string_in] == 0 );
 }
 
@@ -426,6 +449,8 @@ void bdl_packet_put(bdl_tx_t *bdl, bdl_packet_t *p,
     uint16_t crc;
     uint8_t len;
 
+    assert(bdl != NULL);
+    assert(p != NULL);
     assert(p->state == BP_IDLE);
     assert(p->data != NULL);
     assert(p->data_len <= (p->max_len-2)); // need room for CRC
@@ -474,6 +499,7 @@ uint32_t bdl_get_tx_byte(bdl_tx_t *bdl)
     uint8_t data;
     bdl_packet_t *p;
 
+    assert(bdl != NULL);
     switch (bdl->tx_state) {
         case BDL_TX_STRING_MODE:
             // binary packets take precedence over text, check if there is one
