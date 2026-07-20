@@ -34,12 +34,13 @@ VOID_VOID_FUNC = ctypes.CFUNCTYPE(None)
 PACKET_FUNC = ctypes.CFUNCTYPE(None, ctypes.c_void_p)
 
 class BdlPacketState(enum.IntEnum):
-    BP_IDLE    = 0
-    BP_RX_WAIT = 1
-    BP_RX_BUSY = 2
-    BP_RX_DONE = 3
-    BP_TX_WAIT = 4
-    BP_TX_BUSY = 5
+    BP_NOT_READY = 0
+    BP_IDLE      = 1
+    BP_RX_WAIT   = 2
+    BP_RX_BUSY   = 3
+    BP_RX_DONE   = 4
+    BP_TX_WAIT   = 5
+    BP_TX_BUSY   = 6
 
 
 class BundleCAPI:

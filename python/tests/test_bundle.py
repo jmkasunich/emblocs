@@ -575,7 +575,7 @@ def test_c_packet_set_len_asserts_bad_length(bundle_api):
         pkt = CPacket(api, chan=5, bufsize=20, data=b"abc", pool=pool)
         ''',
         should_assert= 'pkt.set_length(19)',
-        expected_assert_text='len <= (p->max_len - 2)'
+        expected_assert_text='len <= (p->buf_len - 2)'
     )
 
 

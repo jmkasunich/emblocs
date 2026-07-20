@@ -126,7 +126,7 @@ void bdl_packet_init_buf(bdl_packet_t *p, uint8_t *buf, uint8_t len)
     assert(len <= 254);
     assert(len >= 2);
     p->data = buf;
-    p->max_len = len;
+    p->buf_len = len;
     p->data_len = 0;
     p->chan = 0;
     p->state = BP_IDLE;
@@ -148,7 +148,7 @@ void bdl_packet_set_len(bdl_packet_t *p, uint8_t len)
 {
     assert(p != NULL);
     assert(p->state == BP_IDLE);
-    assert(len <= (p->max_len - 2));  // allow room for CRC
+    assert(len <= (p->buf_len - 2));  // allow room for CRC
     p->data_len = len;
 }
 
@@ -176,7 +176,7 @@ void bdl_init_rx(bdl_rx_t *bdl, const bdl_rx_config_t *cfg)
     bdl->pkt_current = NULL;
     bdl->pkt_byte_count = 0;
     bdl->pkt_root.state = BP_IDLE;
-    bdl->pkt_root.max_len = 0;
+    bdl->pkt_root.buf_len = 0;
     bdl->pkt_root.data_len = 0;
     bdl->pkt_root.chan = START_OF_PACKET_MASK;  // sentinel to mark root
     bdl->pkt_root.cobs_byte = 0;
@@ -221,8 +221,6 @@ void bdl_packet_listen(bdl_rx_t *bdl, bdl_packet_t *p,
     assert(bdl != NULL);
     assert(p != NULL);
     assert(p->state == BP_IDLE);
-    assert(p->data != NULL);
-    assert(p->chan <= MAX_CHAN);
     p->data_len = 0;
     p->state = BP_RX_WAIT;
     p->callback = callback;
@@ -246,9 +244,6 @@ bool bdl_packet_get(bdl_rx_t *bdl, bdl_packet_t *p)
     assert(bdl != NULL);
     assert(p != NULL);
     assert(p->state == BP_RX_DONE);
-    assert(p->data != NULL);
-    assert(p->data_len <= p->max_len);
-    assert(bdl->crc16 != NULL);
     // COBS decoding
     uint8_t *bp = p->data + p->cobs_byte - 1;
     uint8_t * const end = p->data + p->data_len;
@@ -366,7 +361,7 @@ void bdl_put_rx_byte(bdl_rx_t *bdl, uint8_t data)
                     p->callback(p);
                 }
                 bdl->rx_state = BDL_RX_STRING_MODE;
-            } else if ( p->data_len >= p->max_len ) {
+            } else if ( p->data_len >= p->buf_len ) {
                 // packet too long for buffer - discard remainder
                 p->state = BP_RX_WAIT;
                 bdl->error_count++;
@@ -407,7 +402,7 @@ void bdl_init_tx(bdl_tx_t *bdl, const bdl_tx_config_t *cfg)
     bdl->pkt_current = NULL;
     bdl->pkt_data_index = 0;
     bdl->pkt_root.state = BP_IDLE;
-    bdl->pkt_root.max_len = 0;
+    bdl->pkt_root.buf_len = 0;
     bdl->pkt_root.data_len = 0;
     bdl->pkt_root.chan = START_OF_PACKET_MASK;  // sentinel to mark root
     bdl->pkt_root.cobs_byte = 0;
@@ -457,10 +452,6 @@ void bdl_packet_put(bdl_tx_t *bdl, bdl_packet_t *p,
     assert(bdl != NULL);
     assert(p != NULL);
     assert(p->state == BP_IDLE);
-    assert(p->data != NULL);
-    assert(p->data_len <= (p->max_len-2)); // need room for CRC
-    assert(p->chan <= MAX_CHAN);
-    assert(bdl->crc16 != NULL);
     p->state = BP_TX_WAIT;
     p->callback = callback;
     // compute and append CRC
