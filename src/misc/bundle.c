@@ -372,7 +372,8 @@ void bdl_put_rx_byte(bdl_rx_t *bdl, uint8_t data)
             }
             break;
         default:
-            assert(0);  // invalid rx_state - should never happen
+            // invalid rx_state - should never happen
+            assert(0 && "invalid state");
             bdl->rx_state = BDL_RX_STRING_MODE;
             break;
     }
@@ -546,7 +547,8 @@ uint32_t bdl_get_tx_byte(bdl_tx_t *bdl)
             }
             break;
         default:
-            assert(0);  // invalid tx_state - should never happen
+            // invalid tx_state - should never happen
+            assert(0 && "invalid state");
             bdl->tx_state = BDL_TX_STRING_MODE;
             return 0;
             break;

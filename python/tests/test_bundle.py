@@ -597,7 +597,7 @@ def test_c_tx_init_tx_asserts_when_config_null(bundle_api):
         expected_assert_text='cfg != NULL',
     )
 
-def test_c_init_tx_asserts_when_string_buf_null(bundle_api):
+def test_c_tx_init_tx_asserts_when_string_buf_null(bundle_api):
     assert_c_aborts(
         setup='''
         tx = api.new_tx()
@@ -607,7 +607,7 @@ def test_c_init_tx_asserts_when_string_buf_null(bundle_api):
         expected_assert_text='cfg->string_buf != NULL',
     )
 
-def test_c_init_tx_asserts_when_string_buf_size_too_small(bundle_api):
+def test_c_tx_init_tx_asserts_when_string_buf_size_too_small(bundle_api):
     assert_c_aborts(
         setup='''
         tx = api.new_tx()
@@ -618,7 +618,7 @@ def test_c_init_tx_asserts_when_string_buf_size_too_small(bundle_api):
         expected_assert_text='cfg->string_buf_size >= 2',
     )
 
-def test_c_init_tx_asserts_when_crc16_null(bundle_api):
+def test_c_tx_init_tx_asserts_when_crc16_null(bundle_api):
     assert_c_aborts(
         setup='''
         tx = api.new_tx()
@@ -665,11 +665,28 @@ def test_c_tx_packet_put_asserts_when_packet_null(bundle_api):
         expected_assert_text='p != NULL',
     )
 
+def test_c_tx_packet_put_asserts_when_packet_not_idle(bundle_api):
+    assert_c_aborts(
+        setup='''
+        tx = api.new_tx()
+        pkt = api.new_packet()
+        ''',
+        should_assert='api.packet_put(tx, pkt, None)',
+        expected_assert_text='p->state == BP_IDLE',
+    )
+
 def test_c_tx_get_tx_byte_asserts_when_null(bundle_api):
     assert_c_aborts(
         setup='',
         should_assert='api.get_tx_byte(None)',
         expected_assert_text='bdl != NULL',
+    )
+
+def test_c_tx_get_tx_byte_asserts_when_not_ready(bundle_api):
+    assert_c_aborts(
+        setup='tx = api.new_tx()',
+        should_assert='api.get_tx_byte(tx)',
+        expected_assert_text='invalid state',
     )
 
 
@@ -691,7 +708,7 @@ def test_c_rx_init_rx_asserts_when_config_null(bundle_api):
         expected_assert_text='cfg != NULL',
     )
 
-def test_c_init_rx_asserts_when_string_buf_null(bundle_api):
+def test_c_rx_init_rx_asserts_when_string_buf_null(bundle_api):
     assert_c_aborts(
         setup='''
         rx = api.new_rx()
@@ -701,7 +718,7 @@ def test_c_init_rx_asserts_when_string_buf_null(bundle_api):
         expected_assert_text='cfg->string_buf != NULL',
     )
 
-def test_c_init_rx_asserts_when_string_buf_size_too_small(bundle_api):
+def test_c_rx_init_rx_asserts_when_string_buf_size_too_small(bundle_api):
     assert_c_aborts(
         setup='''
         rx = api.new_rx()
@@ -712,7 +729,7 @@ def test_c_init_rx_asserts_when_string_buf_size_too_small(bundle_api):
         expected_assert_text='cfg->string_buf_size >= 2',
     )
 
-def test_c_init_rx_asserts_when_crc16_null(bundle_api):
+def test_c_rx_init_rx_asserts_when_crc16_null(bundle_api):
     assert_c_aborts(
         setup='''
         rx = api.new_rx()
@@ -759,6 +776,16 @@ def test_c_rx_packet_listen_asserts_when_packet_null(bundle_api):
         expected_assert_text='p != NULL',
     )
 
+def test_c_rx_packet_listen_asserts_when_packet_not_idle(bundle_api):
+    assert_c_aborts(
+        setup='''
+        rx = api.new_rx()
+        pkt = api.new_packet()
+        ''',
+        should_assert='api.packet_listen(rx, pkt, None)',
+        expected_assert_text='p->state == BP_IDLE',
+    )
+
 def test_c_rx_packet_get_asserts_when_null(bundle_api):
     assert_c_aborts(
         setup='',
@@ -773,10 +800,27 @@ def test_c_rx_packet_get_asserts_when_packet_null(bundle_api):
         expected_assert_text='p != NULL',
     )
 
+def test_c_rx_packet_listen_asserts_when_packet_not_done(bundle_api):
+    assert_c_aborts(
+        setup='''
+        rx = api.new_rx()
+        pkt = api.new_packet()
+        ''',
+        should_assert='api.packet_get(rx, pkt)',
+        expected_assert_text='p->state == BP_RX_DONE',
+    )
+
 def test_c_rx_put_rx_byte_asserts_when_null(bundle_api):
     assert_c_aborts(
         setup='',
         should_assert='api.put_rx_byte(None, 0x41)',
         expected_assert_text='bdl != NULL',
+    )
+
+def test_c_rx_put_rx_byte_asserts_when_not_ready(bundle_api):
+    assert_c_aborts(
+        setup='rx = api.new_rx()',
+        should_assert='api.put_rx_byte(rx, 0x41)',
+        expected_assert_text='invalid state',
     )
 
