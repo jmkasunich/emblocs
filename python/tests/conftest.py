@@ -129,7 +129,7 @@ def run_in_subprocess(prefix: str, setup: str, should_assert: str) -> subprocess
         + textwrap.dedent(should_assert)
     )
     return subprocess.run(
-        [sys.executable, "-c", code],
+        [sys.executable, "-I",  "-c", code],
         capture_output=True, text=True, stdin=subprocess.DEVNULL,
     )
 

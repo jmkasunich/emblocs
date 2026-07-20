@@ -4,7 +4,7 @@ import pytest
 import ctypes
 import random
 import binascii
-from conftest import register_callback, assert_process_aborts, TESTS_DIR
+from conftest import register_callback, assert_process_aborts, TESTS_DIR, PYTHON_DIR
 from bundle import Bundle, Unbundle, _cobs_encode, _cobs_decode
 from bundle import _crc_seed as crc_seed
 from bundle_capi import PACKET_FUNC, VOID_VOID_FUNC, BdlPacketState
@@ -19,6 +19,7 @@ from bundle_capi import PACKET_FUNC, VOID_VOID_FUNC, BdlPacketState
 _ASSERT_PREFIX = f'''
 import ctypes, sys
 sys.path.insert(0, {str(TESTS_DIR)!r})
+sys.path.insert(0, {str(PYTHON_DIR)!r})
 
 if sys.platform == "win32":
     # Suppress Windows Error Reporting for this process. Without this, a
@@ -822,5 +823,19 @@ def test_c_rx_put_rx_byte_asserts_when_not_ready(bundle_api):
         setup='rx = api.new_rx()',
         should_assert='api.put_rx_byte(rx, 0x41)',
         expected_assert_text='invalid state',
+    )
+
+def test_c_rx_get_error_count_asserts_when_null(bundle_api):
+    assert_c_aborts(
+        setup='',
+        should_assert='api.get_error_count(None)',
+        expected_assert_text='bdl != NULL',
+    )
+
+def test_c_rx_reset_error_count_asserts_when_null(bundle_api):
+    assert_c_aborts(
+        setup='',
+        should_assert='api.reset_error_count(None)',
+        expected_assert_text='bdl != NULL',
     )
 
