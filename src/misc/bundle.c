@@ -8,11 +8,7 @@
  * *************************************************************/
 
 #include "bundle.h"
-#ifdef __arm__
-#include <cmsis_compiler.h> // __disable_irq(), __enable_irq()
-#else
-#include "test_stubs.h"
-#endif
+#include "critreg.h"
 #include <assert.h>
 #include <string.h> // memset()
 
@@ -235,13 +231,12 @@ void bdl_packet_listen(bdl_rx_t *bdl, bdl_packet_t *p,
     // insert at head of list
     // this makes less frequently used buffers drift towards the tail
     // so frequently used ones are found faster
-    // this is a critical region
-    __disable_irq();
+    CRITICAL_ENTER();
     p->prev = &(bdl->pkt_root);
     p->next = bdl->pkt_root.next;
     p->next->prev = p;
     bdl->pkt_root.next = p;
-    __enable_irq();
+    CRITICAL_EXIT();
 }
 
 bool bdl_packet_get(bdl_rx_t *bdl, bdl_packet_t *p)
@@ -360,11 +355,11 @@ void bdl_put_rx_byte(bdl_rx_t *bdl, uint8_t data)
             p = bdl->pkt_current;
             if ( data == '\0' ) {
                 // packet finished, unlink buffer from list
-                // this is a critical region, but we're already in an ISR
+                CRITICAL_ENTER();
                 p->prev->next = p->next;
                 p->next->prev = p->prev;
                 p->prev = p->next = p;
-                // critical region end
+                CRITICAL_EXIT();
                 p->state = BP_RX_DONE;
                 if ( p->callback != NULL ) {
                     p->callback(p);
@@ -492,13 +487,12 @@ void bdl_packet_put(bdl_tx_t *bdl, bdl_packet_t *p,
     *cp = code;
     // encoding complete
     // insert at end of list
-    // this is a critical region
-    __disable_irq();
+    CRITICAL_ENTER();
     p->next = &(bdl->pkt_root);
     p->prev = bdl->pkt_root.prev;
     p->prev->next = p;
     bdl->pkt_root.prev = p;
-    __enable_irq();
+    CRITICAL_EXIT();
     if ( bdl->tx_bytes_available != NULL ) {
         bdl->tx_bytes_available();
     }
@@ -516,11 +510,11 @@ uint32_t bdl_get_tx_byte(bdl_tx_t *bdl)
             p = bdl->pkt_root.next;
             if ( p != &(bdl->pkt_root) ) {
                 // there is a packet to send; unlink it from list
-                // this is a critical region, but we are already in an ISR
+                CRITICAL_ENTER();
                 p->prev->next = p->next;
                 p->next->prev = p->prev;
                 p->prev = p->next = p;
-                // critical region end
+                CRITICAL_EXIT();
                 // set up for packet transmit
                 p->state = BP_TX_BUSY;
                 bdl->pkt_current = p;
