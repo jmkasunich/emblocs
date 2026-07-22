@@ -128,8 +128,7 @@ void bdl_packet_init_buf(bdl_packet_t *p, uint8_t *buf, uint8_t len)
     p->chan = 0;
     p->state = BP_IDLE;
     p->cobs_byte = 0;
-    p->prev = p;
-    p->next = p;
+    p->next = NULL;
     p->callback = NULL;
 }
 
@@ -174,15 +173,7 @@ void bdl_init_rx(bdl_rx_t *bdl, const bdl_rx_config_t *cfg)
     bdl->crc16 = cfg->crc16;
     bdl->pkt_current = NULL;
     bdl->pkt_byte_count = 0;
-    bdl->pkt_root.state = BP_IDLE;
-    bdl->pkt_root.buf_len = 0;
-    bdl->pkt_root.data_len = 0;
-    bdl->pkt_root.chan = START_OF_PACKET_MASK;  // sentinel to mark root
-    bdl->pkt_root.cobs_byte = 0;
-    bdl->pkt_root.data = NULL;
-    bdl->pkt_root.prev = &(bdl->pkt_root);
-    bdl->pkt_root.next = &(bdl->pkt_root);
-    bdl->pkt_root.callback = NULL;
+    bdl->pkt_root = NULL;
 }
 
 uint32_t bdl_string_get_nb(bdl_rx_t *bdl)
@@ -219,6 +210,18 @@ bool bdl_string_can_get(bdl_rx_t *bdl)
     return ( bdl->string_buf[bdl->string_out] <= MAX_STRING_VALUE );
 }
 
+static void add_pkt_to_rx_list(bdl_rx_t *bdl, bdl_packet_t *p)
+{
+    // insert at head of list
+    // this makes less frequently used buffers drift towards the tail
+    // so frequently used ones are found faster
+    p->state = BP_RX_WAIT;
+    CRITICAL_ENTER();
+    p->next = bdl->pkt_root;
+    bdl->pkt_root = p;
+    CRITICAL_EXIT();
+}
+
 void bdl_packet_listen(bdl_rx_t *bdl, bdl_packet_t *p,
                         void (*callback)(struct bdl_packet_s *p))
 {
@@ -226,17 +229,8 @@ void bdl_packet_listen(bdl_rx_t *bdl, bdl_packet_t *p,
     assert(p != NULL);
     assert(p->state == BP_IDLE);
     p->data_len = 0;
-    p->state = BP_RX_WAIT;
     p->callback = callback;
-    // insert at head of list
-    // this makes less frequently used buffers drift towards the tail
-    // so frequently used ones are found faster
-    CRITICAL_ENTER();
-    p->prev = &(bdl->pkt_root);
-    p->next = bdl->pkt_root.next;
-    p->next->prev = p;
-    bdl->pkt_root.next = p;
-    CRITICAL_EXIT();
+    add_pkt_to_rx_list(bdl, p);
 }
 
 bool bdl_packet_get(bdl_rx_t *bdl, bdl_packet_t *p)
@@ -292,7 +286,7 @@ void bdl_reset_error_count(bdl_rx_t *bdl)
 
 void bdl_put_rx_byte(bdl_rx_t *bdl, uint8_t data)
 {
-    bdl_packet_t *p;
+    bdl_packet_t *p, **pp;
 
     assert(bdl != NULL);
     switch (bdl->rx_state) {
@@ -301,17 +295,23 @@ void bdl_put_rx_byte(bdl_rx_t *bdl, uint8_t data)
                 // start of packet character
                 int new_chan = data & MAX_CHAN;
                 // search listen list for matching buffer
-                p = bdl->pkt_root.next;
-                while ( ( p->chan <= MAX_CHAN ) && ( p->chan != new_chan ) ) {
-                    p = p->next;
+                pp = &(bdl->pkt_root);
+                while ( (p = *pp) != NULL ) {
+                    if ( p->chan == new_chan ) {
+                        // match found, remove from list
+                        CRITICAL_ENTER();
+                        *pp = p->next;
+                        p->next = NULL;
+                        CRITICAL_EXIT();
+                        // set up buffer for receive
+                        p->data_len = 0;
+                        p->state = BP_RX_BUSY;
+                        bdl->pkt_current = p;
+                        bdl->rx_state = BDL_RX_GET_COBS_BYTE;
+                        break;
+                    }
                 }
-                if ( p->chan == new_chan ) {
-                    // match found, set up buffer for receive
-                    p->data_len = 0;
-                    p->state = BP_RX_BUSY;
-                    bdl->pkt_current = p;
-                    bdl->rx_state = BDL_RX_GET_COBS_BYTE;
-                } else {
+                if ( p == NULL ) {
                     // no match
                     bdl->error_count++;
                     bdl->pkt_byte_count = 0;  // no data received yet
@@ -344,7 +344,8 @@ void bdl_put_rx_byte(bdl_rx_t *bdl, uint8_t data)
             if ( data == '\0' ) {
                 // packet ended early
                 bdl->error_count++;
-                p->state = BP_RX_WAIT;
+                // put packet back on list and reset its state
+                add_pkt_to_rx_list(bdl, p);
                 bdl->rx_state = BDL_RX_STRING_MODE;
             } else {
                 p->cobs_byte = data;
@@ -354,12 +355,7 @@ void bdl_put_rx_byte(bdl_rx_t *bdl, uint8_t data)
         case BDL_RX_GET_DATA_BYTE:
             p = bdl->pkt_current;
             if ( data == '\0' ) {
-                // packet finished, unlink buffer from list
-                CRITICAL_ENTER();
-                p->prev->next = p->next;
-                p->next->prev = p->prev;
-                p->prev = p->next = p;
-                CRITICAL_EXIT();
+                // packet finished, deliver it
                 p->state = BP_RX_DONE;
                 if ( p->callback != NULL ) {
                     p->callback(p);
@@ -367,9 +363,10 @@ void bdl_put_rx_byte(bdl_rx_t *bdl, uint8_t data)
                 bdl->rx_state = BDL_RX_STRING_MODE;
             } else if ( p->data_len >= p->buf_len ) {
                 // packet too long for buffer - discard remainder
-                p->state = BP_RX_WAIT;
                 bdl->error_count++;
                 bdl->pkt_byte_count = p->data_len + 1;
+                // put packet back on list and reset its state
+                add_pkt_to_rx_list(bdl, p);
                 bdl->rx_state = BDL_RX_DISCARD_PACKET;
             } else {
                 p->data[p->data_len++] = data;
@@ -408,15 +405,8 @@ void bdl_init_tx(bdl_tx_t *bdl, const bdl_tx_config_t *cfg)
     bdl->crc16 = cfg->crc16;
     bdl->pkt_current = NULL;
     bdl->pkt_data_index = 0;
-    bdl->pkt_root.state = BP_IDLE;
-    bdl->pkt_root.buf_len = 0;
-    bdl->pkt_root.data_len = 0;
-    bdl->pkt_root.chan = START_OF_PACKET_MASK;  // sentinel to mark root
-    bdl->pkt_root.cobs_byte = 0;
-    bdl->pkt_root.data = NULL;
-    bdl->pkt_root.prev = &(bdl->pkt_root);
-    bdl->pkt_root.next = &(bdl->pkt_root);
-    bdl->pkt_root.callback = NULL;
+    bdl->pkt_root = NULL;
+    bdl->pkt_tail = &(bdl->pkt_root);
 }
 
 bool bdl_string_put_nb(bdl_tx_t *bdl, char c)
@@ -488,10 +478,9 @@ void bdl_packet_put(bdl_tx_t *bdl, bdl_packet_t *p,
     // encoding complete
     // insert at end of list
     CRITICAL_ENTER();
-    p->next = &(bdl->pkt_root);
-    p->prev = bdl->pkt_root.prev;
-    p->prev->next = p;
-    bdl->pkt_root.prev = p;
+    p->next = NULL;
+    *(bdl->pkt_tail) = p;
+    bdl->pkt_tail = &(p->next);
     CRITICAL_EXIT();
     if ( bdl->tx_bytes_available != NULL ) {
         bdl->tx_bytes_available();
@@ -507,13 +496,14 @@ uint32_t bdl_get_tx_byte(bdl_tx_t *bdl)
     switch (bdl->tx_state) {
         case BDL_TX_STRING_MODE:
             // binary packets take precedence over text, check if there is one
-            p = bdl->pkt_root.next;
-            if ( p != &(bdl->pkt_root) ) {
+            if ( bdl->pkt_root != NULL) {
                 // there is a packet to send; unlink it from list
                 CRITICAL_ENTER();
-                p->prev->next = p->next;
-                p->next->prev = p->prev;
-                p->prev = p->next = p;
+                p = bdl->pkt_root;
+                bdl->pkt_root = p->next;
+                if ( bdl->pkt_root == NULL ) {
+                    bdl->pkt_tail = &(bdl->pkt_root);
+                }
                 CRITICAL_EXIT();
                 // set up for packet transmit
                 p->state = BP_TX_BUSY;

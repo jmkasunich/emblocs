@@ -93,7 +93,6 @@ typedef struct bdl_packet_s {
     bdl_packet_state_t state;   // packet buffer state - private
     uint8_t *data;              // pointer to the actual data
     struct bdl_packet_s *next;  // used for buffer list management - private
-    struct bdl_packet_s *prev;  // used for buffer list management - private
     void (*callback)(struct bdl_packet_s *p);  // packet completion - private
 } bdl_packet_t;
 
@@ -138,7 +137,8 @@ typedef struct bdl_tx_s {
     uint32_t            string_in;
     uint32_t            string_out;
     void              (*string_not_full)(void);
-    bdl_packet_t        pkt_root;
+    bdl_packet_t       *pkt_root;    // head of list, oldest packet to be sent
+    bdl_packet_t      **pkt_tail;    // points to NULL at end of list, new ones go here
     bdl_packet_t       *pkt_current;
     uint8_t             pkt_data_index;
     bdl_tx_state_t      tx_state;
@@ -162,7 +162,7 @@ typedef struct bdl_rx_s {
     uint32_t            string_in;
     uint32_t            string_out;
     void              (*string_avail)(void);
-    bdl_packet_t        pkt_root;
+    bdl_packet_t       *pkt_root;
     bdl_packet_t       *pkt_current;
     uint8_t             pkt_byte_count;
     bdl_rx_state_t      rx_state;
