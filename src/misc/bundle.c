@@ -310,6 +310,7 @@ void bdl_put_rx_byte(bdl_rx_t *bdl, uint8_t data)
                         bdl->rx_state = BDL_RX_GET_COBS_BYTE;
                         break;
                     }
+                    pp = &p->next;
                 }
                 if ( p == NULL ) {
                     // no match
