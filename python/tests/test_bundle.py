@@ -424,7 +424,7 @@ def test_c_string_receive(bundle_api, c_object_pool):
     received_bytes = bytearray()
     while 1:
         b = rx.string_get_nb();
-        if b == 0:
+        if b == 256:
             break
         received_bytes.append(b)
     received_string = received_bytes.decode('ascii')

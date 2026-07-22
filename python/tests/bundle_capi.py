@@ -68,7 +68,7 @@ class BundleCAPI:
         lib.bdl_init_rx.restype  = None
 
         lib.bdl_string_get_nb.argtypes = [ctypes.c_void_p]
-        lib.bdl_string_get_nb.restype  = ctypes.c_char
+        lib.bdl_string_get_nb.restype  = ctypes.c_uint32
         lib.bdl_string_get_bl.argtypes = [ctypes.c_void_p]
         lib.bdl_string_get_bl.restype  = ctypes.c_char
         lib.bdl_string_put_nb.argtypes = [ctypes.c_void_p, ctypes.c_char]
@@ -174,8 +174,8 @@ class BundleCAPI:
         self._lib.bdl_init_rx(rx, cfg)
 
     def string_get_nb(self, rx) -> int:
-        """Returns the next string-channel byte as an int, or 0 if none available."""
-        return ord(self._lib.bdl_string_get_nb(rx))
+        """Returns the next string-channel byte as an int, or 256 if none available."""
+        return self._lib.bdl_string_get_nb(rx)
 
     def string_get_bl(self, rx) -> int:
         """Returns the next string-channel byte as an int, or blocks if none available."""

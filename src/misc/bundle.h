@@ -45,6 +45,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#define BDL_NO_DATA (0x100)
 
 /*****************************************************************
  * Binary Packet Interface - Packet structures:
@@ -132,7 +133,7 @@ typedef enum {
 
 // all fields are private; use bdl_* functions to access
 typedef struct bdl_tx_s {
-    volatile char      *string_buf;
+    volatile uint8_t   *string_buf;
     uint32_t            string_buf_size;
     uint32_t            string_in;
     uint32_t            string_out;
@@ -156,7 +157,7 @@ typedef enum {
 
 // all fields are private; use bdl_* functions to access
 typedef struct bdl_rx_s {
-    volatile char      *string_buf;
+    volatile uint8_t   *string_buf;
     uint32_t            string_buf_size;
     uint32_t            string_in;
     uint32_t            string_out;
@@ -192,7 +193,7 @@ typedef struct bdl_rx_s {
  * 
  * Example:
  *
- *   static char tx_buf[256];
+ *   static uint8_t tx_buf[256];
  *   static bdl_tx_t my_tx;
  *
  *   const bdl_tx_config_t my_tx_cfg = {
@@ -207,7 +208,7 @@ typedef struct bdl_rx_s {
  */
 
 typedef struct {
-    char      *string_buf;
+    uint8_t   *string_buf;
     size_t     string_buf_size;
     void     (*string_not_full)(void);
     uint16_t (*crc16)(uint16_t seed, const uint8_t *data, uint8_t len);
@@ -218,7 +219,7 @@ void bdl_init_tx(bdl_tx_t *bdl, const bdl_tx_config_t *cfg);
 
 
 typedef struct {
-    char      *string_buf;
+    uint8_t   *string_buf;
     size_t     string_buf_size;
     void     (*string_avail)(void);
     uint16_t (*crc16)(uint16_t seed, const uint8_t *data, uint8_t len);
@@ -253,8 +254,8 @@ void bdl_init_rx(bdl_rx_t *bdl, const bdl_rx_config_t *cfg);
  *
  */
 
-// non-blocking read - returns '\0' if no data available
-char bdl_string_get_nb(bdl_rx_t *bdl);
+// non-blocking read - returns 'BDL_NO_DATA' if no data available
+uint32_t bdl_string_get_nb(bdl_rx_t *bdl);
 // blocking read - busy waits if no data available
 char bdl_string_get_bl(bdl_rx_t *bdl);
 // returns true if data is available
@@ -396,11 +397,11 @@ void bdl_reset_error_count(bdl_rx_t *bdl);
  * 'bdl_get_tx_byte()' should be called by the hardware driver,
  * typically from a "transmit buffer empty" interrupt handler.
  * This function can run in interrupt context and will either
- * return 0-255 as the byte to send, or >255 if there is no
- * data in any outgoing buffer.
+ * return 0-255 as the byte to send, or 'BDL_NO_DATA' if there
+ * is no data in any outgoing buffer.
  *
- * When bdl_get_tx_byte() returns >255, the hardware driver
- * will typically disable the transmit interrupt.
+ * When bdl_get_tx_byte() returns 'BDL_NO_DATA', the hardware
+ * driver will typically disable the transmit interrupt.
  *
  * The driver can provide an optional callback at setup that
  * can be used to re-enable an interrupt or otherwise resume
@@ -411,10 +412,10 @@ void bdl_reset_error_count(bdl_rx_t *bdl);
  * 
  * The callback can re-enable a 'transmitter-ready' interrupt,
  * which in turn would repeatedly invoke 'bdl_get_tx_byte()'
- * until it again returns a value > 255, at which time the
+ * until it again returns 'BDL_NO_DATA', at which time the
  * interrupt would be disabled.  Or, for a polled system it
  * could simply call 'bdl_get_tx_byte()' repeatedly until it
- * again returns a value > 255.  In any case, if the callback
+ * again returns 'BDL_NO_DATA'.  In any case, if the callback
  * blocks, then 'bdl_string_put_xx()' or 'bdl_packet_put()'
  * will also block.
  */

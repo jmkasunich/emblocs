@@ -14,6 +14,7 @@
 #include "test_stubs.h"
 #endif
 #include <assert.h>
+#include <string.h> // memset()
 
 #ifndef uint
 #define uint unsigned int
@@ -169,6 +170,8 @@ void bdl_init_rx(bdl_rx_t *bdl, const bdl_rx_config_t *cfg)
     bdl->error_count = 0;
     bdl->string_buf = cfg->string_buf;
     bdl->string_buf_size = cfg->string_buf_size;
+    // we use illegal string values to mark empty buffer locations
+    memset(bdl->string_buf, MAX_STRING_VALUE+1, bdl->string_buf_size);
     bdl->string_in = 0;
     bdl->string_out = 0;
     bdl->string_avail = cfg->string_avail;
@@ -186,33 +189,38 @@ void bdl_init_rx(bdl_rx_t *bdl, const bdl_rx_config_t *cfg)
     bdl->pkt_root.callback = NULL;
 }
 
-char bdl_string_get_nb(bdl_rx_t *bdl)
+uint32_t bdl_string_get_nb(bdl_rx_t *bdl)
 {
-    char c;
+    uint8_t c;
 
     assert(bdl != NULL);
-    if ( (c = bdl->string_buf[bdl->string_out]) != 0 ) {
-        bdl->string_buf[bdl->string_out] = 0;
+    if ( (c = bdl->string_buf[bdl->string_out]) <= MAX_STRING_VALUE ) {
+        // data exists in buffer
+        // mark buffer location as empty
+        bdl->string_buf[bdl->string_out] = MAX_STRING_VALUE+1;
         bdl->string_out = NEXT(bdl->string_out, bdl->string_buf_size);
+        return c;
     }
-    return c;
+    return BDL_NO_DATA;
 }
 
 char bdl_string_get_bl(bdl_rx_t *bdl)
 {
-    char c;
+    uint8_t c;
 
     assert(bdl != NULL);
-    while ( (c = bdl->string_buf[bdl->string_out]) == 0 );
-    bdl->string_buf[bdl->string_out] = 0;
+    while ( (c = bdl->string_buf[bdl->string_out]) > MAX_STRING_VALUE );
+    // data now exists in buffer
+    // mark buffer location as empty
+    bdl->string_buf[bdl->string_out] = MAX_STRING_VALUE+1;
     bdl->string_out = NEXT(bdl->string_out, bdl->string_buf_size);
-    return c;
+    return (char)(c);
 }
 
 bool bdl_string_can_get(bdl_rx_t *bdl)
 {
     assert(bdl != NULL);
-    return ( bdl->string_buf[bdl->string_out] != 0 );
+    return ( bdl->string_buf[bdl->string_out] <= MAX_STRING_VALUE );
 }
 
 void bdl_packet_listen(bdl_rx_t *bdl, bdl_packet_t *p,
@@ -316,7 +324,8 @@ void bdl_put_rx_byte(bdl_rx_t *bdl, uint8_t data)
                 }
             } else {
                 // ordinary ASCII character
-                if ( bdl->string_buf[bdl->string_in] == 0 ) {
+                if ( bdl->string_buf[bdl->string_in] > MAX_STRING_VALUE ) {
+                    // space available in buffer
                     bdl->string_buf[bdl->string_in] = data;
                     bdl->string_in = NEXT(bdl->string_in, bdl->string_buf_size);
                     if ( bdl->string_avail != NULL ) {
@@ -395,6 +404,8 @@ void bdl_init_tx(bdl_tx_t *bdl, const bdl_tx_config_t *cfg)
     bdl->tx_state = BDL_TX_STRING_MODE;
     bdl->string_buf = cfg->string_buf;
     bdl->string_buf_size = cfg->string_buf_size;
+    // we use illegal string values to mark empty buffer locations
+    memset(bdl->string_buf, MAX_STRING_VALUE+1, bdl->string_buf_size);
     bdl->string_in = 0;
     bdl->string_out = 0;
     bdl->string_not_full = cfg->string_not_full;
@@ -416,8 +427,9 @@ void bdl_init_tx(bdl_tx_t *bdl, const bdl_tx_config_t *cfg)
 bool bdl_string_put_nb(bdl_tx_t *bdl, char c)
 {
     assert(bdl != NULL);
-    if ( bdl->string_buf[bdl->string_in] == 0 ) {
-        bdl->string_buf[bdl->string_in] = c & MAX_STRING_VALUE;
+    if ( bdl->string_buf[bdl->string_in] > MAX_STRING_VALUE ) {
+        // location is empty, store data
+        bdl->string_buf[bdl->string_in] = (uint8_t)(c) & MAX_STRING_VALUE;
         bdl->string_in = NEXT(bdl->string_in, bdl->string_buf_size);
         if ( bdl->tx_bytes_available != NULL ) {
             bdl->tx_bytes_available();
@@ -430,8 +442,9 @@ bool bdl_string_put_nb(bdl_tx_t *bdl, char c)
 void bdl_string_put_bl(bdl_tx_t *bdl, char c)
 {
     assert(bdl != NULL);
-    while ( bdl->string_buf[bdl->string_in] != 0 );
-    bdl->string_buf[bdl->string_in] = c & MAX_STRING_VALUE;
+    while ( bdl->string_buf[bdl->string_in] <= MAX_STRING_VALUE );
+    // location is now empty, store data
+    bdl->string_buf[bdl->string_in] = (uint8_t)(c) & MAX_STRING_VALUE;
     bdl->string_in = NEXT(bdl->string_in, bdl->string_buf_size);
     if ( bdl->tx_bytes_available != NULL ) {
         bdl->tx_bytes_available();
@@ -441,7 +454,7 @@ void bdl_string_put_bl(bdl_tx_t *bdl, char c)
 bool bdl_string_can_put(bdl_tx_t *bdl)
 {
     assert(bdl != NULL);
-    return ( bdl->string_buf[bdl->string_in] == 0 );
+    return ( bdl->string_buf[bdl->string_in] > MAX_STRING_VALUE );
 }
 
 void bdl_packet_put(bdl_tx_t *bdl, bdl_packet_t *p,
@@ -514,9 +527,10 @@ uint32_t bdl_get_tx_byte(bdl_tx_t *bdl)
                 bdl->tx_state = BDL_TX_SEND_COBS_BYTE;
                 // send the start of packet byte
                 return p->chan | START_OF_PACKET_MASK;
-            } else if ( (data = bdl->string_buf[bdl->string_out]) != 0 ) {
+            } else if ( (data = bdl->string_buf[bdl->string_out]) <= MAX_STRING_VALUE ) {
                 // send a character
-                bdl->string_buf[bdl->string_out] = 0;
+                // first mark buffer location as empty
+                bdl->string_buf[bdl->string_out] = MAX_STRING_VALUE+1;
                 bdl->string_out = NEXT(bdl->string_out, bdl->string_buf_size);
                 if ( bdl->string_not_full != NULL ) {
                     bdl->string_not_full();
@@ -524,7 +538,7 @@ uint32_t bdl_get_tx_byte(bdl_tx_t *bdl)
                 return data;
             } else {
                 // nothing to send
-                return 0x100;
+                return BDL_NO_DATA;
             }
             break;
         case BDL_TX_SEND_COBS_BYTE:
