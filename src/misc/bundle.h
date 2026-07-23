@@ -25,7 +25,7 @@
  * read from or written by different threads.
  *
  * The protocol works by limiting the string channel to values
- * between 0x01 and 0x7F.  Values of 0x80 and higher are used
+ * between 0x00 and 0x7F.  Values of 0x80 and higher are used
  * to indicate the start of a binary packet as well as the
  * channel number.  Binary packets use COBS (constant overhead
  * byte stuffing) to avoid including zeros in the packet, at
@@ -373,8 +373,8 @@ uint16_t bdl_crc16_lookup(uint16_t seed, const uint8_t *data, uint8_t len);
  * can change string bytes, cause binary data to be treated
  * as string, or cause string data to be considered as binary
  * (and thus probably be discarded as a bad packet).
- * Returned string data will not contain 0x00 or any value
- * greater than 0x7F.
+ * Returned string data will not contain any value greater than
+ * 0x7F.
  */
 
 uint32_t bdl_get_error_count(bdl_rx_t *bdl);
