@@ -201,6 +201,12 @@ class CRx:
         for b in data:
             self.api.put_rx_byte(self.rx, b)
 
+    @property
+    def error_count(self) -> int:
+        return self.api.get_error_count(self.rx)
+
+    def reset_error_count(self) -> None:
+        self.api.reset_error_count(self.rx)
 
 #-----------------------------------------------------------------------
 # Low-level tests of seed generation and CRC computation
@@ -481,8 +487,174 @@ def test_py_packet_receive():
 
 
 #-----------------------------------------------------------------------
+# multi-packet tests
+#-----------------------------------------------------------------------
+
+def _recorder(pool):
+    """Returns (order_list, callback) -- callback appends the CPacket
+    object (looked up by address via the pool) each time it fires, so
+    tests can assert both *that* a callback fired and *which specific
+    buffer* it fired for."""
+    order = []
+    def _cb(addr):
+        order.append(pool[addr])
+    return order, _cb
+
+
+def test_c_rx_listener_list_lifecycle(bundle_api, c_object_pool):
+    """
+    Walks one receive listener list through its full lifecycle:
+    unlistened channel against a full, non-empty list (exercises a
+    head, a middle, and a tail node all failing to match in one
+    search); a match requiring mid-list removal; two matches that
+    drain the list to empty, one node at a time; and finally a search
+    against a genuinely empty list.
+
+    Registers two buffers on channel 5 and one on channel 6, in the
+    order 5, 6, 5 -- producing the list [chan5_b, chan6, chan5_a]
+    head-to-tail. Which specific buffer object catches a given
+    channel-5 packet is deliberately never asserted: LIFO search order
+    is a performance optimization (see add_pkt_to_rx_list's comment),
+    not a documented contract. What the contract does promise is that
+    both buffers eventually receive correct data, in wire order.
+    """
+    rx = CRx(bundle_api, string_bufsize=8, pool=c_object_pool)
+    assert rx.error_count == 0
+    order, cb = _recorder(c_object_pool)
+    callback = register_callback(PACKET_FUNC, cb, c_object_pool)
+
+    chan5_a = CPacket(bundle_api, chan=5, pool=c_object_pool)
+    chan6   = CPacket(bundle_api, chan=6, pool=c_object_pool)
+    chan5_b = CPacket(bundle_api, chan=5, pool=c_object_pool)
+    chan5_buffers = {chan5_a, chan5_b}
+
+    rx.packet_listen(chan5_a, callback)
+    rx.packet_listen(chan6, callback)
+    rx.packet_listen(chan5_b, callback)
+
+    # --- unlistened channel against the full 3-node list: walks a
+    # head, a middle, and a tail node, none of which match.
+    rx.put_rx_bytes(make_packet_wire_bytes(b"nobody-home", chan=7))
+    assert rx.error_count == 1
+    assert order == []
+
+    # --- middle removal: chan 6 sits between the two chan-5 buffers,
+    # so matching it requires walking past a non-matching head and
+    # unlinking from the middle. List drops from 3 nodes to 2.
+    rx.put_rx_bytes(make_packet_wire_bytes(b"middle", chan=6))
+    assert order == [chan6]
+    assert chan6.state == BdlPacketState.BP_RX_DONE
+    assert rx.packet_get(chan6) is True
+    assert chan6.state == BdlPacketState.BP_IDLE
+    assert chan6.read_data() == b"middle"
+    assert chan5_a.state == BdlPacketState.BP_RX_WAIT
+    assert chan5_b.state == BdlPacketState.BP_RX_WAIT
+    # should be no additional errors
+    assert rx.error_count == 1
+
+    # --- first chan-5 delivery: 2 nodes -> 1. Not asserting which
+    # buffer caught it -- see docstring.
+    rx.put_rx_bytes(make_packet_wire_bytes(b"first-five", chan=5))
+    assert len(order) == 2
+    first_catcher = order[1]
+    assert first_catcher in chan5_buffers
+    assert first_catcher.state == BdlPacketState.BP_RX_DONE
+    assert rx.packet_get(first_catcher) is True
+    assert first_catcher.state == BdlPacketState.BP_IDLE
+    assert first_catcher.read_data() == b"first-five"
+    # should be no additional errors
+    assert rx.error_count == 1
+
+    # --- second chan-5 delivery: drains the sole remaining node,
+    # emptying the list.
+    rx.put_rx_bytes(make_packet_wire_bytes(b"second-five", chan=5))
+    assert len(order) == 3
+    second_catcher = order[2]
+    assert second_catcher.state == BdlPacketState.BP_RX_DONE
+    assert {first_catcher, second_catcher} == chan5_buffers
+    assert second_catcher is not first_catcher
+    assert rx.packet_get(second_catcher) is True
+    assert second_catcher.state == BdlPacketState.BP_IDLE
+    assert second_catcher.read_data() == b"second-five"
+    # should be no additional errors
+    assert rx.error_count == 1
+
+    # --- third chan-5 packet against a genuinely empty list: the
+    # zero-iteration boundary, distinct from "walked and found nothing".
+    errors_before = rx.error_count
+    rx.put_rx_bytes(make_packet_wire_bytes(b"nobody-left", chan=5))
+    assert rx.error_count == 2
+    assert len(order) == 3
+
+    # handy plate to test the error reset mechanism
+    rx.reset_error_count()
+    assert rx.error_count == 0
+
+
+def test_c_tx_list_strict_fifo(bundle_api, c_object_pool):
+    """
+    Queues three packets before draining any of them. FIFO ordering
+    can only be verified this way -- draining after each individual
+    put would never exercise 'insert into a non-empty tail' more than
+    once before a removal happens.
+    """
+    tx = CTx(bundle_api, string_bufsize=8, pool=c_object_pool)
+    order, cb = _recorder(c_object_pool)
+    callback = register_callback(PACKET_FUNC, cb, c_object_pool)
+
+    p1 = CPacket(bundle_api, chan=1, data=b"first", pool=c_object_pool)
+    p2 = CPacket(bundle_api, chan=1, data=b"second", pool=c_object_pool)
+    p3 = CPacket(bundle_api, chan=1, data=b"third", pool=c_object_pool)
+
+    assert all(p.state == BdlPacketState.BP_IDLE for p in (p1, p2, p3))
+    expected = b"".join(make_packet_wire_bytes(payload, chan=1) for payload in [b"first", b"second", b"third"])
+
+    tx.packet_put(p1, callback)
+    tx.packet_put(p2, callback)
+    tx.packet_put(p3, callback)
+    assert all(p.state == BdlPacketState.BP_TX_WAIT for p in (p1, p2, p3))
+
+    wire = tx.get_tx_bytes()  # drains all three; callbacks fire as each completes
+
+    assert all(p.state == BdlPacketState.BP_IDLE for p in (p1, p2, p3))
+    assert order == [p1, p2, p3]
+    assert wire == expected
+
+
+def test_c_tx_list_empty_then_refill(bundle_api, c_object_pool):
+    """
+    Drains a single queued packet down to an empty list (exercising
+    the tail-pointer reset back to &pkt_root), then immediately
+    re-queues that same buffer plus a second one, confirming the tail
+    pointer is still correct for appends after an empty-list reset --
+    the specific transition most head/tail queue bugs live in.
+    """
+    tx = CTx(bundle_api, string_bufsize=8, pool=c_object_pool)
+    order, cb = _recorder(c_object_pool)
+    callback = register_callback(PACKET_FUNC, cb, c_object_pool)
+
+    p1 = CPacket(bundle_api, chan=2, data=b"round-one", pool=c_object_pool)
+    tx.packet_put(p1, callback)
+    assert p1.state == BdlPacketState.BP_TX_WAIT
+    tx.get_tx_bytes()
+    assert order == [p1]
+    assert p1.state == BdlPacketState.BP_IDLE
+
+    # buffer is idle again -- reuse it, and add a second packet behind it
+    p1.write_data(b"round-two")
+    p2 = CPacket(bundle_api, chan=3, data=b"newcomer", pool=c_object_pool)
+    tx.packet_put(p1, callback)
+    tx.packet_put(p2, callback)
+    tx.get_tx_bytes()
+
+    assert order == [p1, p1, p2]
+
+
+
+#-----------------------------------------------------------------------
 # fatal error handling - bdl_packet_t
 #-----------------------------------------------------------------------
+
 
 
 def test_c_packet_init_buf_asserts_when_null(bundle_api):
