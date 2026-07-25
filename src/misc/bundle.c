@@ -249,6 +249,11 @@ bool bdl_packet_get(bdl_rx_t *bdl, bdl_packet_t *p)
         *bp = 0;
         bp += code;
     }
+    if ( bp != end ) {
+        // COBS decode error
+        bdl->error_count++;
+        return false;
+    }
     // decoding complete
     p->state = BP_IDLE;
     // check CRC

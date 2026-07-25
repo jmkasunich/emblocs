@@ -93,6 +93,8 @@ def _cobs_decode(data: bytes) -> bytes:
         code = buf[bp]
         buf[bp] = 0
         bp += code
+    if not bp == end:
+        raise ValueError("COBS decode error")
     return bytes(buf)
 
 
@@ -367,15 +369,16 @@ class Unbundle:
                 self._state = 'packet'
             else:
                 # state == 'packet': scan for packet terminator (0x00)
-                index = data.find(0, bp, data_len)
+                search_end = min(data_len, bp + 256 - len(self._pkt_buf))
+                index = data.find(0, bp, search_end)
                 if index == -1:
                     # no terminator yet; accumulate packet data
-                    self._pkt_buf.extend(data[bp:data_len])
+                    self._pkt_buf.extend(data[bp:search_end])
                     if len(self._pkt_buf) > 255:
                         self.error_count += 1
                         self._pkt_buf.clear()
                         self._state = 'string'
-                    bp = data_len
+                    bp = search_end
                 else:
                     # terminator found; deliver packet
                     self._pkt_buf.extend(data[bp:index])
