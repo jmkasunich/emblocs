@@ -296,6 +296,7 @@ void bdl_put_rx_byte(bdl_rx_t *bdl, uint8_t data)
     assert(bdl != NULL);
     switch (bdl->rx_state) {
         case BDL_RX_STRING_MODE:
+        reprocess_string:  // used by BDL_RX_DISCARD_PACKET
             if ( data & START_OF_PACKET_MASK ) {
                 // start of packet character
                 int new_chan = data & MAX_CHAN;
@@ -336,13 +337,15 @@ void bdl_put_rx_byte(bdl_rx_t *bdl, uint8_t data)
             }
             break;
         case BDL_RX_DISCARD_PACKET:
+        reprocess_discard:  // used by BDL_RX_GET_DATA_BYTE
             if ( data == '\0' ) {
                 bdl->rx_state = BDL_RX_STRING_MODE;
             } else {
-                bdl->pkt_byte_count++;
                 if ( bdl->pkt_byte_count >= 255 ) {
                     bdl->rx_state = BDL_RX_STRING_MODE;
+                    goto reprocess_string;  // reprocess the byte in string mode
                 }
+                bdl->pkt_byte_count++;
             }
             break;
         case BDL_RX_GET_COBS_BYTE:
@@ -374,6 +377,7 @@ void bdl_put_rx_byte(bdl_rx_t *bdl, uint8_t data)
                 // put packet back on list and reset its state
                 add_pkt_to_rx_list(bdl, p);
                 bdl->rx_state = BDL_RX_DISCARD_PACKET;
+                goto reprocess_discard;  // reprocess the byte in discard mode
             } else {
                 p->data[p->data_len++] = data;
             }

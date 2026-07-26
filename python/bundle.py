@@ -369,27 +369,37 @@ class Unbundle:
                 self._state = 'packet'
             else:
                 # state == 'packet': scan for packet terminator (0x00)
-                search_end = min(data_len, bp + 256 - len(self._pkt_buf))
-                index = data.find(0, bp, search_end)
-                if index == -1:
-                    # no terminator yet; accumulate packet data
-                    self._pkt_buf.extend(data[bp:search_end])
-                    if len(self._pkt_buf) > 255:
+                budget_end = bp + (256 - len(self._pkt_buf))
+                if data_len < budget_end:
+                    # not enough data available this call to possibly reach the
+                    # 256-byte cap -- search only within what's here, and if no
+                    # terminator turns up, just wait for more data next call
+                    index = data.find(0, bp, data_len)
+                    if index == -1:
+                        self._pkt_buf.extend(data[bp:data_len])
+                        bp = data_len
+                        continue
+                else:
+                    # enough data present to reach max packet length                 # the true
+                    # search only up to the max length
+                    index = data.find(0, bp, budget_end)
+                    if index == -1:
+                        # no terminator -- proven bad packet
+                        # The last (non-terminator) byte might be the start of
+                        # another packet or a string, don't discard it.
                         self.error_count += 1
                         self._pkt_buf.clear()
                         self._state = 'string'
-                    bp = search_end
-                else:
-                    # terminator found; deliver packet
-                    self._pkt_buf.extend(data[bp:index])
-                    bp = index + 1
-                    if len(self._pkt_buf) > 255:
-                        self.error_count += 1
-                    else:
-                        self._deliver_packet(self._pkt_chan, bytes(self._pkt_buf))
-                    self._pkt_buf.clear()
-                    # remainder of rx_buf might be string data
-                    # next pass of loop will handle it
-                    self._state = 'string'
+                        bp = budget_end - 1
+                        continue
+                # if we get here, we found a terminator and we know the packet
+                # is of legal length - deliver it
+                self._pkt_buf.extend(data[bp:index])
+                self._deliver_packet(self._pkt_chan, bytes(self._pkt_buf))
+                self._pkt_buf.clear()
+                # remainder of rx_buf might be string data
+                # next pass of loop will handle it
+                bp = index + 1
+                self._state = 'string'
         if string_out and self._string_callback is not None:
             self._string_callback(bytes(string_out).decode('ascii'))
