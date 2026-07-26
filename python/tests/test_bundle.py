@@ -825,6 +825,59 @@ def test_c_tx_bytes_available_callback(bundle_api, c_object_pool):
 
 
 #-----------------------------------------------------------------------
+# C: packet handling test (no Python counterpoint)
+#-----------------------------------------------------------------------
+
+def test_c_discard_boundary_consistency_across_paths(bundle_api, c_object_pool):
+    """
+    Confirms the C discard-recovery mechanism absorbs the same number
+    of bytes regardless of which of the three ways it gets triggered:
+    a short (20-byte) buffer overflowing, a maximum-length (254-byte)
+    buffer overflowing, and a completely unregistered channel. One
+    stream exercises all three back-to-back, each followed by a run of
+    260 filler byte with no terminator, so each must resolve via the
+    byte-count fail-safe.  Each must discard 255 bytes and then place
+    the five remaining bytes in the run into the string  buffer.
+      - we check that all three cases put exactly 5 bytes into
+    the string buffer.
+    """
+    api = bundle_api
+    short_pkt = CPacket(api, bufsize=20, chan=5, pool=c_object_pool)
+    long_pkt = CPacket(api, bufsize=254, chan=6, pool=c_object_pool)
+
+    received_strings = []
+    received_packets = []
+
+    def on_string_avail():
+        b = api.string_get_nb(rx.rx)
+        if b < 256:
+            received_strings.append(chr(b))
+
+    def on_packet(addr):
+        pkt_obj = c_object_pool[addr]
+        if rx.packet_get(pkt_obj):
+            received_packets.append((pkt_obj.chan, pkt_obj.read_data()))
+
+    packet_cb = register_callback(PACKET_FUNC, on_packet, c_object_pool)
+    rx = CRx(api, 100, string_avail_funct=on_string_avail, pool=c_object_pool)
+    rx.packet_listen(short_pkt, packet_cb)
+    rx.packet_listen(long_pkt, packet_cb)
+    # channel 7 deliberately left unregistered
+
+    stream = (
+        bytes([0x85]) + b"A" * 260 +      # chan 5, short (20-byte) buffer overflow
+        bytes([0x86]) + b"B" * 260 +      # chan 6, max-length (254-byte) buffer overflow
+        bytes([0x87]) + b"C" * 260 +      # chan 7, no listener at all
+        b"hello"
+    )
+    rx.put_rx_bytes(stream)
+
+    assert received_packets == []
+    #assert bundle_api.get_error_count(rx.rx) == 3
+    assert ''.join(received_strings) == "AAAAA" + "BBBBB" + "CCCCC" + "hello"
+
+
+#-----------------------------------------------------------------------
 # Python: Multiple string / multiple packet / mixed priority tests
 #-----------------------------------------------------------------------
 
@@ -1557,6 +1610,7 @@ def test_wire_error_1b1_string_byte_to_header_recovers_via_255_cap(wire_error_rx
 
     assert rx.error_count >= 1
     assert len(rx.received_packets) == 1
+    assert ''.join(rx.received_strings) == f"abcAAAAA" + CANARY_STRING
     assert_canary_recovered(rx.received_packets, rx.received_strings)
 
 @_CANARY_PARAMS
@@ -1581,6 +1635,7 @@ def test_wire_error_1b2_string_byte_to_header_recovers_via_255_cap(wire_error_rx
 
     assert rx.error_count >= 1
     assert len(rx.received_packets) == 1
+    assert ''.join(rx.received_strings) == f"abcAAAAA" + CANARY_STRING
     assert_canary_recovered(rx.received_packets, rx.received_strings)
 
 @_CANARY_PARAMS
@@ -1632,10 +1687,332 @@ def test_wire_error_1b4_string_byte_to_header_recovers_via_swallowed_packet(wire
     assert len(rx.received_packets) == 1
     assert_canary_recovered(rx.received_packets, rx.received_strings)
 
+@_CANARY_PARAMS
+def test_wire_error_2a_header_wrong_channel_no_listener(wire_error_rx, canary_suffix):
+    """
+    Fault tree case 2A: header byte corrupted to a different channel
+    number that has no registered listener.  Original channel 5, error
+    channel 9.
+    """
+    rx = wire_error_rx
+    rx.listen_packet(5)
+    rx.listen_string()
+    rx.listen_packet(CANARY_CHAN)
+
+    corrupted_packet = bytearray(make_packet_wire_bytes(b"xyz", chan=5))
+    corrupted_packet[0] = 0x80 | 9  # header now points at channel 9
+    stream = b"abc" + bytes(corrupted_packet) + canary_suffix()
+    rx.put_rx_bytes(stream)
+
+    assert rx.error_count >= 1
+    assert len(rx.received_packets) == 1
+    assert_canary_recovered(rx.received_packets, rx.received_strings)
+
+@_CANARY_PARAMS
+def test_wire_error_2b_header_wrong_channel_with_listener(wire_error_rx, canary_suffix):
+    """
+    Fault tree case 2B: header byte corrupted to a different channel
+    number that DOES have a registered listener (channel 7), unlike
+    2A. Framing is completely intact -- a single well-formed packet,
+    correctly terminated.  Packet is rejected at the CRC stage, because
+    we embed the channel number into the CRC seed.
+    """
+    rx = wire_error_rx
+    rx.listen_string()
+    rx.listen_packet(5)
+    rx.listen_packet(7)
+    rx.listen_packet(CANARY_CHAN)
+
+    corrupted_packet = bytearray(make_packet_wire_bytes(b"xyz", chan=5))
+    corrupted_packet[0] = 0x80 | 7  # retargeted to chan 7, content still keyed to chan 5's CRC seed
+    stream = b"abc" + bytes(corrupted_packet) + canary_suffix()
+    rx.put_rx_bytes(stream)
+
+    assert rx.error_count == 1
+    assert len(rx.received_packets) == 1  # only the canary, nothing on 7
+    assert_canary_recovered(rx.received_packets, rx.received_strings)
+
+@_CANARY_PARAMS
+def test_wire_error_2c1_header_becomes_string_no_hi_bit_in_packet(wire_error_rx, canary_suffix):
+    """
+    Fault tree case 2C1: header byte corrupted to a legal string byte
+    (<= 0x7F) so packet does not start. Packet body does not contain
+    any bytes >0x7F, so receiver remains in string mode throughout.
+    """
+    rx = wire_error_rx
+    rx.listen_string()
+    rx.listen_packet(5)
+    rx.listen_packet(CANARY_CHAN)
+
+    corrupted_packet = bytearray(make_packet_wire_bytes(b"xyz", chan=5))
+    # "xyz" on chan 5 results in: 0x85, 0x06, 0x78, 0x79, 0x7A, 0x4F, 0x0B, 0x00
+    corrupted_packet[0] = 0x41  # header becomes 'A' - legal string char
+    stream = b"abc" + bytes(corrupted_packet) + canary_suffix()
+    rx.put_rx_bytes(stream)
+
+    assert rx.error_count == 0
+    assert len(rx.received_packets) == 1  # only the canary
+    assert_canary_recovered(rx.received_packets, rx.received_strings)
+
+@_CANARY_PARAMS
+def test_wire_error_2c2_header_becomes_string_with_hi_bit_in_packet(wire_error_rx, canary_suffix):
+    """
+    Fault tree case 2C2: header byte corrupted to a legal string byte
+    (<= 0x7F) so packet does not start. Packet body does contain at least
+    one byte >0x7F, so receiver begins building a (bogus) packet, which
+    is terminated by the original packet's terminator and rejected by
+    CRC.
+    """
+    rx = wire_error_rx
+    rx.listen_string()
+    rx.listen_packet(5)
+    rx.listen_packet(CANARY_CHAN)
+
+    corrupted_packet = bytearray(make_packet_wire_bytes(b"\xC3yz", chan=5))
+    # "\xC3yz" on chan 5 results in: 0x85, 0x06, 0xC3, 0x79, 0x7A, 0x41, 0x05, 0x00
+    corrupted_packet[0] = 0x41  # header becomes 'A' - legal string char
+    stream = b"abc" + bytes(corrupted_packet) + canary_suffix()
+    rx.put_rx_bytes(stream)
+
+    assert rx.error_count == 1
+    assert len(rx.received_packets) == 1  # only the canary
+    assert_canary_recovered(rx.received_packets, rx.received_strings)
+
+@_CANARY_PARAMS
+def test_wire_error_2c3_header_becomes_string_with_hi_bit_in_crc(wire_error_rx, canary_suffix):
+    """
+    Fault tree case 2C3: header byte corrupted to a legal string byte
+    (<= 0x7F) so packet does not start. Packet body does not contain a
+    byte > 0x7F, but the last CRC is > 0x7F, so receiver begins building
+    a (bogus) packet at that point, which is terminated by the original
+    packet's terminator and rejected by CRC.
+    """
+    rx = wire_error_rx
+    rx.listen_string()
+    rx.listen_packet(5)
+    rx.listen_packet(CANARY_CHAN)
+
+    corrupted_packet = bytearray(make_packet_wire_bytes(b"abc", chan=5))
+    # "abc" on chan 5 results in: 0x85, 0x06, 0x61, 0x62, 0x63, 0x2C, 0x8A, 0x00
+    corrupted_packet[0] = 0x41  # header becomes 'A' - legal string char
+    stream = b"abc" + bytes(corrupted_packet) + canary_suffix()
+    rx.put_rx_bytes(stream)
+
+    assert rx.error_count == 1
+    assert len(rx.received_packets) == 1  # only the canary
+    assert_canary_recovered(rx.received_packets, rx.received_strings)
+
+@_CANARY_PARAMS
+def test_wire_error_3a_cobs_byte_past_end_of_packet(wire_error_rx, canary_suffix):
+    """
+    Fault tree case 3A: the leading COBS byte is corrupted to a value
+    that points beyond the end of the packet.  Detected by the COBS
+    decode algorithm.
+    """
+    rx = wire_error_rx
+    rx.listen_string()
+    rx.listen_packet(5)
+    rx.listen_packet(CANARY_CHAN)
+
+    corrupted_packet = bytearray(make_packet_wire_bytes(b"A\x00B", chan=5)) # payload contains a zero
+    corrupted_packet[1] = len(b"A\x00B") + 2 + 1 + 1  # one byte past end of packet
+    stream = b"abc" + bytes(corrupted_packet) + canary_suffix()
+    rx.put_rx_bytes(stream)
+
+    assert rx.error_count == 1
+    assert len(rx.received_packets) == 1
+    assert_canary_recovered(rx.received_packets, rx.received_strings)
+
+@_CANARY_PARAMS
+def test_wire_error_3b_cobs_byte_wrong_but_lands_at_end(wire_error_rx, canary_suffix):
+    """
+    Fault tree case 3B: the leading COBS byte is corrupted to a value
+    that points exactly at the end of the packet.  This will pass COBS
+    decode (indistinguishable from a packet containing no zeros), while
+    silently failing to restore an embedded zero along the way.  Relies
+    on CRC to catch content error.
+    """
+    rx = wire_error_rx
+    rx.listen_string()
+    rx.listen_packet(5)
+    rx.listen_packet(CANARY_CHAN)
+
+    corrupted_packet = bytearray(make_packet_wire_bytes(b"A\x00B", chan=5)) # payload contains a zero
+    corrupted_packet[1] = len(b"A\x00B") + 2 + 1  # exactly at end of packet
+    stream = b"abc" + bytes(corrupted_packet) + canary_suffix()
+    rx.put_rx_bytes(stream)
+
+    assert rx.error_count == 1
+    assert len(rx.received_packets) == 1
+    assert_canary_recovered(rx.received_packets, rx.received_strings)
+
+@_CANARY_PARAMS
+def test_wire_error_3c_cobs_byte_wrong_inside_packet(wire_error_rx, canary_suffix):
+    """
+    Fault tree case 3C: the leading COBS byte is corrupted to a value
+    that points inside the packet.  The packet byte pointed to will be
+    incorrectly set to zero and the decoder will follow an incorrect
+    COBS chain, eventually ending at or beyond the end of the packet.
+    Detected either by COBS decoder (if chain ends beyond packet) or CRC
+    (if chain ends exactly at packet end, but content is wrong).  Since
+    3A tests the first case and 3B the second, we don't worry about
+    testing both here.
+    """
+    rx = wire_error_rx
+    rx.listen_string()
+    rx.listen_packet(5)
+    rx.listen_packet(CANARY_CHAN)
+
+    corrupted_packet = bytearray(make_packet_wire_bytes(b"A\x00B", chan=5)) # payload contains a zero
+    corrupted_packet[1] = len(b"A\x00B") + 1  # two bytes before end of packet
+    stream = b"abc" + bytes(corrupted_packet) + canary_suffix()
+    rx.put_rx_bytes(stream)
+
+    assert rx.error_count == 1
+    assert len(rx.received_packets) == 1
+    assert_canary_recovered(rx.received_packets, rx.received_strings)
+
+@_CANARY_PARAMS
+def test_wire_error_3d1_cobs_byte_becomes_zero_all_string_after(wire_error_rx, canary_suffix):
+    """
+    Fault tree case 3D1: the leading COBS byte is corrupted to a value
+    of zero.  If passed to the COBS decoder that would cause a hang, but
+    we won't get that far; the protocol will interpret the zero as an
+    end-of-packet marker.  The packet is too short to contain a CRC and
+    will be discarded.
+    However, recovery afterward depends on the subsequent bytes that were
+    part of the packet, like case 2C.  This specific test is similar to
+    2C1, where all remaining bytes are <= 0x7F.
+    """
+    rx = wire_error_rx
+    rx.listen_string()
+    rx.listen_packet(5)
+    rx.listen_packet(CANARY_CHAN)
+
+    corrupted_packet = bytearray(make_packet_wire_bytes(b"xyz", chan=5))
+    # "xyz" on chan 5 results in: 0x85, 0x06, 0x78, 0x79, 0x7A, 0x4F, 0x0B, 0x00
+    corrupted_packet[1] = 0  # COBS byte becomes terminator
+    stream = b"abc" + bytes(corrupted_packet) + canary_suffix()
+    rx.put_rx_bytes(stream)
+
+    assert rx.error_count == 1
+    assert len(rx.received_packets) == 1
+    assert_canary_recovered(rx.received_packets, rx.received_strings)
+
+
+@_CANARY_PARAMS
+def test_wire_error_3d2_cobs_byte_becomes_zero_all_string_after(wire_error_rx, canary_suffix):
+    """
+    Fault tree case 3D2: the leading COBS byte is corrupted to a value
+    of zero.  If passed to the COBS decoder that would cause a hang, but
+    we won't get that far; the protocol will interpret the zero as an
+    end-of-packet marker.  The packet is too short to contain a CRC and
+    will be discarded.
+    However, recovery afterward depends on the subsequent bytes that were
+    part of the packet, like case 2C.  This specific test is similar to
+    2C2, where at least one packet byte is > 0x7F.
+    """
+    rx = wire_error_rx
+    rx.listen_string()
+    rx.listen_packet(5)
+    rx.listen_packet(CANARY_CHAN)
+
+    corrupted_packet = bytearray(make_packet_wire_bytes(b"\xC3yz", chan=5))
+    # "\xC3yz" on chan 5 results in: 0x85, 0x06, 0xC3, 0x79, 0x7A, 0x41, 0x05, 0x00
+    corrupted_packet[1] = 0  # COBS byte becomes terminator
+    stream = b"abc" + bytes(corrupted_packet) + canary_suffix()
+    rx.put_rx_bytes(stream)
+
+    assert rx.error_count == 2
+    assert len(rx.received_packets) == 1
+    assert_canary_recovered(rx.received_packets, rx.received_strings)
+
+@_CANARY_PARAMS
+def test_wire_error_4a_data_byte_corrupted_nonzero(wire_error_rx, canary_suffix):
+    """
+    Fault tree case 4A (covers case 5 too -- the receive state machine
+    has no way to distinguish a payload byte from a CRC byte until
+    framing completes, so "data byte" and "CRC byte" corruption are the
+    same code path): a body byte corrupted to a different nonzero
+    value. Framing stays completely intact (full-length, well-formed
+    packet, correct terminator) -- only the decoded content is wrong,
+    caught by CRC alone. Uses a zero-free payload (single-hop COBS
+    encoding) so the corrupted byte is unambiguously plain content,
+    not a chain-control position (that's case 3's territory).
+    """
+    rx = wire_error_rx
+    rx.listen_string()
+    rx.listen_packet(5)
+    rx.listen_packet(CANARY_CHAN)
+
+    corrupted_packet = bytearray(make_packet_wire_bytes(b"xyz", chan=5))
+    corrupted_packet[3] = ord('Y')  # was 'y' -- different nonzero byte, same length
+    stream = b"abc" + bytes(corrupted_packet) + canary_suffix()
+    rx.put_rx_bytes(stream)
+
+    assert rx.error_count == 1
+    assert len(rx.received_packets) == 1
+    assert_canary_recovered(rx.received_packets, rx.received_strings)
+
+@_CANARY_PARAMS
+def test_wire_error_4b_data_byte_corrupted_to_zero(wire_error_rx, canary_suffix):
+    """
+    Fault tree case 4B (and 5B): a body byte corrupted to 0x00, injecting
+    a premature terminator partway through the packet (position chosen
+    mid-body, not at the leading COBS byte). Unlike case 3D (corrupting
+    the leading COBS byte itself), this leaves a non-empty but
+    truncated buffer -- COBS decode runs structurally (rather than
+    raising on empty input), and the truncated/wrong content is what
+    fails CRC. Same observable outcome as 3D (single error, clean
+    recovery), but exercises a genuinely different internal path, so
+    it's not redundant with it.
+    """
+    rx = wire_error_rx
+    rx.listen_string()
+    rx.listen_packet(5)
+    rx.listen_packet(CANARY_CHAN)
+
+    corrupted_packet = bytearray(make_packet_wire_bytes(b"xyz", chan=5))
+    corrupted_packet[3] = 0  # was 'y' -- premature terminator mid-body
+    stream = b"abc" + bytes(corrupted_packet) + canary_suffix()
+    rx.put_rx_bytes(stream)
+
+    assert rx.error_count == 1
+    assert len(rx.received_packets) == 1
+    assert_canary_recovered(rx.received_packets, rx.received_strings)
+
+@_CANARY_PARAMS
+def test_wire_error_6_terminator_corrupted_nonzero(wire_error_rx, canary_suffix):
+    """
+    Fault tree case 6: a genuine packet's real terminator is corrupted
+    to a nonzero value.  The end of the packet is not detected, and
+    we remain in packet mode slurping up bytes until either another
+    terminator arrives or we trigger a byte count limit.  There are
+    four possible cases (depending on whether we were listening for
+    the damaged packet or not, and whether the data that follows is
+    string or another packet).  But these cases are all tested under
+    case 1B, so we only need one test here.
+    """
+    rx = wire_error_rx
+    rx.listen_string()
+    rx.listen_packet(5)
+    rx.listen_packet(9)
+    rx.listen_packet(CANARY_CHAN)
+
+    corrupted_packet = bytearray(make_packet_wire_bytes(b"xy", chan=5))
+    corrupted_packet[-1] = 0xFF  # corrupt the real terminator to nonzero
+    swallowed_packet = make_packet_wire_bytes(b"xyz", chan=9)
+    stream = b"abc" + bytes(corrupted_packet) + swallowed_packet + canary_suffix()
+    rx.put_rx_bytes(stream)
+
+    assert rx.error_count >= 1
+    assert len(rx.received_packets) == 1
+    assert_canary_recovered(rx.received_packets, rx.received_strings)
+
+
 #-----------------------------------------------------------------------
 # C fatal error handling - bdl_packet_t
 #-----------------------------------------------------------------------
-
 
 
 def test_c_packet_init_buf_asserts_when_null(bundle_api):
