@@ -241,6 +241,7 @@ bool bdl_packet_get(bdl_rx_t *bdl, bdl_packet_t *p)
     assert(bdl != NULL);
     assert(p != NULL);
     assert(p->state == BP_RX_DONE);
+    p->state = BP_IDLE;
     // COBS decoding
     uint8_t *bp = p->data + p->cobs_byte - 1;
     uint8_t * const end = p->data + p->data_len;
@@ -255,7 +256,6 @@ bool bdl_packet_get(bdl_rx_t *bdl, bdl_packet_t *p)
         return false;
     }
     // decoding complete
-    p->state = BP_IDLE;
     // check CRC
     if ( p->data_len < 2 ) {
         // too short to contain a valid CRC
