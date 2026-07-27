@@ -166,7 +166,7 @@ void bdl_init_rx(bdl_rx_t *bdl, const bdl_rx_config_t *cfg)
     bdl->string_buf = cfg->string_buf;
     bdl->string_buf_size = cfg->string_buf_size;
     // we use illegal string values to mark empty buffer locations
-    memset(bdl->string_buf, MAX_STRING_VALUE+1, bdl->string_buf_size);
+    memset((void *)bdl->string_buf, MAX_STRING_VALUE+1, bdl->string_buf_size);
     bdl->string_in = 0;
     bdl->string_out = 0;
     bdl->string_avail = cfg->string_avail;
@@ -407,7 +407,7 @@ void bdl_init_tx(bdl_tx_t *bdl, const bdl_tx_config_t *cfg)
     bdl->string_buf = cfg->string_buf;
     bdl->string_buf_size = cfg->string_buf_size;
     // we use illegal string values to mark empty buffer locations
-    memset(bdl->string_buf, MAX_STRING_VALUE+1, bdl->string_buf_size);
+    memset((void *)bdl->string_buf, MAX_STRING_VALUE+1, bdl->string_buf_size);
     bdl->string_in = 0;
     bdl->string_out = 0;
     bdl->string_not_full = cfg->string_not_full;
