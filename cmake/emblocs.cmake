@@ -28,6 +28,7 @@
 #                 reference if needed elsewhere in CMakeLists.txt.
 
 set(EMBLOCS_INC ${EMBLOCS_DIR}/src/emblocs)
+set(EMBLOCS_MISC ${EMBLOCS_DIR}/src/misc)
 
 # Re-run configure if the system definition or config file changes
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
@@ -58,4 +59,10 @@ include(${CMAKE_BINARY_DIR}/${BLOCS_FILE}.cmake)
 target_include_directories(${TARGET} PRIVATE
     ${CMAKE_BINARY_DIR}
     ${EMBLOCS_INC}
+    ${EMBLOCS_MISC}
+)
+
+# Add core libraries
+target_sources(${TARGET} PRIVATE
+    ${EMBLOCS_MISC}/bundle.c
 )
