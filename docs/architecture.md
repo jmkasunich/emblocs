@@ -558,16 +558,13 @@ generated `<system>.cmake`:
 include(${CMAKE_BINARY_DIR}/system.cmake)
 ```
 
-The generated `system.cmake` contains one `add_library(... OBJECT ...)` rule
-per variant, compiling the generated `<variant>.c` directly:
+The generated `system.cmake` contains one `.c` file per variant, all
+added via `target_sources()` into the single project executable.
 
-```cmake
-add_library(mux2to1 OBJECT ${CMAKE_BINARY_DIR}/mux2to1.c)
-```
-
-No `-D` flags are required since all substitutions are already present in
-`<variant>.c`. The master `CMakeLists.txt` links the resulting object
-libraries into the final firmware target.
+`system.cmake` also contains a
+`set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS`
+statement that references every base .bloc, .c, and .h file, so that
+the project will be reconfigured if any of those files change.
 
 ---
 
