@@ -7,8 +7,8 @@
  **************************************************************/
 
 #include "bl_monitor.h"
-#include "serial.h"
-#include "ser_crc.h"
+#include <serial.h>
+#include <ser_crc.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <assert.h>

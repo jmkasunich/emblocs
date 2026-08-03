@@ -14,7 +14,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "serial.h"
+#include <serial.h>
 
 /*****************************************************************
  * CRC16 Packet Interface

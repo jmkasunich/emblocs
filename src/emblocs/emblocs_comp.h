@@ -11,7 +11,7 @@
 #ifndef EMBLOCS_COMP_H
 #define EMBLOCS_COMP_H
 
-#include "emblocs_common.h"
+#include <emblocs_common.h>
 
 #ifndef _countof
 #define _countof(array) (sizeof(array)/sizeof(array[0]))

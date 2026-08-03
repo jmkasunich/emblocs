@@ -11,8 +11,8 @@
 #ifndef EMBLOCS_PRIV_H
 #define EMBLOCS_PRIV_H
 
-#include "emblocs_api.h"
-#include "emblocs_comp.h"
+#include <emblocs_api.h>
+#include <emblocs_comp.h>
 
 /**************************************************************
  * Realtime data and object metadata are stored in separate

@@ -5,7 +5,7 @@
 #ifndef NOT_H
 #define NOT_H
 
-#include "emblocs_comp.h"
+#include <emblocs_comp.h>
 
 
 // define instance structure

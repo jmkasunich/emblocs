@@ -5,7 +5,7 @@
 #ifndef MUX_H
 #define MUX_H
 
-#include "emblocs_comp.h"
+#include <emblocs_comp.h>
 
 // define instance structure
 typedef struct {

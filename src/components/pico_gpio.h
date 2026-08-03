@@ -5,7 +5,7 @@
 #ifndef PICO_GPIO_H
 #define PICO_GPIO_H
 
-#include "emblocs_comp.h"
+#include <emblocs_comp.h>
 
 
 // define instance structure

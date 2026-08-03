@@ -2,7 +2,7 @@
 // Edit freely - this file will not be overwritten.
 // Source: pico_gpio.bloc
 
-#include "emblocs_comp.h"
+#include <emblocs_comp.h>
 
 #define BL_BLOCK_NAME pico_gpio
 
@@ -21,8 +21,8 @@
 
 // EMBLOCS:  DO NOT REMOVE OR EDIT ABOVE THIS LINE
 
-#include "pico/stdlib.h"
-#include "hardware/structs/sio.h"
+#include <pico/stdlib.h>
+#include <hardware/structs/sio.h>
 
 void BL_MANGLE(init)(void *instance_data, uint32_t periodns) {
     BL_MANGLE(t) *self = (BL_MANGLE(t) *)instance_data;

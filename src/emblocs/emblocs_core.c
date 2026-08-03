@@ -1,5 +1,5 @@
-#include "emblocs_priv.h"
-#include "linked_list.h"
+#include <emblocs_priv.h>
+#include <linked_list.h>
 #include <string.h>         // strcmp
 #include <stdio.h>      // FIXME - printf for rasp pi
 

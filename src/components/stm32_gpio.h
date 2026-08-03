@@ -5,7 +5,7 @@
 #ifndef STM32_GPIO_H
 #define STM32_GPIO_H
 
-#include "emblocs_comp.h"
+#include <emblocs_comp.h>
 
 #include "platform.h"
 

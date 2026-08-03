@@ -1,9 +1,9 @@
-#include "emblocs_priv.h"
+#include <emblocs_priv.h>
 #include <string.h>         // strcmp
 #include <stdarg.h>
-#include "printing.h"
-#include "linked_list.h"
-#include "str_to_xx.h"
+#include <printing.h>
+#include <linked_list.h>
+#include <str_to_xx.h>
 
 /* These enums and the subsequent table define
  * the keywords (aka reserved words) for the

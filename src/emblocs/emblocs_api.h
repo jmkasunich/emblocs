@@ -11,7 +11,7 @@
 #ifndef EMBLOCS_API_H
 #define EMBLOCS_API_H
 
-#include "emblocs_common.h"
+#include <emblocs_common.h>
 
 /**************************************************************
  * Top-level EMBLOCS API functions used to build a system     *

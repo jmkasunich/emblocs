@@ -10,7 +10,7 @@
 #ifdef PICO_BUILD
 #include <stdio.h>
 #else
-#include "platform.h"
+#include <platform.h>
 #endif
 #include <stdarg.h>
 #include <assert.h>

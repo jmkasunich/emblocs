@@ -162,7 +162,7 @@ def blockspec_as_h_template(lines: list[str], blockspec: BlockSpec) -> None:
     lines.append(f"#define {guard}")
     lines.append(f"")
     # fixed include for emblocs types in struct
-    lines.append(f'#include "emblocs_comp.h"')
+    lines.append(f'#include <emblocs_comp.h>')
     lines.append(f"")
     # custom includes
     for include in blockspec.includes:
@@ -238,7 +238,7 @@ def blockspec_as_c_template(lines: list[str], blockspec: BlockSpec) -> None:
     lines.append(f"// Source: {Path(blockspec.abs_path).name}")
     lines.append(f"")
     # fixed include
-    lines.append(f'#include "emblocs_comp.h"')
+    lines.append(f'#include <emblocs_comp.h>')
     lines.append(f"")
     # block name (for mangling)
     lines.append(f"#define BL_BLOCK_NAME {blockspec_name}")
@@ -301,7 +301,7 @@ def blockdef_as_h_variant(lines: list[str], blockdef: BlockDef) -> None:
     lines.append(f"#define {guard}")
     lines.append(f"")
     # fixed include
-    lines.append(f'#include "emblocs_common.h"')
+    lines.append(f'#include <emblocs_common.h>')
     lines.append(f"")
     # custom includes
     for include in blockdef.includes:
@@ -336,7 +336,7 @@ def blockdef_as_c_variant_preamble(lines: list[str], blockdef: BlockDef) -> None
     lines.append(f"//   params: " + ", ".join(f"{k}={v}" for k, v in blockdef.params.items()))
     lines.append(f"")
     # fixed include
-    lines.append(f'#include "emblocs_comp.h"')
+    lines.append(f'#include <emblocs_comp.h>')
     lines.append(f"")
     # BL_ macros for name mangling
     lines.append(f"#define BL_BLOCK_NAME {blockdef_name}")
@@ -479,8 +479,8 @@ def design_as_c_system(lines: list[str], design: Design) -> None:
     # header comment
     lines.append(f"// Auto-generated from {Path(design.abs_path).name} - Do not edit.")
     lines.append(f"")
-    lines.append(f'#include "emblocs_common.h"')
-    lines.append(f'#include "{Path(design.abs_path).stem}.h"')
+    lines.append(f'#include <emblocs_common.h>')
+    lines.append(f'#include <{Path(design.abs_path).stem}.h>')
     lines.append(f"")
     # includes — one per blockdef
     for name in design.block_defs:

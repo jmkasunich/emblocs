@@ -2,7 +2,7 @@
 // Edit freely - this file will not be overwritten.
 // Source: integrator.bloc
 
-#include "emblocs_comp.h"
+#include <emblocs_comp.h>
 
 #define BL_BLOCK_NAME integrator
 

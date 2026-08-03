@@ -2,7 +2,7 @@
 // Edit freely - this file will not be overwritten.
 // Source: stm32_gpio.bloc
 
-#include "emblocs_comp.h"
+#include <emblocs_comp.h>
 
 #define BL_BLOCK_NAME stm32_gpio
 
@@ -20,7 +20,7 @@
 #define ENABLES (65280)
 #endif
 
-#include "stm32_gpio.h"
+#include <stm32_gpio.h>
 
 // EMBLOCS:  DO NOT REMOVE OR EDIT ABOVE THIS LINE
 

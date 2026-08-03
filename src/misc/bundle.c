@@ -8,7 +8,7 @@
  * *************************************************************/
 
 #include "bundle.h"
-#include "critreg.h"
+#include <critreg.h>
 #include <assert.h>
 #include <string.h> // memset()
 
