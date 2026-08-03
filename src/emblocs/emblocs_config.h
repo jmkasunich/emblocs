@@ -1,62 +1,58 @@
 /***************************************************************
  *
- * emblocs_config.h - header for EMBLOCS configuration
+ * emblocs_config.h
  *
- * Embedded Block-Oriented Control System
+ * This file contains #defines that are used to configure the
+ * emblocs system for a particular project.
  *
+ * A real project must supply its own emblocs_config.h, located
+ * earlier in the include search path than this template, so that
+ * it replaces this template with target specific code.
  *
+ * The target-specific file must address every configuration
+ * macro listed below.
+ *
+ * This template file serves two purposes:
+ *   1)  List the macros that must be provided by a
+ *       target-specific file.
+ *   2)  Provide something to keep editors, code-completion, etc.,
+ *       happy when not working on a specific target.
+ *
+ * This file can be used as a template for a real, target-specific
+ * file.  Copy it to the project directory, replace these comments
+ * with target-specific documentation, adjust the config values
+ * to suit the project, and remove the TARGET_BUILD guard below.
  *
  **************************************************************/
 
 #ifndef EMBLOCS_CONFIG_H
 #define EMBLOCS_CONFIG_H
 
-/* Uncomment this define to print error messages */
-#define BL_PRINT_ERRORS
+// prevent this template file from being used in a real build
+#ifdef TARGET_BUILD
+#error "Template version of 'emblocs_config.h' is not suitable for a real build."
+#endif
+
+
+/********************************************************
+ * CONFIGURATION STARTS HERE
+ */
+
+/* Uncomment this define to print messages on errors.
+ * Printing adds non-trivial code size.
+ */
+#define EBL_PRINT_ERRORS
 
 /* Uncomment this define to halt on errors.
  * This can save code size since calling functions
  * don't need to check return values.
  */
-//#define BL_ERROR_HALT
-
-/* Uncomment this define to make 'show' commands print
- * more details such as memory addresses, indexes, etc.
- */
-//#define BL_SHOW_VERBOSE
-
-/* Uncomment this define to enable pin and function
- * 'unlink' commands.
- * Most systems don't need 'unlink', they should
- * just configure things correctly in the first
- * place.  Leaving this commented will save code
- * space.
- */
-#define BL_ENABLE_UNLINK
-
-/* Uncomment this define to enable pin and function
- * 'linkto' commands to unlink previously linked
- * objects.  This also defines BL_ENABLE_UNLINK.
- * Most systems don't need this, they should just
- * configure things correctly in the first place.
- * Leaving this commented will save a little bit
- * of code space.
- */
-#define BL_ENABLE_IMPLICIT_UNLINK
+//#define EBL_ERROR_HALT
 
 /* Uncomment this define to enable checks for NULL
  * pointers passed into API functions.  Leaving
  * it commented will save code space.
  */
-#define BL_NULL_POINTER_CHECKS
-
-/* size of the memory pool for realtime data */
-#define BL_RT_POOL_SIZE     (16000)
-
-/* size of the memory pool for object metadata */
-#define BL_META_POOL_SIZE   (32000)
-
-/* maximum length of object names */
-#define BL_MAX_NAME_LEN     (40)
+#define EBL_NULL_POINTER_CHECKS
 
 #endif // EMBLOCS_CONFIG_H
