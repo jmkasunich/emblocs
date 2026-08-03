@@ -58,8 +58,15 @@ include(${CMAKE_BINARY_DIR}/${BLOCS_FILE}.cmake)
 # Add generated headers and emblocs headers to the include path
 target_include_directories(${TARGET} PRIVATE
     ${CMAKE_BINARY_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}
     ${EMBLOCS_INC}
     ${EMBLOCS_MISC}
+)
+
+# mark this as a 'real' build to support checks against
+# using templates in place of target-specific files
+target_compile_definitions(${TARGET} PRIVATE
+    TARGET_BUILD
 )
 
 # Add core libraries
