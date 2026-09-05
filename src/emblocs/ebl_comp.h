@@ -1,6 +1,6 @@
 /***************************************************************
  *
- * emblocs_comp.h - header for EMBLOCS components
+ * ebl_comp.h - header for EMBLOCS components
  *
  * Embedded Block-Oriented Control System
  *
@@ -8,10 +8,10 @@
  *
  **************************************************************/
 
-#ifndef EMBLOCS_COMP_H
-#define EMBLOCS_COMP_H
+#ifndef EBL_COMP_H
+#define EBL_COMP_H
 
-#include <emblocs_common.h>
+#include <ebl_common.h>
 
 #ifndef _countof
 #define _countof(array) (sizeof(array)/sizeof(array[0]))
@@ -254,4 +254,4 @@ bool bl_block_add_function(struct bl_block_meta_s *blk, bl_function_def_t const 
  */
 bool bl_block_add_functions(struct bl_block_meta_s *blk, bl_comp_def_t const *def);
 
-#endif // EMBLOCS_COMP_H
+#endif // EBL_COMP_H

@@ -1,6 +1,6 @@
 /***************************************************************
  *
- * emblocs_common.h - header for EMBLOCS
+ * ebl_common.h - header for EMBLOCS
  *
  * Embedded Block-Oriented Control System
  *
@@ -10,11 +10,11 @@
  *
  **************************************************************/
 
-#ifndef EMBLOCS_COMMON_H
-#define EMBLOCS_COMMON_H
+#ifndef EBL_COMMON_H
+#define EBL_COMMON_H
 
 // use <> to fetch project specific config if present
-#include <emblocs_config.h>
+#include <ebl_config.h>
 
 #ifdef BL_ENABLE_IMPLICIT_UNLINK
 #ifndef BL_ENABLE_UNLINK
@@ -150,4 +150,4 @@ struct bl_signal_meta_s;
 struct bl_thread_meta_s;
 struct bl_thread_data_s;
 
-#endif // EMBLOCS_COMMON_H
+#endif // EBL_COMMON_H

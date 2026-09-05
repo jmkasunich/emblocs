@@ -2,7 +2,7 @@
 // Edit freely - this file will not be overwritten.
 // Source: pico_gpio.bloc
 
-#include <emblocs_comp.h>
+#include <ebl_comp.h>
 
 #define BL_BLOCK_NAME pico_gpio
 

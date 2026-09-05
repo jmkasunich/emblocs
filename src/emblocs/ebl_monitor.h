@@ -1,6 +1,6 @@
 /***************************************************************
  *
- * bl_monitor.h - EMBLOCS runtime monitor API
+ * ebl_monitor.h - EMBLOCS runtime monitor API
  *
  * Provides bl_monitor_init() and bl_monitor_poll() for
  * integrating the EMBLOCS runtime monitor into a target
@@ -15,8 +15,8 @@
  *
  **************************************************************/
 
-#ifndef BL_MONITOR_H
-#define BL_MONITOR_H
+#ifndef EBL_MONITOR_H
+#define EBL_MONITOR_H
 
 /***************************************************************
  * bl_monitor_init()
@@ -39,4 +39,4 @@ void bl_monitor_init(void);
  **************************************************************/
 void bl_monitor_poll(void);
 
-#endif // BL_MONITOR_H
+#endif // EBL_MONITOR_H

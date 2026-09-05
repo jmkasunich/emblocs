@@ -1,6 +1,6 @@
 /********************************************************************
  *
- * emblocs_platform.h
+ * ebl_platform.h
  *
  * This file contains target and/or toolchain specific code for
  * emblocs specific needs like the monitor UART port.
@@ -25,13 +25,13 @@
  *
  **************************************************************/
 
-#ifndef EMBLOCS_PLATFORM_H
-#define EMBLOCS_PLATFORM_H
+#ifndef EBL_PLATFORM_H
+#define EBL_PLATFORM_H
 
 // prevent this template file from being used in a real build
 #ifdef TARGET_BUILD
-#error "Template version of 'emblocs_platform.h' is not suitable for a real build."
+#error "Template version of 'ebl_platform.h' is not suitable for a real build."
 #endif
 
 
-#endif // EMBLOCS_PLATFORM_H
+#endif // EBL_PLATFORM_H

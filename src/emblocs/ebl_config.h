@@ -1,11 +1,11 @@
 /***************************************************************
  *
- * emblocs_config.h
+ * ebl_config.h
  *
  * This file contains #defines that are used to configure the
  * emblocs system for a particular project.
  *
- * A real project must supply its own emblocs_config.h, located
+ * A real project must supply its own ebl_config.h, located
  * earlier in the include search path than this template, so that
  * it replaces this template with target specific code.
  *
@@ -25,12 +25,12 @@
  *
  **************************************************************/
 
-#ifndef EMBLOCS_CONFIG_H
-#define EMBLOCS_CONFIG_H
+#ifndef EBL_CONFIG_H
+#define EBL_CONFIG_H
 
 // prevent this template file from being used in a real build
 #ifdef TARGET_BUILD
-#error "Template version of 'emblocs_config.h' is not suitable for a real build."
+#error "Template version of 'ebl_config.h' is not suitable for a real build."
 #endif
 
 
@@ -55,4 +55,4 @@
  */
 #define EBL_NULL_POINTER_CHECKS
 
-#endif // EMBLOCS_CONFIG_H
+#endif // EBL_CONFIG_H

@@ -2,7 +2,7 @@
 // Edit freely - this file will not be overwritten.
 // Source: stm32_gpio.bloc
 
-#include <emblocs_comp.h>
+#include <ebl_comp.h>
 
 #define BL_BLOCK_NAME stm32_gpio
 

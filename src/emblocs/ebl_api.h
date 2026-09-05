@@ -1,6 +1,6 @@
 /***************************************************************
  * 
- * emblocs_api.h - header for EMBLOCS applications
+ * ebl_api.h - header for EMBLOCS applications
  * 
  * Embedded Block-Oriented Control System
  * 
@@ -8,10 +8,10 @@
  * 
  **************************************************************/
 
-#ifndef EMBLOCS_API_H
-#define EMBLOCS_API_H
+#ifndef EBL_API_H
+#define EBL_API_H
 
-#include <emblocs_common.h>
+#include <ebl_common.h>
 
 /**************************************************************
  * Top-level EMBLOCS API functions used to build a system     *
@@ -155,4 +155,4 @@ bool bl_parse_string(char const * const string);
  */
 extern struct bl_comp_def_s * const bl_comp_defs[];
 
-#endif // EMBLOCS_API_H
+#endif // EBL_API_H

@@ -1,4 +1,4 @@
-#include <emblocs_priv.h>
+#include <ebl_priv.h>
 #include <linked_list.h>
 #include <printing.h>
 

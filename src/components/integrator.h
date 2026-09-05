@@ -5,7 +5,7 @@
 #ifndef INTEGRATOR_H
 #define INTEGRATOR_H
 
-#include <emblocs_comp.h>
+#include <ebl_comp.h>
 
 // define instance structure
 typedef struct {

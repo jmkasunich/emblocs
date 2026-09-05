@@ -1,12 +1,12 @@
 /***************************************************************
  *
- * bl_monitor.c - EMBLOCS runtime monitor implementation
+ * ebl_monitor.c - EMBLOCS runtime monitor implementation
  *
  * see bl_monitor.h for API details
  *
  **************************************************************/
 
-#include "bl_monitor.h"
+#include "ebl_monitor.h"
 #include <serial.h>
 #include <ser_crc.h>
 #include <stdint.h>

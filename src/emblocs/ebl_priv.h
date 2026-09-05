@@ -1,6 +1,6 @@
 /***************************************************************
  * 
- * emblocs_priv.h - private header for EMBLOCS library
+ * ebl_priv.h - private header for EMBLOCS library
  * 
  * Embedded Block-Oriented Control System
  * 
@@ -8,11 +8,11 @@
  * 
  **************************************************************/
 
-#ifndef EMBLOCS_PRIV_H
-#define EMBLOCS_PRIV_H
+#ifndef EBL_PRIV_H
+#define EBL_PRIV_H
 
-#include <emblocs_api.h>
-#include <emblocs_comp.h>
+#include <ebl_api.h>
+#include <ebl_comp.h>
 
 /**************************************************************
  * Realtime data and object metadata are stored in separate
@@ -207,4 +207,4 @@ int bl_thread_meta_compare_name_key(void *node, void *key);
 int bl_pin_meta_compare_name_key(void *node, void *key);
 int bl_function_meta_compare_name_key(void *node, void *key);
 
-#endif // EMBLOCS_PRIV_H
+#endif // EBL_PRIV_H

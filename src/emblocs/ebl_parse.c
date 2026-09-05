@@ -1,4 +1,4 @@
-#include <emblocs_priv.h>
+#include <ebl_priv.h>
 #include <string.h>         // strcmp
 #include <stdarg.h>
 #include <printing.h>
