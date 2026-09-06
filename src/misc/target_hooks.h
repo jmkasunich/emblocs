@@ -10,6 +10,9 @@
  * earlier in the include search path than this template, so that
  * it replaces this template with target specific code.
  *
+ * While the macros in this file are not unique to the EMBLOCS
+ * project, they use the EBL_ prefix to avoid possible collisions.
+ *
  * The target-specific file must provide correct implementations
  * of every macro below.
  *
@@ -75,27 +78,42 @@
  */
 
 
- /********************************************************************
+/********************************************************************
  *
  * Function/Data tags
  *
- * The following tags are used to mark functions or data structures
- * as either time critical or one-time init only use.  A platform
- * can define these as no-op safely, but on platforms where speed-
- * critical code should be copied to RAM, speed critical data should
- * be in closely-coupled memory (CCM), etc., these tags are how
- * the emblocs library marks such code and data.
+ * The following tags are used to tag functions or data objects
+ * as either time critical or one-time init only use.
+ *
+ * On platforms where for example speed-critical code should be
+ * placed in linker sections that will be copied to RAM, speed
+ * critical data should be in closely-coupled memory (CCM), or
+ * data/functions used only during init can run from slower
+ * memory or perhaps be reclaimed after use, these tags are
+ * used by the emblocs library to mark such items.
+ *
+ * Note that such tags must be applied to C names only; if you
+ * want to tag an array of objects or a pointer to an object,
+ * the array and/or pointer notation should be outside of the
+ * tag macro:
+ *
+ * const uint32_t EBL_TAG_CONST_FAST(my_array)[3] = { 1, 2, 3 };
+ * uint8_t * EBL_TAG_DATA_INIT(init_buf);
+ *
+ * The default definitions below are no-ops; they simply drop
+ * the marking and return the basic name.  It is never necessary
+ * to replace them, but on some targets, doing so will allow
+ * for better optimization.
  *
  */
 
-// --- Time-critical function (e.g., run from RAM) ---
-#define EBL_FAST_FUNC
+#define EBL_TAG_FUNCT_FAST(name)    name
+#define EBL_TAG_FUNCT_INIT(name)    name
 
-// --- Time-critical data (e.g., CCM/DTCM) ---
-#define EBL_FAST_DATA
+#define EBL_TAG_DATA_FAST(name)     name
+#define EBL_TAG_DATA_INIT(name)     name
 
-// --- Init-only code/data (candidate for reclaiming after startup) ---
-#define EBL_INIT_ONLY_FUNC
-#define EBL_INIT_ONLY_DATA
+#define EBL_TAG_CONST_FAST(name)    name
+#define EBL_TAG_CONST_INIT(name)    name
 
 #endif // TARGET_HOOKS_H

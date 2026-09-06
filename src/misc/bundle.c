@@ -8,7 +8,7 @@
  * *************************************************************/
 
 #include "bundle.h"
-#include <critreg.h>
+#include <target_hooks.h>
 #include <assert.h>
 #include <string.h> // memset()
 
@@ -39,7 +39,7 @@
 
 // compute CRC-16-CCITT over a buffer, using bitwise loop
 // slower but smaller
-uint16_t bdl_crc16_bitwise(uint16_t seed, const uint8_t *data, uint8_t len)
+uint16_t EBL_TAG_FUNCT_FAST(bdl_crc16_bitwise)(uint16_t seed, const uint8_t *data, uint8_t len)
 {
     uint16_t crc = seed;
     uint8_t i, j;
@@ -61,7 +61,7 @@ uint16_t bdl_crc16_bitwise(uint16_t seed, const uint8_t *data, uint8_t len)
 // fast but large - beware if MCU executes out of serial flash,
 // data fetches from the lookup table may be slow
 
-static const uint16_t crc_lookup[256] = {
+static const uint16_t EBL_TAG_CONST_FAST(crc_lookup)[256] = {
     0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50A5, 0x60C6, 0x70E7,
     0x8108, 0x9129, 0xA14A, 0xB16B, 0xC18C, 0xD1AD, 0xE1CE, 0xF1EF,
     0x1231, 0x0210, 0x3273, 0x2252, 0x52B5, 0x4294, 0x72F7, 0x62D6,
@@ -96,7 +96,7 @@ static const uint16_t crc_lookup[256] = {
     0x6E17, 0x7E36, 0x4E55, 0x5E74, 0x2E93, 0x3EB2, 0x0ED1, 0x1EF0,
 };
 
-uint16_t bdl_crc16_lookup(uint16_t seed, const uint8_t *data, uint8_t len)
+uint16_t EBL_TAG_FUNCT_FAST(bdl_crc16_lookup)(uint16_t seed, const uint8_t *data, uint8_t len)
 {
     uint16_t crc = seed;
     uint8_t i;
@@ -116,7 +116,7 @@ uint16_t bdl_crc16_lookup(uint16_t seed, const uint8_t *data, uint8_t len)
  *
  * *************************************************************/
 
-void bdl_packet_init_buf(bdl_packet_t *p, uint8_t *buf, uint8_t len)
+void EBL_TAG_FUNCT_INIT(bdl_packet_init_buf)(bdl_packet_t *p, uint8_t *buf, uint8_t len)
 {
     assert(p != NULL);
     assert(buf != NULL);
@@ -132,7 +132,7 @@ void bdl_packet_init_buf(bdl_packet_t *p, uint8_t *buf, uint8_t len)
     p->callback = NULL;
 }
 
-void bdl_packet_set_chan(bdl_packet_t *p, uint8_t chan)
+void EBL_TAG_FUNCT_FAST(bdl_packet_set_chan)(bdl_packet_t *p, uint8_t chan)
 {
     assert(p != NULL);
     assert(p->state == BP_IDLE);
@@ -140,7 +140,7 @@ void bdl_packet_set_chan(bdl_packet_t *p, uint8_t chan)
     p->chan = chan;
 }
 
-void bdl_packet_set_len(bdl_packet_t *p, uint8_t len)
+void EBL_TAG_FUNCT_FAST(bdl_packet_set_len)(bdl_packet_t *p, uint8_t len)
 {
     assert(p != NULL);
     assert(p->state == BP_IDLE);
@@ -154,7 +154,7 @@ void bdl_packet_set_len(bdl_packet_t *p, uint8_t len)
  *
  * *************************************************************/
 
-void bdl_init_rx(bdl_rx_t *bdl, const bdl_rx_config_t *cfg)
+void EBL_TAG_FUNCT_INIT(bdl_init_rx)(bdl_rx_t *bdl, const bdl_rx_config_t *cfg)
 {
     assert(bdl != NULL);
     assert(cfg != NULL);
@@ -176,7 +176,7 @@ void bdl_init_rx(bdl_rx_t *bdl, const bdl_rx_config_t *cfg)
     bdl->pkt_root = NULL;
 }
 
-uint32_t bdl_string_get_nb(bdl_rx_t *bdl)
+uint32_t EBL_TAG_FUNCT_FAST(bdl_string_get_nb)(bdl_rx_t *bdl)
 {
     uint8_t c;
 
@@ -191,7 +191,7 @@ uint32_t bdl_string_get_nb(bdl_rx_t *bdl)
     return BDL_NO_DATA;
 }
 
-char bdl_string_get_bl(bdl_rx_t *bdl)
+char EBL_TAG_FUNCT_FAST(bdl_string_get_bl)(bdl_rx_t *bdl)
 {
     uint8_t c;
 
@@ -204,25 +204,25 @@ char bdl_string_get_bl(bdl_rx_t *bdl)
     return (char)(c);
 }
 
-bool bdl_string_can_get(bdl_rx_t *bdl)
+bool EBL_TAG_FUNCT_FAST(bdl_string_can_get)(bdl_rx_t *bdl)
 {
     assert(bdl != NULL);
     return ( bdl->string_buf[bdl->string_out] <= MAX_STRING_VALUE );
 }
 
-static void add_pkt_to_rx_list(bdl_rx_t *bdl, bdl_packet_t *p)
+static void EBL_TAG_FUNCT_FAST(add_pkt_to_rx_list)(bdl_rx_t *bdl, bdl_packet_t *p)
 {
     // insert at head of list
     // this makes less frequently used buffers drift towards the tail
     // so frequently used ones are found faster
     p->state = BP_RX_WAIT;
-    CRITICAL_ENTER();
+    EBL_CRITICAL_ENTER();
     p->next = bdl->pkt_root;
     bdl->pkt_root = p;
-    CRITICAL_EXIT();
+    EBL_CRITICAL_EXIT();
 }
 
-void bdl_packet_listen(bdl_rx_t *bdl, bdl_packet_t *p,
+void EBL_TAG_FUNCT_FAST(bdl_packet_listen)(bdl_rx_t *bdl, bdl_packet_t *p,
                         void (*callback)(struct bdl_packet_s *p))
 {
     assert(bdl != NULL);
@@ -233,7 +233,7 @@ void bdl_packet_listen(bdl_rx_t *bdl, bdl_packet_t *p,
     add_pkt_to_rx_list(bdl, p);
 }
 
-bool bdl_packet_get(bdl_rx_t *bdl, bdl_packet_t *p)
+bool EBL_TAG_FUNCT_FAST(bdl_packet_get)(bdl_rx_t *bdl, bdl_packet_t *p)
 {
     uint16_t crc_calc, crc_recv;
     uint8_t len;
@@ -289,7 +289,7 @@ void bdl_reset_error_count(bdl_rx_t *bdl)
 }
 
 
-void bdl_put_rx_byte(bdl_rx_t *bdl, uint8_t data)
+void EBL_TAG_FUNCT_FAST(bdl_put_rx_byte)(bdl_rx_t *bdl, uint8_t data)
 {
     bdl_packet_t *p, **pp;
 
@@ -305,10 +305,10 @@ void bdl_put_rx_byte(bdl_rx_t *bdl, uint8_t data)
                 while ( (p = *pp) != NULL ) {
                     if ( p->chan == new_chan ) {
                         // match found, remove from list
-                        CRITICAL_ENTER();
+                        EBL_CRITICAL_ENTER();
                         *pp = p->next;
                         p->next = NULL;
-                        CRITICAL_EXIT();
+                        EBL_CRITICAL_EXIT();
                         // set up buffer for receive
                         p->data_len = 0;
                         p->state = BP_RX_BUSY;
@@ -419,7 +419,7 @@ void bdl_init_tx(bdl_tx_t *bdl, const bdl_tx_config_t *cfg)
     bdl->pkt_tail = &(bdl->pkt_root);
 }
 
-bool bdl_string_put_nb(bdl_tx_t *bdl, char c)
+bool EBL_TAG_FUNCT_FAST(bdl_string_put_nb)(bdl_tx_t *bdl, char c)
 {
     assert(bdl != NULL);
     if ( bdl->string_buf[bdl->string_in] > MAX_STRING_VALUE ) {
@@ -434,7 +434,7 @@ bool bdl_string_put_nb(bdl_tx_t *bdl, char c)
     return false;
 }
 
-void bdl_string_put_bl(bdl_tx_t *bdl, char c)
+void EBL_TAG_FUNCT_FAST(bdl_string_put_bl)(bdl_tx_t *bdl, char c)
 {
     assert(bdl != NULL);
     while ( bdl->string_buf[bdl->string_in] <= MAX_STRING_VALUE );
@@ -446,13 +446,13 @@ void bdl_string_put_bl(bdl_tx_t *bdl, char c)
     }
 }
 
-bool bdl_string_can_put(bdl_tx_t *bdl)
+bool EBL_TAG_FUNCT_FAST(bdl_string_can_put)(bdl_tx_t *bdl)
 {
     assert(bdl != NULL);
     return ( bdl->string_buf[bdl->string_in] > MAX_STRING_VALUE );
 }
 
-void bdl_packet_put(bdl_tx_t *bdl, bdl_packet_t *p,
+void EBL_TAG_FUNCT_FAST(bdl_packet_put)(bdl_tx_t *bdl, bdl_packet_t *p,
                      void (*callback)(struct bdl_packet_s *p))
 {
     uint16_t crc;
@@ -487,17 +487,17 @@ void bdl_packet_put(bdl_tx_t *bdl, bdl_packet_t *p,
     *cp = code;
     // encoding complete
     // insert at end of list
-    CRITICAL_ENTER();
+    EBL_CRITICAL_ENTER();
     p->next = NULL;
     *(bdl->pkt_tail) = p;
     bdl->pkt_tail = &(p->next);
-    CRITICAL_EXIT();
+    EBL_CRITICAL_EXIT();
     if ( bdl->tx_bytes_available != NULL ) {
         bdl->tx_bytes_available();
     }
 }
 
-uint32_t bdl_get_tx_byte(bdl_tx_t *bdl)
+uint32_t EBL_TAG_FUNCT_FAST(bdl_get_tx_byte)(bdl_tx_t *bdl)
 {
     uint8_t data;
     bdl_packet_t *p;
@@ -508,13 +508,13 @@ uint32_t bdl_get_tx_byte(bdl_tx_t *bdl)
             // binary packets take precedence over text, check if there is one
             if ( bdl->pkt_root != NULL) {
                 // there is a packet to send; unlink it from list
-                CRITICAL_ENTER();
+                EBL_CRITICAL_ENTER();
                 p = bdl->pkt_root;
                 bdl->pkt_root = p->next;
                 if ( bdl->pkt_root == NULL ) {
                     bdl->pkt_tail = &(bdl->pkt_root);
                 }
-                CRITICAL_EXIT();
+                EBL_CRITICAL_EXIT();
                 // set up for packet transmit
                 p->state = BP_TX_BUSY;
                 bdl->pkt_current = p;
