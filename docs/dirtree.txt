@@ -1,6 +1,7 @@
 emblocs/
     .gitignore
-    emblocs.json
+    emblocs.json       <-- obsolete?
+    emblocs_cfg.json
     LICENSE
     README.md
     docs/
@@ -9,6 +10,10 @@ emblocs/
         blocs_language.md
         DEVELOPMENT.md
         dirtree.txt  <-- this file
+        monitor-startup.md
+        monitor.md
+    cmake/
+        emblocs.cmake    <-- included from master CMakeLists.txt
     src/
         components/
             *.bloc
@@ -16,16 +21,28 @@ emblocs/
             *.h
         emblocs/
             CMakeLists.txt  <-- not sure what's in here
-            emblocs_xxx.h   (total of five headers)
-            emblocs_core.c  <- roughly equivalent to emblocs.py - main structs
-            emblocs_parse.c <- parser for a very different dialect of what became .blocs
-            emblocs_show.c  <- roughly equivalent to the describe() methods
+            ebl_api.h          <-- old headers for old API
+            ebl_common.h       <-- headers for types and such
+            ebl_comp.h         <-- headers for component definitions
+            ebl_config.h       <-- template config file (copy to project)
+            ebl_core.h         <-- old headers for old API
+            ebl_monitor.h      <-- header for new monitor
+            ebl_platform.h     <-- old approach for platform independence
+            ebl_priv.h         <-- old header for internal types, etc
+            ebl_core.c         <-- roughly equivalent to emblocs.py - main structs
+            ebl_monitor.c      <-- new monitor
+            ebl_parse.c        <-- parser for a very different dialect of what became .blocs
+            ebl_show.c         <-- roughly equivalent to the describe() methods
         misc/
             some utlilty libs used by emblocs/
+            CMakeLists.txt  <-- not sure what's in here
+            bundle.c & .h      (serial communications library)
             linked_list.c & .h (linked list management code)
             printing.c & .h    (stripped down printf-like for embedded)
-            serial.c & .h      (serial port buffers and a mixed text/binary protocol)
+            ser_crc.c & .h     (old CRC code for serial.c)
+            serial.c & .h      (old predecessor of bundle.c)
             str_to_xx.c & .h   (conversion from string to float, u32, s32)
+            target_hooks.h     (default version of portability code)
         old_components/
             old, .c only components
     python/
