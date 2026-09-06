@@ -3,9 +3,9 @@ add_library(emblocs INTERFACE)
 
 # specify the library sources
 target_sources(emblocs INTERFACE
-    emblocs_core.c
-    emblocs_parse.c
-    emblocs_show.c
+    ebl_core.c
+    ebl_parse.c
+    ebl_show.c
 )
 
 # specify the include path

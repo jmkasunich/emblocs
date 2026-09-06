@@ -19,6 +19,6 @@ target_sources(str_to_xx INTERFACE
 # specify the include path
 target_include_directories(linked_list INTERFACE ${CMAKE_CURRENT_LIST_DIR} )
 target_include_directories(printing INTERFACE ${CMAKE_CURRENT_LIST_DIR} )
-target_include_directories(printing INTERFACE ${CMAKE_CURRENT_LIST_DIR} )
+target_include_directories(str_to_xx INTERFACE ${CMAKE_CURRENT_LIST_DIR} )
 
 #target_link_libraries(printing INTERFACE stdio )
