@@ -72,4 +72,5 @@ target_compile_definitions(${TARGET} PRIVATE
 # Add core libraries
 target_sources(${TARGET} PRIVATE
     ${EMBLOCS_MISC}/bundle.c
+    ${EMBLOCS_INC}/ebl_monitor.c
 )

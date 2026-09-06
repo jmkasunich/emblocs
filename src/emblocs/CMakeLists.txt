@@ -3,6 +3,7 @@ add_library(emblocs INTERFACE)
 
 # specify the library sources
 target_sources(emblocs INTERFACE
+    ebl_monitor.c
     ebl_core.c
     ebl_parse.c
     ebl_show.c

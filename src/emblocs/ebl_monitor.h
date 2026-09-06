@@ -18,6 +18,8 @@
 #ifndef EBL_MONITOR_H
 #define EBL_MONITOR_H
 
+#include <bundle.h>
+
 /***************************************************************
  * bl_monitor_init()
  *
@@ -25,7 +27,7 @@
  * before the first call to bl_monitor_poll().
  *
  **************************************************************/
-void bl_monitor_init(void);
+void ebl_monitor_init(bdl_rx_t *rx, bdl_tx_t *tx);
 
 /***************************************************************
  * bl_monitor_poll()
@@ -37,6 +39,6 @@ void bl_monitor_init(void);
  * main loop between real-time thread invocations.
  *
  **************************************************************/
-void bl_monitor_poll(void);
+void ebl_monitor_poll(void);
 
 #endif // EBL_MONITOR_H
