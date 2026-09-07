@@ -287,17 +287,18 @@ noted here but deferred.
 ### 5.1. BlockSpec
 
 A BlockSpec is stored as a compressed `.bloc` file. Compression discards:
-- Comments (`//` and `///` annotations)
-- Descriptions
+- Comments (`//` annotations)
+- Descriptions ( `///` annotations)
 - `var` declarations (private to the block implementation, not needed for
   monitoring)
 - `include` declarations (not needed for monitoring)
-- All whitespace
+- Duplicate whitespace
 
-Keywords and common keyword sequences are replaced by an escape character
-followed by a single-character code. Names and expressions are stored
-unmodified. The result is an ASCII string that can be transmitted over the
-UART text channel and expanded back through the existing `.bloc` parser.
+Keywords and common keyword sequences are replaced by codes in the 128-255
+range.  Then the tokenized data is fed to zlib.compress for additional
+compression, resulting in a binary blob that can be transferred over the
+bundle protocol's binary packets.  The monitor then reverses the process
+and sends the expanded text back through the existing `.bloc` parser.
 
 This approach is efficient for blocks with array pins — it stores the name
 template, not the expanded pin names. If multiple BlockDefs are derived
@@ -306,10 +307,9 @@ from one BlockSpec, the BlockSpec is stored only once.
 ### 5.2. BlockDef
 
 A BlockDef is stored as: variant name + BlockSpec identifier (integer index
-into the transmitted BlockSpec list) + parameter values in the order defined
-by the BlockSpec. A more compact form would use only the parameter values
-(since their order is defined by the BlockSpec), with an integer index
-identifying the BlockSpec.
+into the transmitted BlockSpec list) + parameter name:value pairs. A more
+compact form would use only the parameter values, since their order is
+defined by the BlockSpec, with an integer index identifying the BlockSpec.
 
 The `field_offset` arrays (one `uint16_t` per struct field, in declaration
 order) are stored with the BlockDef metadata, since offsets are per-type
@@ -340,19 +340,8 @@ ordered function list.
 
 ### 6.1. Channel Assignment
 
-Read and write commands use the **ASCII text channel**, not the binary
-packet channel. Rationale:
-
-- Read/write traffic is sporadic and does not need hard real-time delivery.
-- The binary packet channel is reserved for time-sensitive streaming data
-  (oscilloscope samples, sampler output) where latency must be minimal and
-  predictable.
-- A read or write command should be deferred if a binary packet needs to
-  be transmitted; this deferral is natural on the ASCII channel and
-  problematic on the binary channel.
-- ASCII commands are human-readable, which significantly aids debugging
-  during early development. A terminal session is sufficient to verify
-  that the C monitor is functioning correctly.
+All monitor traffic uses the binary packet channel(s) of the bundle
+protocol, saving the ASCII text channel for the application.
 
 ### 6.2. UART Requirements
 
