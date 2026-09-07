@@ -1,5 +1,4 @@
-# emblocs_common.py
-# Shared infrastructure for EMBLOCS tools.
+# config.py
 # Provides Config for managing tool configuration data across
 # GUI and command-line tools, reading from and writing to a
 # shared JSON config file.
@@ -20,7 +19,7 @@ from parse_common import ctx, OMIT
 
 class Config:
     """
-    Manages configuration data for EMBLOCS tools.
+    Manages configuration data.
 
     Configuration data is stored in a single nested dict (config.data)
     and accessed using dotted names, e.g. 'scope.channel_00.units_per_div'.

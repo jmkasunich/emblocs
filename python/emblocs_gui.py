@@ -6,7 +6,7 @@ import tkinter as tk
 from pathlib import Path
 import platform
 import sys
-from emblocs_common import Config
+from config import Config
 from monitor_app import MonitorApp
 from startup_dialog import StartupDialog, update_recents
 
