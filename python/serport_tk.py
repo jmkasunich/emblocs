@@ -28,6 +28,13 @@ class SerPortTk(ttk.Frame):
         send_packet(),
         listen_on_string_channel(),
         listen_on_packet_channel()
+      configuration and programmatic control:
+        set_port()
+        set_baud()
+        get_port()
+        get_buad()
+        connect()
+        disconnect()
     """
 
     def __init__(self, parent, config: Config, on_connect=None, on_disconnect=None, **kwargs):
@@ -45,6 +52,7 @@ class SerPortTk(ttk.Frame):
         self.connected = False
         self.on_connect = on_connect
         self.on_disconnect = on_disconnect
+        self.after_id = None
 
         padx = 5
         pady = 5
@@ -141,11 +149,17 @@ class SerPortTk(ttk.Frame):
         # Save to config
         self.config.set_by_name('port.port', port)
         self.config.set_by_name('port.baud', baud_str)
+        # begin monitoring SerPort
+        self.after_id = self.after(200, self._check_connection)
+        # invoke user callback
         if self.on_connect:
             self.on_connect()
 
     def _disconnect(self):
         """Disconnect from the serial port."""
+        if self.after_id is not None:
+            self.after_cancel(self.after_id)
+            self.after_id = None
         self.serport.close()
         self.serport = None
         self.connected = False
@@ -154,8 +168,24 @@ class SerPortTk(ttk.Frame):
         self.status_label.config(foreground='red')
         self.port_combo.config(state='normal')
         self.baud_combo.config(state='normal')
+        # invoke user callback
         if self.on_disconnect:
             self.on_disconnect()
+
+    def _check_connection(self):
+        """
+        The underlying SerPort can close unexpectedly (for example
+        if a USB-to-Serial widget is unplugged).  In that case we
+        want to disconnect.  This method periodicaly checks the
+        serport.is_running() status, and shows a dialog before
+        disconnecting if there is a problem with the port.
+        """
+        if not self.serport.is_running():
+            messagebox.showerror("Info", "Serial Port closed unexpectedly")
+            self.after_id = None
+            self._disconnect()
+        else:
+            self.after_id = self.after(200, self._check_connection)
 
     def is_connected(self) -> bool:
         """
@@ -165,6 +195,54 @@ class SerPortTk(ttk.Frame):
             True if connected, False otherwise
         """
         return self.connected
+
+    def set_port(self, port: str) -> None:
+        """
+        Programmatically set port name string
+        Raises RuntimeError if currently connected
+        """
+        if self.connected:
+            raise RuntimeError("Currently connected, can't change port")
+        self.port_var.set(port)
+
+    def set_baud(self, baud: str) -> None:
+        """
+        Programmatically set baud-rate string
+        Raises RuntimeError if currently connected
+        """
+        if self.connected:
+            raise RuntimeError("Currently connected, can't change baud rate")
+        self.baud_var.set(baud)
+
+    def get_port(self) -> str:
+        """
+        Gets port name string
+        """
+        return self.port_var.get()
+
+    def get_baud(self) -> str:
+        """
+        Gets baud-rate string
+        """
+        return self.baud_var.get()
+
+    def connect(self) -> None:
+        """
+        Programmatically connect using the current port and baud rate
+        Raises RuntimeError if already connected
+        """
+        if self.connected:
+            raise RuntimeError("Already connected")
+        self._connect()
+
+    def disconnect(self) -> None:
+        """
+        Programmatically disconnect from the port
+        Raises RuntimeError if not connected
+        """
+        if not self.connected:
+            raise RuntimeError("Already disconnected")
+        self._disconnect()
 
     def send_string(self, data: str) -> None:
         """

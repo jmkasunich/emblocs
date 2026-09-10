@@ -79,9 +79,23 @@ class SerPort:
         """
         return [port.device for port in serial.tools.list_ports.comports()]
 
+    def is_running(self) -> bool:
+        """
+        Report status of worker threads.
+
+        OS or hardware issues might make the serial port go away; the
+        resulting exception(s) happen in the worker threads and are
+        otherwise invisble to clients.  This method returns true if
+        the threads are still happy, false if an exception has occurred.
+        Ideally the client would call close() if this returns false.
+        """
+
+        return not self.stop_event.is_set()
+
     def send_string(self, data: str) -> None:
         """
         Queue a string for transmission on the string channel.
+        If the worker thread has stopped the data is silently discarded.
 
         Args:
             data: String to send (ASCII only)
@@ -89,13 +103,15 @@ class SerPort:
         Raises:
             UnicodeEncodeError if data contains non-ASCII characters
         """
-        if self.debug:
-            print(f"SerPort.send_string: {len(data)} chars")
-        self.bundle.send_string(data)
+        if not self.stop_event.is_set():
+            if self.debug:
+                print(f"SerPort.send_string: {len(data)} chars")
+            self.bundle.send_string(data)
 
     def send_packet(self, chan: int, data: bytes) -> None:
         """
         Queue a binary packet for transmission.
+        If the worker thread has stopped the data is silently discarded.
 
         Args:
             chan: Packet channel (0-127)
@@ -104,9 +120,10 @@ class SerPort:
         Raises:
             ValueError if channel or data length is invalid
         """
-        if self.debug:
-            print(f"SerPort.send_packet: chan={chan}, len={len(data)}")
-        self.bundle.send_packet(chan, data)
+        if not self.stop_event.is_set():
+            if self.debug:
+                print(f"SerPort.send_packet: chan={chan}, len={len(data)}")
+            self.bundle.send_packet(chan, data)
 
     def listen_on_packet_channel(self, chan: int, q: queue.Queue, with_timestamp: bool = False) -> None:
         """
@@ -209,13 +226,10 @@ class SerPort:
                     if self.debug:
                         print(f"SerPort._rx_worker: read {len(data)} bytes")
                     self.unbundle.put_rx_bytes(data)
-            except SerialException as e:
-                if not self.stop_event.is_set():
-                    print(f"SerPort._rx_worker: SerialException: {e}")
-                break
             except Exception as e:
                 if not self.stop_event.is_set():
-                    print(f"SerPort._rx_worker: Exception: {e}")
+                    print(f"SerPort._rx_worker: {type(e).__name__}: {e}")
+                self.stop_event.set()
                 break
 
         if self.debug:
@@ -245,14 +259,10 @@ class SerPort:
                     if self.debug:
                         print(f"SerPort._tx_worker: write {len(data)} bytes")
                     self.serial.write(data)
-
-            except SerialException as e:
-                if not self.stop_event.is_set():
-                    print(f"SerPort._tx_worker: SerialException: {e}")
-                break
             except Exception as e:
                 if not self.stop_event.is_set():
-                    print(f"SerPort._tx_worker: Exception: {e}")
+                    print(f"SerPort._tx_worker: {type(e).__name__}: {e}")
+                self.stop_event.set()
                 break
 
         if self.debug:
