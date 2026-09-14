@@ -14,7 +14,7 @@ import tkinter as tk
 from tkinter import ttk
 import tkinter.font as tkfont
 from datetime import datetime
-from config import Config
+from config import Config, ConfigView
 
 def _clamp(value, low, high):
     """Clamp a value between low and high."""
@@ -28,13 +28,13 @@ class TerminalRx(ttk.Frame):
     This class handles the display and user interface, not the serial port.
     """
 
-    def __init__(self, parent, config: Config, linenum_len=6, timestamp_len1=8, timestamp_len2=3, **kwargs):
+    def __init__(self, parent, config: ConfigView, linenum_len=6, timestamp_len1=8, timestamp_len2=3, **kwargs):
         """
         Initialize the TerminalRx widget.
 
         Args:
             parent: Tkinter parent widget
-            config: Config object with [terminal][rx] settings
+            config: ConfigView object with [terminal][rx] settings
             linenum_len: Length of line number field (1-10)
             timestamp_len1: Length of timestamp before decimal (2-19)
             timestamp_len2: Length of fractional seconds (0-6)
@@ -56,8 +56,8 @@ class TerminalRx(ttk.Frame):
 
         # Font for text display
         self.font = tkfont.Font(
-            family=self.config.get_by_name('terminal.font_family'),
-            size=self.config.get_by_name('terminal.rx.font_size'),
+            family=self.config.get('../font_family'),
+            size=self.config.get('font_size'),
             weight="normal"
         )
         self.charwidth = self.font.measure('0')
@@ -87,32 +87,32 @@ class TerminalRx(ttk.Frame):
         # Control checkboxes
         self.checkframe = ttk.Frame(self)
 
-        self.show_linenum = tk.BooleanVar(value=self.config.get_by_name('terminal.rx.show_linenum'))
+        self.show_linenum = tk.BooleanVar(value=self.config.get('show_linenum'))
         self.linenum_check = ttk.Checkbutton(
             self.checkframe, text='Line Numbers',
             command=self.show_changed, variable=self.show_linenum
         )
-        self.show_timestamp = tk.BooleanVar(value=self.config.get_by_name('terminal.rx.show_timestamp'))
+        self.show_timestamp = tk.BooleanVar(value=self.config.get('show_timestamp'))
         self.timestamp_check = ttk.Checkbutton(
             self.checkframe, text='Timestamps',
             command=self.show_changed, variable=self.show_timestamp
         )
-        self.wrap = tk.BooleanVar(value=self.config.get_by_name('terminal.rx.wrap_lines'))
+        self.wrap = tk.BooleanVar(value=self.config.get('wrap_lines'))
         self.wrap_check = ttk.Checkbutton(
             self.checkframe, text='Wrap Long Lines',
             command=self.wrap_changed, variable=self.wrap
         )
-        self.autoscroll = tk.BooleanVar(value=self.config.get_by_name('terminal.rx.autoscroll'))
+        self.autoscroll = tk.BooleanVar(value=self.config.get('autoscroll'))
         self.autoscroll_check = ttk.Checkbutton(
             self.checkframe, text='Autoscroll',
             command=self.scroll_changed, variable=self.autoscroll
         )
-        self.show_rx = tk.BooleanVar(value=self.config.get_by_name('terminal.rx.show_rx_text'))
+        self.show_rx = tk.BooleanVar(value=self.config.get('show_rx_text'))
         self.rx_check = ttk.Checkbutton(
             self.checkframe, text='RX',
             command=self.show_changed, variable=self.show_rx
         )
-        self.show_tx = tk.BooleanVar(value=self.config.get_by_name('terminal.rx.show_tx_text'))
+        self.show_tx = tk.BooleanVar(value=self.config.get('show_tx_text'))
         self.tx_check = ttk.Checkbutton(
             self.checkframe, text='TX',
             command=self.show_changed, variable=self.show_tx
@@ -150,16 +150,14 @@ class TerminalRx(ttk.Frame):
         self.grid_rowconfigure(2, weight=0)
 
     @staticmethod
-    def add_config_data(config: Config):
-        config.set_by_name('terminal.font_family','Courier')
-        # RX-specific config
-        config.set_by_name('terminal.rx.font_size', 10)
-        config.set_by_name('terminal.rx.show_linenum', True)
-        config.set_by_name('terminal.rx.show_timestamp', True)
-        config.set_by_name('terminal.rx.show_rx_text', True)
-        config.set_by_name('terminal.rx.show_tx_text', True)
-        config.set_by_name('terminal.rx.wrap_lines', False)
-        config.set_by_name('terminal.rx.autoscroll', True)
+    def register_config(config: ConfigView):
+        config.register('font_size', 10)
+        config.register('show_linenum', True)
+        config.register('show_timestamp', True)
+        config.register('show_rx_text', True)
+        config.register('show_tx_text', True)
+        config.register('wrap_lines', False)
+        config.register('autoscroll', True)
 
     def make_timestr(self, timestamp):
         """
@@ -225,11 +223,11 @@ class TerminalRx(ttk.Frame):
         """Handle wrap checkbox change."""
         wrap = self.wrap.get()
         self.text.config(wrap='char' if wrap else 'none')
-        self.config.set_by_name('terminal.rx.wrap_lines', wrap)
+        self.config.set('wrap_lines', wrap)
 
     def scroll_changed(self):
         """Handle autoscroll checkbox change."""
-        self.config.set_by_name('terminal.rx.autoscroll', self.autoscroll.get())
+        self.config.set('autoscroll', self.autoscroll.get())
 
     def show_changed(self):
         """Handle show checkboxes (linenum, timestamp, rx, tx)."""
@@ -249,10 +247,10 @@ class TerminalRx(ttk.Frame):
         self.set_lmargin2()
 
         # Update config
-        self.config.set_by_name('terminal.rx.show_timestamp', show_timestamp)
-        self.config.set_by_name('terminal.rx.show_linenum', show_linenum)
-        self.config.set_by_name('terminal.rx.show_rx_text', show_rx)
-        self.config.set_by_name('terminal.rx.show_tx_text', show_tx)
+        self.config.set('show_timestamp', show_timestamp)
+        self.config.set('show_linenum', show_linenum)
+        self.config.set('show_rx_text', show_rx)
+        self.config.set('show_tx_text', show_tx)
 
     def copy_displayed(self, event=None):
         """
@@ -284,13 +282,13 @@ class TerminalTx(ttk.Frame):
     TODO: immediate mode
     """
 
-    def __init__(self, parent, config: Config, command=None, **kwargs):
+    def __init__(self, parent, config: ConfigView, command=None, **kwargs):
         """
         Initialize the TerminalTx widget.
 
         Args:
             parent:  Tkinter parent widget
-            config:  Config object with terminal settings
+            config:  ConfigView object with terminal settings
             command: Function to call when user presses Return
                      Receives command text (including newline)
         """
@@ -301,8 +299,8 @@ class TerminalTx(ttk.Frame):
 
         # Font for text input
         self.font = tkfont.Font(
-            family=self.config.get_by_name('terminal.font_family'),
-            size=self.config.get_by_name('terminal.tx.font_size'),
+            family=self.config.get('../font_family'),
+            size=self.config.get('font_size'),
             weight="normal"
         )
 
@@ -326,17 +324,15 @@ class TerminalTx(ttk.Frame):
         self.grid_rowconfigure(1, weight=0)
 
     @staticmethod
-    def add_config_data(config: Config):
+    def register_config(config: ConfigView):
         """
-        Add TerminalTx-specific config fields to a Config object.
-        Also initializes shared terminal config if not present.
+        Add TerminalTx-specific config fields to a ConfigView object.
         Should be called before TerminalTx is instantiated.
 
         Args:
             config: Config object to update
         """
-        config.set_by_name('terminal.font_family', 'Courier')
-        config.set_by_name('terminal.tx.font_size', 10)
+        config.register('font_size', 10)
 
     def _on_return(self, event):
         """Handle Return key press."""
@@ -355,13 +351,13 @@ class Terminal(ttk.Frame):
     TerminalRx shows received text, TerminalTx accepts user commands.
     """
 
-    def __init__(self, parent, config: Config, command=None, **kwargs):
+    def __init__(self, parent, config: ConfigView, command=None, **kwargs):
         """
         Initialize the Terminal widget.
 
         Args:
             parent:  Tkinter parent widget
-            config:  Config object with terminal settings
+            config:  ConfigView object with terminal settings
             command: Function to call when user sends a command
                      Receives command text (including newline)
         """
@@ -370,8 +366,8 @@ class Terminal(ttk.Frame):
         self.config = config
 
         # Create RX display and TX input
-        self.rx = TerminalRx(self, config)
-        self.tx = TerminalTx(self, config, command=command)
+        self.rx = TerminalRx(self, ConfigView(config, "rx/"))
+        self.tx = TerminalTx(self, ConfigView(config, "tx/"), command=command)
 
         # Layout: RX takes most space, TX at bottom
         self.rx.grid(row=0, column=0, sticky='nsew')
@@ -380,16 +376,17 @@ class Terminal(ttk.Frame):
         self.grid_columnconfigure(0, weight=1) # everybody expands horizonally
 
     @staticmethod
-    def add_config_data(config: Config):
+    def add_config_data(config: ConfigView):
         """
-        Add Terminal config to a Config object.
+        Add Terminal config to a ConfigView object.
         Initializes both RX and TX config.
 
         Args:
-            config: Config object to update
+            config: ConfigView object to update
         """
-        TerminalRx.add_config_data(config)
-        TerminalTx.add_config_data(config)
+        config.register('font_family','Courier')
+        TerminalRx.register_config(ConfigView(config, "rx/"))
+        TerminalTx.register_config(ConfigView(config, "tx/"))
 
     def append(self, content: bytes, timestamp, is_tx: bool = False):
         """
@@ -414,7 +411,8 @@ if __name__ == '__main__':
     root.geometry("800x400")
     
     config = Config()
-    Terminal.add_config_data(config)
+    term_config = ConfigView(config, "term")
+    Terminal.register_config(term_config)
     
     def on_command(cmd):
         # Echo command back as TX
@@ -422,7 +420,7 @@ if __name__ == '__main__':
         # Echo back as RX (uppercased to prove it's working)
         terminal.append(cmd.upper().encode(), datetime.now(), is_tx=False)
     
-    terminal = Terminal(root, config, command=on_command)
+    terminal = Terminal(root, term_config, command=on_command)
     terminal.grid(row=0, column=0, sticky='nsew')
     root.grid_rowconfigure(0, weight=1)
     root.grid_columnconfigure(0, weight=1)

@@ -10,7 +10,7 @@ When connected passes method calls through to SerPort,
 import tkinter as tk
 from tkinter import ttk, messagebox
 import queue
-from config import Config
+from config import Config, ConfigView
 from serport import SerPort
 
 
@@ -37,13 +37,13 @@ class SerPortTk(ttk.Frame):
         disconnect()
     """
 
-    def __init__(self, parent, config: Config, on_connect=None, on_disconnect=None, **kwargs):
+    def __init__(self, parent, config: ConfigView, on_connect=None, on_disconnect=None, **kwargs):
         """
         Initialize the SerPortTk widget.
 
         Args:
             parent: Tkinter parent widget
-            config: Config object with port settings
+            config: ConfigView object with port settings
         """
         super().__init__(parent, **kwargs)
 
@@ -59,13 +59,13 @@ class SerPortTk(ttk.Frame):
 
         # Port selection
         ttk.Label(self, text="Port:").grid(row=0, column=0, padx=padx, pady=pady)
-        self.port_var = tk.StringVar(value=self.config.get_by_name('port.port'))
+        self.port_var = tk.StringVar(value=self.config.get('port'))
         self.port_combo = ttk.Combobox(self, textvariable=self.port_var, state="normal")
         self.port_combo.grid(row=0, column=1, padx=padx, pady=pady, sticky='ew')
 
         # Baud rate selection
         ttk.Label(self, text="Baud:").grid(row=0, column=2, padx=padx, pady=pady)
-        self.baud_var = tk.StringVar(value=self.config.get_by_name('port.baud'))
+        self.baud_var = tk.StringVar(value=self.config.get('baud'))
         self.baud_combo = ttk.Combobox(
             self, values=('9600', '115200', '230400', '460800', '921600'),
             textvariable=self.baud_var, state="normal"
@@ -96,16 +96,16 @@ class SerPortTk(ttk.Frame):
         self._refresh_ports()
 
     @staticmethod
-    def add_config_data(config: Config):
+    def register_config(config: ConfigView):
         """
-        Add SerPortTk-specific config fields to a Config object.
+        Add SerPortTk-specific config fields to a ConfigView object.
         Should be called before SerPortTk is instantiated.
 
         Args:
-            config: Config object to update
+            config: ConfigView object to update
         """
-        config.set_by_name('port.port', '')
-        config.set_by_name('port.baud', '115200')
+        config.register('port', '')
+        config.register('baud', '115200')
 
     def _refresh_ports(self):
         """Update port dropdown with available serial ports."""
@@ -147,8 +147,8 @@ class SerPortTk(ttk.Frame):
         self.status_var.set("Connected")
         self.status_label.config(foreground='green')
         # Save to config
-        self.config.set_by_name('port.port', port)
-        self.config.set_by_name('port.baud', baud_str)
+        self.config.set('port', port)
+        self.config.set('baud', baud_str)
         # begin monitoring SerPort
         self.after_id = self.after(200, self._check_connection)
         # invoke user callback
@@ -321,21 +321,23 @@ if __name__ == '__main__':
 
     # Create config and register all config keys
     config = Config()
-    SerPortTk.add_config_data(config)
-    Terminal.add_config_data(config)
-    config.set_by_name('app.geometry', '800x600')
+    ser_config = ConfigView(config, '/serport/')
+    term_config = ConfigView(config, '/terminal/')
+    SerPortTk.register_config(ser_config)
+    Terminal.register_config(term_config)
+    config.register('/app/geometry', '800x600')
 
     # Create main window
     root = tk.Tk()
     root.title("SerPort Dumb Terminal")
-    root.geometry(config.get_by_name('app.geometry'))
+    root.geometry(config.get('/app/geometry'))
 
     # Configure grid for expansion
     root.grid_rowconfigure(1, weight=1)
     root.grid_columnconfigure(0, weight=1)
 
     # Create Terminal widget (will hold both RX display and TX input)
-    terminal = Terminal(root, config)
+    terminal = Terminal(root, term_config)
     terminal.grid(row=1, column=0, sticky='nsew', padx=2, pady=2)
 
     # String receive queue - persistent
@@ -362,7 +364,7 @@ if __name__ == '__main__':
             terminal.append(cmd.encode(), datetime.now(), is_tx=True)
 
     # Create SerPortTk widget at top with callbacks
-    serport_tk = SerPortTk(root, config, on_connect=on_connect)
+    serport_tk = SerPortTk(root, ser_config, on_connect=on_connect)
     serport_tk.grid(row=0, column=0, sticky='ew', padx=2, pady=2)
 
     # Wire terminal TX callback to send via SerPortTk
