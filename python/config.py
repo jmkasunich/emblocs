@@ -1,7 +1,7 @@
 # config.py
-# Provides Config for managing tool configuration data across
-# GUI and command-line tools, reading from and writing to a
-# shared JSON config file.
+# Provides Config and ConfigView for managing configuration
+# data across GUI and command-line tools, reading from and\
+# writing to a shared JSON config file.
 
 from __future__ import annotations
 from typing import NamedTuple, Any
@@ -133,6 +133,7 @@ class Config:
         last = parts[-1]
         match last:
             case '':
+                # original path ended with '/'
                 is_leaf = False
                 parts.pop()
             case '..' | '.':
@@ -143,13 +144,13 @@ class Config:
         for part in parts:
             match part:
                 case '':
+                    # '//' means reset to root
                     names = []
                 case '..':
                     if names:
                         names.pop()
                     else:
                         raise ValueError(f"'{path}' contains '..' at root")
-
                 case '.':
                     pass
                 case _:
@@ -208,10 +209,10 @@ class Config:
     def register(self, path: str, value: Any):
         """
         Adds a leaf item to the data structure at 'path', with type
-        and default value as specified by 'value'.
-        Raises KeyError if the path ends in '/', the object already
-        exists, or any intermediate node on the path already exists
-        as a leaf.
+        and default value as specified by 'value'.  If the item already
+        exists, its value will not be changed.
+        Raises KeyError if the path ends in '/' or any intermediate
+        node on the path already exists as a leaf.
         """
         result = self._flatten_path(path)
         if not result.is_leaf:
@@ -220,6 +221,7 @@ class Config:
         # traverse to the parent of the leaf, creating dicts as needed
         for name in result.names[:-1]:
             if name not in node:
+                # create new subdir
                 node[name] = {}
             elif not isinstance(node[name], dict):
                 raise KeyError(f"'{result.flat_path}': '{name}' is already set as a leaf value; "
@@ -227,9 +229,9 @@ class Config:
                 )
             node = node[name]
         leaf = result.names[-1]
-        if leaf in node:
-            raise KeyError(f"'{result.flat_path}' is already registered")
-        node[leaf] = value
+        if leaf not in node:
+            # create the new item
+            node[leaf] = value
 
     def is_registered(self, path: str) -> bool:
         """
