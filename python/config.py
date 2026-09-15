@@ -39,6 +39,8 @@ class Config:
     existence and expected type of each key, as well as creating any
     subdirectory nodes needed to reach the item.
 
+    Data items are accessed using get() and set() methods.
+
     Data items can be loaded from files or the command line, and
     saved to files.  load_file() may be called one or more times
     to merge file contents into config._data; later calls take
@@ -47,64 +49,7 @@ class Config:
     merge_cli() applies command line values; if called last, it gives
     them highest precedence.
 
-    Typical usage:
-
-        config = Config()
-
-        # register keys with defaults
-        config.register('/paths/bloc_search_paths', [])
-        config.register('/text/font_size', 12)
-
-        # set up CLI args
-        # --cfg is not mapped to a config name, used to find the config file
-        config.add_cli_arg('--cfg', help="path to config file")
-        # --font-size is mapped to a config value
-        config.add_cli_arg('--font-size', name='/text/font_size', help="font size for text window")
-        # --verbose is not, used only by the main program
-        config.add_cli_arg('--verbose', action='store_true', help="verbose output")
-
-        # parse CLI first so we can use --cfg to find the config file
-        args = config.parse_cli()
-
-        # load config file(s); caller decides policy
-        template = Path(__file__).parent.parent / 'emblocs_cfg.json'
-        if template.exists():
-            # load template fields and values first
-            config.load_file(template)
-        cfg_path = Path(args.cfg) if args.cfg else Path('emblocs_cfg.json')
-        # project config overrides template; if not found,
-        # one will be created by save_file() on exit
-        if cfg_path.exists():
-            # config file values override template
-            # config file can also add new fields
-            config.load_file(cfg_path)
-
-        # CLI values last so they override file values
-        config.merge_cli()
-
-        # ... use config ...
-
-        size = config.get("/text/font_size")
-        size += 1
-        config.set("/text/font_size", size)
-
-        config.save_file(cfg_path)
-
-    Typical usage in a consumer class:
-
-        class SerPort:
-            @staticmethod
-            def register_config(config):
-                config.register('/port/port', '')
-                config.register('/port/baud', '115.2K')
-                config.add_cli_arg('-p', '--port', name='/port/port',
-                                   help="serial port name")
-                config.add_cli_arg('-b', '--baud', name='/port/baud',
-                                   help="baud rate")
-
-            def __init__(self, config):
-                self.port = config.get('/port/port')
-                self.baud = config.get('/port/baud')
+    See the end of this file for typical usage.
     """
 
     def __init__(self) -> None:
@@ -206,7 +151,7 @@ class Config:
                 raise KeyError(f"config item '/{'/'.join(msg_path)}' is not a dict")
         return self._resolve_path_retval(result.flat_path, result.is_leaf, subdir, name, data)
 
-    def register(self, path: str, value: Any):
+    def register(self, path: str, value: Any) -> None:
         """
         Adds a leaf item to the data structure at 'path', with type
         and default value as specified by 'value'.  If the item already
@@ -256,7 +201,7 @@ class Config:
             raise KeyError(f"Cannot get '{result.flat_path}'; not a leaf")
         return result.value
 
-    def set(self, path: str, value: Any):
+    def set(self, path: str, value: Any) -> None:
         """
         Sets the leaf item at 'path' to 'value'.
         Raises KeyError if the path ends with '/' or the item is not
@@ -283,10 +228,6 @@ class Config:
                 f"got {type(value).__name__}); "
             )
 
-    # ------------------------------------------------------------------
-    # Iterators
-    # ------------------------------------------------------------------
-
     def _recurse_items(self, d: dict, path: str) -> Iterator[tuple[str, object]]:
         """
         Helper for items() - recursively yields (name, value) pairs
@@ -301,9 +242,8 @@ class Config:
 
     def items(self, path: str = '/', recurse: bool = False ) -> Iterator[tuple[str, object]]:
         """
-        Yield (name, value) pairs for every leaf at node 'path' (and
-        below, if 'recurse' is true), where name is the full path
-        to the leaf.
+        Yield (name, value) pairs for every leaf at node 'path' (and below,
+        if 'recurse' is true), where name is the full path to the leaf.
         Raises KeyError if 'path' describes a leaf or does not exist
         in the tree.
         """
@@ -316,6 +256,17 @@ class Config:
                 yield f"{path}{key}", val
             elif recurse:
                 yield from self._recurse_items(val, f"{path}{key}/")
+
+    def list_all(self, path: str = '/') -> None:
+        """
+        Print all items in the Config as name: value for leaves,
+        name only for subdirs.
+        """
+        for name in self.names(path, True):
+            if name.endswith('/'):
+                print(f"{name}")
+            else:
+                print(f"{name}: {self.get(name)}")
 
     def _recurse_names(self, d: dict, path: str) -> Iterator[str]:
         """
@@ -332,9 +283,8 @@ class Config:
 
     def names(self, path: str = '/', recurse: bool = False ) -> Iterator[str]:
         """
-        Yield name for every leaf or subdir at 'path' (and
-        below, if 'recurse' is true), where name is the full path
-        to the leaf.
+        Yield name for every leaf or subdir at 'path' (and below, if
+        'recurse' is true), where name is the full path from the root.
         Raises KeyError if 'path' describes a leaf or does not exist
         in the tree.
         """
@@ -350,9 +300,12 @@ class Config:
             else:
                 yield f"{path}{key}"
 
-    # ------------------------------------------------------------------
-    # Command line parsing
-    # ------------------------------------------------------------------
+    def list_names(self, path: str = '/') -> None:
+        """
+        Print the names of all items in the Config.
+        """
+        for name in self.names(path, True):
+            print(f"{name}")
 
     def add_cli_arg(self, *flags: str,
                     name: str | None = None,
@@ -403,7 +356,19 @@ class Config:
             # bool must be checked before int since bool is a subclass of int
             if 'type' not in kwargs and 'action' not in kwargs:
                 if isinstance(current_val, bool):
-                    kwargs['type'] = lambda s: s.lower() not in ('0', 'false', 'no', 'off')
+                    # bool is subset of int, but needs special handling,
+                    # including this dedicated parse function:
+                    def _parse_bool(s: str) -> bool:
+                        match s.lower():
+                            case '1' | 'true' | 'yes' | 'on':
+                                return True
+                            case '0' | 'false' | 'no' | 'off':
+                                return False
+                            case _:
+                                raise argparse.ArgumentTypeError(
+                                    f"invalid boolean value: {s!r}"
+                                )
+                    kwargs['type'] = _parse_bool
                 elif isinstance(current_val, int):
                     kwargs['type'] = int
                 elif isinstance(current_val, float):
@@ -441,10 +406,6 @@ class Config:
             val = getattr(self._args, dest, None)
             if val is not None:
                 self.set(name, val)
-
-    # ------------------------------------------------------------------
-    # Load and save
-    # ------------------------------------------------------------------
 
     def load_file(self, path: str | Path) -> bool:
         """
@@ -498,8 +459,7 @@ class Config:
             print(f"error writing config file {path.as_posix()!r}: {e}",
                   file=sys.stderr)
 
-
-##############################################################
+# ------------------------------------------------------------------
 
 class ConfigView:
     """
@@ -522,65 +482,187 @@ class ConfigView:
             raise TypeError(f"parent must be ConfigView or Config, got {type(parent)!r}")
         self.cwd = self.root.flat_path(path)
 
-    def register(self, path: str, value):
+    def register(self, path: str, value) -> None:
         self.root.register(f"{self.cwd}{path}", value)
 
     def is_registered(self, path: str) -> bool:
         return self.root.is_registered(f"{self.cwd}{path}")
 
-    def get(self, path: str):
+    def get(self, path: str) -> Any:
         return self.root.get(f"{self.cwd}{path}")
 
-    def set(self, path: str, value):
+    def set(self, path: str, value) -> None:
         self.root.set(f"{self.cwd}{path}", value)
 
-
-############################################################################
+# ------------------------------------------------------------------
+#
 #  SAMPLE CODE
 #
-# class Channels:
-#     def __init__(self, config: ConfigView):
-#         self.config = config
-#         self.num_chan = config.get("number_of_channels")
-#         self.channel_widgets = []
-#         for n in range(self.num_chan):
-#             self.channel_widgets.apppend(Channel(ConfigView(self.config, f"chan{n}/")))
-#
-#     @staticmethod
-#     def register_config_data(config: ConfigView, num_chan: int):
-#         config.register("number_of_channels", num_chan)
-#         config.register("foo", "a string")
-#         for n in range(num_chan):
-#             Channel.register_config_data(ConfigView(config, f"chan{n}/"))
-#
-#
-# class Channel:
-#     def __init__(self, config: ConfigView):
-#         self.config = config
-#         self.units = config.get("units")
-#
-#     @staticmethod
-#     def register_config_data(config: ConfigView):
-#         config.register("label", "a string")
-#         config.register("gain", 17)
-#         config.register("units", "volts")
-#
-#     def raise_gain(self):
-#         # get present value from config data
-#         gain = self.config.get("gain")
-#         # change it
-#         gain += 1
-#         # store new value in config data
-#         self.config.set("gain", gain)
-#
-#
-# def main():
-#     app_config = Config()
-#     app_config.register("root_foo", 42)
-#     app_config.register("root_bar", 33)
-#     Channels.register_config_data(ConfigView(app_config, "channels/"), 4)
-#
-#     app_config.load_file("my_config_file.json")
-#
-#     chans_widget = Channels(ConfigView(app_config, "channels/"))
+# ------------------------------------------------------------------
 
+if __name__ == '__main__':
+
+    class ComPort:
+        """
+        Sample class for a communication port.
+        """
+        def __init__(self, config: ConfigView):
+            self.config = config
+            # read and use config data
+            self.port = config.get("port")
+            self.baud = config.get("baud")
+
+        @staticmethod
+        def register_config(config: ConfigView):
+            """
+            Register config data items needed by a ComPort
+            """
+            config.register("port", "")
+            config.register("baud", 9600)
+
+        def change_baud(self, new_baud: int):
+            """
+            Sample of modifying a config value within a class
+            """
+            self.baud = new_baud
+            # store new value in config data
+            self.config.set("baud", self.baud)
+
+    class Meter:
+        """
+        Sample class showing how ConfigViews can be nested.
+        One Meter object has four Input objects, each with
+        its own configuration data.
+        """
+        def __init__(self, config: ConfigView):
+            self.config = config
+            # register Meter and Input config data, if not already done
+            self.register_config(self.config)
+            # create the Input objects
+            self.input_objects = []
+            for n in range(4):
+                input_view = ConfigView(self.config, f"input{n}/")
+                self.input_objects.append(Input(input_view))
+
+        @staticmethod
+        def register_config(config: ConfigView):
+            # register this object's config data
+            config.register("font_size", 10)
+            # register subsidiary object(s) config data
+            for n in range(4):
+                Input.register_config(ConfigView(config, f"input{n}/"))
+
+    class Input:
+        """
+        Sample class for a single Input, to be nested
+        within a Meter object.
+        """
+        def __init__(self, config: ConfigView):
+            self.config = config
+            # make sure config data for this Input is registered
+            self.register_config(self.config)
+            # read and use config data
+            self.units = config.get("units")
+
+        @staticmethod
+        def register_config(config: ConfigView):
+            """
+            Register config data items needed by an Input
+            """
+            config.register("label", "a string")
+            config.register("gain", 17)
+            config.register("units", "volts")
+
+        def raise_gain(self):
+            """
+            Sample of modifying a config value within a class
+            """
+            # get present value from config data
+            gain = self.config.get("gain")
+            # change it
+            gain += 1
+            # store new value in config data
+            self.config.set("gain", gain)
+
+
+    def main():
+        """
+        GUI classes create widgets during their __init__() methods,
+        and often need config data to do that.  So this application
+        registers config data for all classes that it wants to use
+        before creating the class instances.
+        Then it reads the config file and merges any CLI values
+        into the Config data before it actually creates the widgets.
+        """
+        print(f"testing config")
+        app_config = Config()
+        print(f"After creation:\n")
+        app_config.list_all()
+
+        # register root-level config items
+        app_config.register("/root_foo", 42)
+        app_config.register("/root_bar", 33)
+        # register config items for a Meter object and its children
+        meter_config = ConfigView(app_config, "meter/")
+        Meter.register_config(meter_config)
+        # register config iotems for a ComPort
+        comport_config = ConfigView(app_config, "port/")
+        ComPort.register_config(comport_config)
+
+        print(f"After registering:\n")
+        app_config.list_all()
+
+        # set up command line arguments
+        # --cfg is not mapped to a config name, it is only used to find the config file
+        app_config.add_cli_arg('--cfg', help="path to config file")
+        # --font-size is mapped to a config value
+        app_config.add_cli_arg('--font-size', name='/meter/font_size', help="font size for meter widget")
+        # --com-port and --baud are mapped to config values
+        app_config.add_cli_arg('--com-port', name='/port/port', help="COM port for target connection")
+        app_config.add_cli_arg('--baud', name='/port/baud', help="baud rate for target connection")
+        # --verbose is not mapped to config data, used only by the main program
+        app_config.add_cli_arg('--verbose', action='store_true', help="verbose output")
+
+        # parse CLI first so we can use --cfg to find the config file
+        args = app_config.parse_cli()
+
+        # config file is 'config.json' unless --cfg was supplied on command line
+        cfg_path = Path(args.cfg) if args.cfg else Path('config.json')
+        if cfg_path.exists():
+            # get values from config file
+            print(f"\nReading from config file '{cfg_path}'...")
+            app_config.load_file(cfg_path)
+
+        print(f"\nAfter file load:\n")
+        app_config.list_all()
+
+        # get command line last so it supersedes defaults and file values
+        app_config.merge_cli()
+
+        print(f"\nAfter command line:\n")
+        app_config.list_all()
+
+        # create widgets
+        meter = Meter(meter_config)
+        comport = ComPort(comport_config)
+
+        print(f"\nAfter widget creation:\n")
+        app_config.list_all()
+
+        # program execution - typically the user would invoke things
+        # but we are faking it here...
+        meter.input_objects[2].raise_gain()
+        meter.input_objects[2].raise_gain()
+        meter.input_objects[1].raise_gain()
+        meter.input_objects[2].raise_gain()
+        comport.change_baud(115200)
+
+        print(f"\nAfter execution:\n")
+        app_config.list_all()
+
+        print(f"saving config to '{cfg_path}'")
+        app_config.save_file(cfg_path)
+
+        print(f"done")
+
+main()
