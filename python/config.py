@@ -1,6 +1,6 @@
 # config.py
 # Provides Config and ConfigView for managing configuration
-# data across GUI and command-line tools, reading from and\
+# data across GUI and command-line tools, reading from and/or
 # writing to a shared JSON config file.
 
 from __future__ import annotations
@@ -18,13 +18,17 @@ from parse_common import ctx, OMIT
 # Config
 # ---------------------------------------------------------------------------
 
+# we store only types that are lossless over a JSON round trip
+_LEAF_TYPES = (str, int, float, bool)
+
 class Config:
     """
     Manages configuration data.
 
     Configuration data is stored in a single nested dict (config._data)
     and accessed using paths as in a filesystem tree.  Paths not ending
-    with '/' are "leaf nodes" containing config data items.  Paths
+    with '/' are "leaf nodes" containing config data items.  All data
+    items must be of a type in _LEAF_TYPES defined above.  Paths
     ending with '/' are 'subdir' nodes that can be used to add
     structure to the config data.
 
@@ -32,7 +36,7 @@ class Config:
     a leading '/'.  The ConfigView class (defined below) is a wrapper
     that allows relative paths; this lets consumer classes register
     their own items while the application controls the overall data
-    heirarchy.
+    hierarchy.
 
     Consumer classes register their keys by calling register() with
     default values during initialization.  This establishes both the
@@ -69,6 +73,12 @@ class Config:
         entries, returning the flat path, a list of the names in the
         path, and whether the path refers to a leaf or a subdir.
         Subdir paths must end in '/', leaf paths must not.
+        If a path contains '//', the function resets to the absolute
+        root at that point; this allows specifying an absolute path
+        even when working with a ConfigView which normally prepends
+        a base path.
+        This method only looks at the name as a string; it does not
+        check any actual data structure (see _resolve_path() for that).
         Raises ValueError if path is not absolute or uses '..' when
         at the root.
         """
@@ -155,11 +165,17 @@ class Config:
         """
         Adds a leaf item to the data structure at 'path', with type
         and default value as specified by 'value'.  If the item already
-        exists, its value will not be changed.
+        exists, its value will not be changed, but a type mismatch will
+        raise TypeError.
         Raises KeyError if the path ends in '/' or any intermediate
         node on the path already exists as a leaf.
+        Raises TypeError if the type of 'value' is not in _LEAF_TYPES.
         """
         result = self._flatten_path(path)
+        if type(value) not in _LEAF_TYPES:
+            allowed = ', '.join(t.__name__ for t in _LEAF_TYPES)
+            raise TypeError(f"Cannot register '{result.flat_path}': bad type "
+                            f"'{type(value).__name__}' (must be one of: {allowed})")
         if not result.is_leaf:
             raise KeyError(f"Cannot register '{result.flat_path}'; not a leaf")
         node = self._data
@@ -177,6 +193,10 @@ class Config:
         if leaf not in node:
             # create the new item
             node[leaf] = value
+        else:
+            # already exists: don't change value, but raise if types don't match
+            if type(value) is not type(node[leaf]):
+                raise TypeError(f"cannot re-register '{result.flat_path}'; type mismatch")
 
     def is_registered(self, path: str) -> bool:
         """
@@ -213,19 +233,13 @@ class Config:
         if not result.is_leaf:
             raise KeyError(f"Cannot set '{result.flat_path}'; not a leaf")
         existing = result.value
-        type_ok = (
-            isinstance(existing, bool) and isinstance(value, bool)
-        ) or (
-            not isinstance(existing, bool) and
-            type(value) is type(existing)
-        )
-        if type_ok:
+        if type(value) is type(existing):
             result.subdir[result.key] = value
         else:
             raise ValueError(
                 f"'{result.flat_path}' has wrong type "
                 f"(expected {type(existing).__name__}, "
-                f"got {type(value).__name__}); "
+                f"got {type(value).__name__})"
             )
 
     def _recurse_items(self, d: dict, path: str) -> Iterator[tuple[str, object]]:
@@ -250,12 +264,13 @@ class Config:
         result = self._resolve_path(path)
         if result.is_leaf:
             raise KeyError(f"Cannot iterate '{result.flat_path}'; it is a leaf")
+        prefix = result.flat_path
         subdir = result.value
         for key, val in subdir.items():
             if not isinstance(val, dict):
-                yield f"{path}{key}", val
+                yield f"{prefix}{key}", val
             elif recurse:
-                yield from self._recurse_items(val, f"{path}{key}/")
+                yield from self._recurse_items(val, f"{prefix}{key}/")
 
     def list_all(self, path: str = '/') -> None:
         """
@@ -291,14 +306,15 @@ class Config:
         result = self._resolve_path(path)
         if result.is_leaf:
             raise KeyError(f"Cannot iterate '{result.flat_path}'; it is a leaf")
+        prefix = result.flat_path
         subdir = result.value
         for key, val in subdir.items():
             if isinstance(val, dict):
-                yield f"{path}{key}/"
+                yield f"{prefix}{key}/"
                 if recurse:
-                    yield from self._recurse_names(val, f"{path}{key}/")
+                    yield from self._recurse_names(val, f"{prefix}{key}/")
             else:
-                yield f"{path}{key}"
+                yield f"{prefix}{key}"
 
     def list_names(self, path: str = '/') -> None:
         """
@@ -316,7 +332,7 @@ class Config:
         If name is supplied, the argument is mapped to that config
         item using path notation, e.g. name='/scope/time_per_div'.
         merge_cli() will apply its value to the corresponding location
-        in config.data.  The type of the argument is inferred from the
+        in config._data.  The type of the argument is inferred from the
         current value at that name unless overridden by a 'type' kwarg.
         The name may refer to any depth in the config tree.
 
@@ -373,8 +389,10 @@ class Config:
                     kwargs['type'] = int
                 elif isinstance(current_val, float):
                     kwargs['type'] = float
-                else:
+                elif isinstance(current_val, str):
                     kwargs['type'] = str
+                else:
+                    raise TypeError(f"'{name}': unsupported type {type(current_val).__name__}")
             self._parser.add_argument(*flags, dest=dest, default=None, **kwargs)
             self._cli_map.append((dest, name))
         else:
@@ -394,7 +412,7 @@ class Config:
 
     def merge_cli(self) -> None:
         """
-        Apply saved CLI values to config.data.
+        Apply saved CLI values to config._data.
         Only mapped args (those registered with a name) are merged;
         unmapped args are ignored.
         parse_cli() must be called before merge_cli().
@@ -409,9 +427,11 @@ class Config:
 
     def load_file(self, path: str | Path) -> bool:
         """
-        Read a config file and merge its contents into config.data.
+        Read a config file and merge its contents into config._data.
         Traverses the file's JSON tree and calls set() for each leaf
         so type checking and default preservation apply automatically.
+        This means that keys contained in the file but not registered
+        by the application will be ignored with a warning.
         May be called more than once; later calls take precedence over
         earlier ones for overlapping keys.
         Reports an error and returns False if the file is not found or
@@ -433,22 +453,28 @@ class Config:
         except OSError as e:
             ctx.error(f"could not read config file: {e}", lineno=OMIT, column=OMIT)
             ok = False
+        except Exception as e:
+            ctx.error(f"could not load config file: {type(e).__name__}: {e}",
+                      lineno=OMIT, column=OMIT)
+            ok = False
+        if ok and not isinstance(filedata, dict):
+            ctx.error("top level of config file must be a JSON object",
+                      lineno=OMIT, column=OMIT)
+            ok = False
         if ok:
             for name, value in self._recurse_items(filedata, '/'):
                 try:
                     self.set(name, value)
-                except KeyError as e:
-                    ctx.warning(f"{e}, ignoring", lineno=OMIT, column=OMIT)
-                except ValueError as e:
-                    ctx.warning(f"{e}, ignoring", lineno=OMIT, column=OMIT)
+                except ( KeyError, ValueError ) as e:
+                    ctx.warning(f"{e.args[0]}, ignoring", lineno=OMIT, column=OMIT)
         ctx.summarize()
         ctx.pop()
         return ok
 
     def save_file(self, path: str | Path) -> None:
         """
-        Write all of config.data to the given path as JSON.
-        The entire contents of config.data are written; no filtering
+        Write all of config._data to the given path as JSON.
+        The entire contents of config._data are written; no filtering
         is applied.
         """
         path = Path(path)
@@ -466,7 +492,11 @@ class ConfigView:
     ConfigView provides a "view" of a Config object that is relative
     to the location specified by 'path'.  Allows objects to manage
     their config data without worrying about where that data lives
-    in the ovarall tree.
+    in the overall tree.
+    When working with a ConfigView, the default relative path syntax
+    can be overridden by applying a leading '/' to any path; when
+    the base path is concatenated, that will result in '//' which
+    will reset the path resolver to the absolute root.
     """
     def __init__(self, parent: ConfigView | Config, path: str):
         if not path.endswith('/'):
@@ -605,7 +635,7 @@ if __name__ == '__main__':
         # register config items for a Meter object and its children
         meter_config = ConfigView(app_config, "meter/")
         Meter.register_config(meter_config)
-        # register config iotems for a ComPort
+        # register config items for a ComPort
         comport_config = ConfigView(app_config, "port/")
         ComPort.register_config(comport_config)
 
@@ -665,4 +695,4 @@ if __name__ == '__main__':
 
         print(f"done")
 
-main()
+    main()
