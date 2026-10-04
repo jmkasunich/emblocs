@@ -8,6 +8,7 @@ from typing import NamedTuple, Any
 import argparse
 import json
 import sys
+import os
 from pathlib import Path
 from typing import Iterator
 
@@ -45,8 +46,8 @@ class Config:
 
     Data items are accessed using get() and set() methods.
 
-    Data items can be loaded from files or the command line, and
-    saved to files.  load_file() may be called one or more times
+    Registered data items can be loaded from files or the command line,
+    and saved to files.  load_file() may be called one or more times
     to merge file contents into config._data; later calls take
     precedence over earlier ones for overlapping keys.
 
@@ -227,12 +228,19 @@ class Config:
         Raises KeyError if the path ends with '/' or the item is not
         registered.
         Raises ValueError if the type of 'value' does not match the
-        registered type.
+        registered type.  Exception: if the registered type is float
+        and 'value' is int, 'value' is converted to float.
         """
         result = self._resolve_path(path)
         if not result.is_leaf:
             raise KeyError(f"Cannot set '{result.flat_path}'; not a leaf")
         existing = result.value
+        if type(existing) is float and type(value) is int:
+            try:
+                value = float(value)
+            except OverflowError:
+                raise ValueError(f"'{result.flat_path}': integer too large "
+                                 f"for a float") from None
         if type(value) is type(existing):
             result.subdir[result.key] = value
         else:
@@ -341,10 +349,12 @@ class Config:
         returned by parse_cli() and is available for the caller to use
         directly.
 
-        Positional arguments are supported, but cannot be mapped to
-        config data.  If it is necessary to save a positional argument
-        value to config data, extract the value from the Namespace
-        returned by parse_cli() and use set() to store it.
+        Positional arguments are supported, and can be mapped to
+        config data.
+
+        For mapped arguments the parsed value must be a single value
+        of the item's type, so options that produce lists (such as
+        nargs greater than 1 or action='append') can't be used.
 
         flags and all other kwargs are passed through to
         parser.add_argument(), supporting the full argparse API including
@@ -367,7 +377,6 @@ class Config:
                 raise ValueError(f"config name '{name}' is not a leaf value, "
                                  f"cannot be mapped to a CLI arg")
             current_val = result.value
-            dest = name.replace('/', '__')
             # infer type from current value unless caller supplied one;
             # bool must be checked before int since bool is a subclass of int
             if 'type' not in kwargs and 'action' not in kwargs:
@@ -393,8 +402,8 @@ class Config:
                     kwargs['type'] = str
                 else:
                     raise TypeError(f"'{name}': unsupported type {type(current_val).__name__}")
-            self._parser.add_argument(*flags, dest=dest, default=None, **kwargs)
-            self._cli_map.append((dest, name))
+            action = self._parser.add_argument(*flags, default=None, **kwargs)
+            self._cli_map.append((action.dest, name))
         else:
             # unmapped arg: pass through to argparse unchanged
             self._parser.add_argument(*flags, **kwargs)
@@ -476,14 +485,25 @@ class Config:
         Write all of config._data to the given path as JSON.
         The entire contents of config._data are written; no filtering
         is applied.
+        Works by saving to a temp file first, so if an error occurs any
+        old config data is not lost.
+        The directory containing the target file must already exist.
         """
-        path = Path(path)
+        target = Path(path).resolve()
+        tmp = target.with_name(f"{target.name}.{os.getpid()}.tmp")
         try:
-            with open(path, 'w', encoding='utf-8') as f:
+            with open(tmp, 'w', encoding='utf-8') as f:
                 json.dump(self._data, f, indent=4)
+                f.flush()
+                os.fsync(f.fileno())   # make sure data is on disk before the swap
+            os.replace(tmp, target)    # atomic swap
         except OSError as e:
-            print(f"error writing config file {path.as_posix()!r}: {e}",
+            print(f"error writing config file {target.as_posix()!r}: {e}",
                   file=sys.stderr)
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 # ------------------------------------------------------------------
 
