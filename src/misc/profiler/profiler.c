@@ -5,26 +5,46 @@
 #include "profiler_priv.h"
 
 typedef struct {
-    uint32_t base_addr;
+    uint32_t base_addr;  // first bin starts here
+    volatile uint8_t  state;
     uint8_t  shift_count;
-    uint8_t  state;
-    uint32_t total_samples;
+    uint32_t packed_vals;  // bin count and shift count, packed into uint32_t
+    uint32_t magic_number; // used by optimized assembly sample counter
+    uint32_t above_count;
+    uint32_t below_count;
     profiler_count_t bins[PROFILER_NUM_BINS];
 } profile_t;
 
+// these defaults give bins that cover the
+// full 0x0 to 0xFFFFFFFF address range
+#define DEFAULT_SHIFT_COUNT  (1u + __builtin_clz(PROFILER_NUM_BINS))
+#define DEFAULT_BIN_WIDTH    (1u << DEFAULT_SHIFT_COUNT)
+
 // declare the actual structure - there is only one
-volatile profile_t profile = { .state=PROFILER_RESET };
+profile_t profile = {
+    .base_addr = 0,
+    .state=PROFILER_READY,
+    .shift_count = DEFAULT_SHIFT_COUNT,
+    .packed_vals = (PROFILER_NUM_BINS << 8) | (DEFAULT_SHIFT_COUNT & 0xFF),
+    .magic_number = (uint32_t)(0u - PROFILER_NUM_BINS),
+    .above_count = 0,
+    .below_count = 0
+};
 
 
 // and make sure the structure offsets match the actual structure
-_Static_assert(PROFILER_BASE_ADDR_OFFSET     == offsetof(profile_t, base_addr),
-               "profiler_priv.h: PROFILER_BASE_ADDR_OFFSET does not match profile_t");
-_Static_assert(PROFILER_SHIFT_COUNT_OFFSET   == offsetof(profile_t, shift_count),
-               "profiler_priv.h: PROFILER_SHIFT_COUNT_OFFSET does not match profile_t");
 _Static_assert(PROFILER_STATE_OFFSET         == offsetof(profile_t, state),
                "profiler_priv.h: PROFILER_STATE_OFFSET does not match profile_t");
-_Static_assert(PROFILER_TOTAL_SAMPLES_OFFSET == offsetof(profile_t, total_samples),
-               "profiler_priv.h: PROFILER_TOTAL_SAMPLES_OFFSET does not match profile_t");
+_Static_assert(PROFILER_SHIFT_COUNT_OFFSET   == offsetof(profile_t, shift_count),
+               "profiler_priv.h: PROFILER_SHIFT_COUNT_OFFSET does not match profile_t");
+_Static_assert(PROFILER_MAGIC_NUMBER_OFFSET  == offsetof(profile_t, magic_number),
+               "profiler_priv.h: PROFILER_MAGIC_NUMBER_OFFSET does not match profile_t");
+_Static_assert(PROFILER_PACKED_VALS_OFFSET   == offsetof(profile_t, packed_vals),
+               "profiler_priv.h: PROFILER_PACKED_VALS_OFFSET does not match profile_t");
+_Static_assert(PROFILER_ABOVE_COUNT_OFFSET   == offsetof(profile_t, above_count),
+               "profiler_priv.h: PROFILER_ABOVE_COUNT_OFFSET does not match profile_t");
+_Static_assert(PROFILER_BELOW_COUNT_OFFSET   == offsetof(profile_t, below_count),
+               "profiler_priv.h: PROFILER_BELOW_COUNT_OFFSET does not match profile_t");
 _Static_assert(PROFILER_BINS_OFFSET          == offsetof(profile_t, bins),
                "profiler_priv.h: PROFILER_BINS_OFFSET does not match profile_t");
 
@@ -41,17 +61,36 @@ _Static_assert(PROFILER_BINS_OFFSET          == offsetof(profile_t, bins),
 
 __attribute__((used)) static void profiler_sample(uint32_t pc)
 {
-    volatile profile_t *p = &profile;
+    profile_t *p = &profile;
+    uint32_t bin;
 
-    p->total_samples++;
-    pc = (pc - p->base_addr) >> p->shift_count;
-    if (pc >= PROFILER_NUM_BINS) return;
-
-    if ( ++p->bins[pc] == COUNT_MAX ) {
+    if ( pc < p->base_addr ) {
+        if ( p->below_count == UINT32_MAX ) {
+            profiler_irq_disable();
+            p->state = PROFILER_FULL;
+        } else {
+            p->below_count++;
+        }
+        return;
+    }
+    bin = (pc - p->base_addr) >> p->shift_count;
+    if ( bin >= PROFILER_NUM_BINS ) {
+        if ( p->above_count == UINT32_MAX ) {
+            profiler_irq_disable();
+            p->state = PROFILER_FULL;
+        } else {
+            p->above_count++;
+        }
+        return;
+    }
+    if ( p->bins[bin] == COUNT_MAX ) {
         profiler_irq_disable();
-        profile.state = PROFILER_FULL;
+        p->state = PROFILER_FULL;
+    } else {
+        p->bins[bin]++;
     }
 }
+
 /*
  * Naked vector target. Hardware has already stacked the frame, so the
  * stacked PC is at [sp, #24]. Load it into r0 and tail-branch into the body.
@@ -68,26 +107,33 @@ __attribute__((used)) static void profiler_sample(uint32_t pc)
 
 #endif // PROFILER_SAMPLER_C
 
-bool profiler_setup(uint32_t base_address, uint32_t bin_width)
+bool profiler_setup(uint32_t base_addr, uint32_t bin_width)
 {
-    // test for between 2 and 2^24 and a power of 2
-    if ( ( bin_width < 2 ) || ( bin_width > (1UL<<24)) ||
+    // test for between 2 and 2^30 and a power of 2
+    if ( ( bin_width < 2 ) || ( bin_width > (1UL<<30)) ||
          ( ( bin_width & ( bin_width - 1 ) ) != 0 ) ) {
         return false;
     }
-    if ( base_address & 0x01 ) {
+    // test for base_addr a multiple of bin_width
+    if ( (base_addr % bin_width) != 0 ) {
         return false;
     }
     if ( profile.state == PROFILER_RUNNING ) {
         profiler_stop();
     }
-    profile.base_addr = base_address;
-    profile.shift_count = 0;
+    profile.base_addr = base_addr;
+    uint8_t shift_count = 0;
     while ( bin_width > 1 ) {
         bin_width >>= 1;
-        profile.shift_count++;
+        shift_count++;
     }
-    profile.total_samples = 0;
+    profile.shift_count = shift_count;
+    // these are for optimized access by assembly language sampler ISR
+    profile.packed_vals = (PROFILER_NUM_BINS << 8) | shift_count;
+    profile.magic_number = (0u - ((base_addr >> shift_count) + PROFILER_NUM_BINS));
+    // reset statistics
+    profile.above_count = 0;
+    profile.below_count = 0;
     for ( uint32_t n = 0 ; n < PROFILER_NUM_BINS ; n++ ) {
         profile.bins[n] = 0;
     }
@@ -124,42 +170,47 @@ bool profiler_stop(void)
     return true;
 }
 
-profiler_count_t *profiler_read(void)
-{
-    if ( profile.state == PROFILER_RESET ) {
-        return NULL;
-    }
-    if ( profile.state == PROFILER_RUNNING ) {
-        profiler_irq_disable();
-    }
-    if ( profile.state != PROFILER_READOUT ) {
-        // do any required translation here
-        profile.state = PROFILER_READOUT;
-    }
-    // IRQ is stopped, can (and must) discard volatile
-    return (profiler_count_t *)profile.bins;
-}
-
 profiler_count_t profiler_read_bin(uint32_t bin_num)
 {
-    profiler_count_t count;
-
-    if ( ( profile.state == PROFILER_RESET ) ||
-         ( bin_num >= PROFILER_NUM_BINS ) ) {
+    if ( bin_num >= PROFILER_NUM_BINS ) {
         return 0;
     }
-    count = profile.bins[bin_num];
-    if ( profile.state != PROFILER_READOUT ) {
-        // do any required translation here
-    }
-    return count;
+    return profile.bins[bin_num];
 }
 
-uint32_t profiler_read_total(void)
+void profiler_read_statistics(uint32_t *above, uint32_t *below,
+                              uint64_t *total)
 {
-    if ( profile.state == PROFILER_RESET ) {
-        return 0;
+    if ( above != NULL ) {
+        *above = profile.above_count;
     }
-    return profile.total_samples;
+    if ( below != NULL ) {
+        *below = profile.below_count;
+    }
+    if ( total != NULL ) {
+        uint64_t tmp = 0;
+        for ( uint32_t n = 0 ; n < PROFILER_NUM_BINS ; n++ ) {
+            tmp += profile.bins[n];
+        }
+        tmp += profile.above_count;
+        tmp += profile.below_count;
+        *total = tmp;
+    }
 }
 
+void profiler_read_info(uint32_t *base_addr, uint32_t *bin_width,
+                        uint32_t *num_bins, const profiler_count_t **data_addr)
+{
+    if ( base_addr != NULL ) {
+        *base_addr = profile.base_addr;
+    }
+    if ( bin_width != NULL ) {
+        *bin_width = 1u << profile.shift_count;
+    }
+    if ( num_bins != NULL ) {
+        *num_bins = PROFILER_NUM_BINS;
+    }
+    if ( data_addr != NULL ) {
+        *data_addr = profile.bins;
+    }
+}

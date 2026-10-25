@@ -5,18 +5,18 @@
 // contains only preprocessor directives.
 
 // state names
-#define PROFILER_RESET      0
-#define PROFILER_READY      1
-#define PROFILER_RUNNING    2
-#define PROFILER_FULL       3
-#define PROFILER_READOUT    4
+#define PROFILER_READY      0
+#define PROFILER_RUNNING    1
+#define PROFILER_FULL       2
 
 // structure member offsets
 
-#define PROFILER_BASE_ADDR_OFFSET        0
-#define PROFILER_SHIFT_COUNT_OFFSET      4
-#define PROFILER_STATE_OFFSET            5
-#define PROFILER_TOTAL_SAMPLES_OFFSET    8
-#define PROFILER_BINS_OFFSET             12
+#define PROFILER_STATE_OFFSET            4
+#define PROFILER_SHIFT_COUNT_OFFSET      5
+#define PROFILER_PACKED_VALS_OFFSET      8
+#define PROFILER_MAGIC_NUMBER_OFFSET     12
+#define PROFILER_ABOVE_COUNT_OFFSET      16
+#define PROFILER_BELOW_COUNT_OFFSET      20
+#define PROFILER_BINS_OFFSET             24
 
 #endif // PROFILER_PRIV_H

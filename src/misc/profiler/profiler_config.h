@@ -3,7 +3,7 @@
 
 /* configuration - should be defined by the build system */
 /* note that RAM usage is approximately
- *    PROFILER_COUNT_SIZE * PROFILER_NUM_BINS + 20 bytes
+ *    PROFILER_COUNT_SIZE * PROFILER_NUM_BINS + 24 bytes
  */
 
 // each bin counter can be 1, 2, or 4 bytes
@@ -34,6 +34,10 @@
 
 #if PROFILER_NUM_BINS < 4
 #error "PROFILER_NUM_BINS must be at least 4"
+#endif
+
+#if PROFILER_NUM_BINS > 0xFFFFFF
+#error "PROFILER_NUM_BINS cannot exceed 0xFFFFFF"
 #endif
 
 #if defined(PROFILER_SAMPLER_C) && defined(PROFILER_SAMPLER_ASM)

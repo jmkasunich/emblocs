@@ -21,13 +21,12 @@ typedef uint32_t profiler_count_t;
 #endif
 
 /**************************************************************
- * The profiler can be in one of several states, as follows:
+ * The profiler can be in one of three states, as follows:
  *
- * RESET   - uninitialized; before first profiler_setup() call
  * READY   - ready to begin or resume sampling
  * RUNNING - actively sampling
- * FULL    - stopped; one or more bins reached max count
- * READOUT - data is ready for bulk readout
+ * FULL    - stopped because one or more bins or
+ *           statistics counters would have overflowed
  *
  * Some of the API functions only work in certain states, as
  * documented in the function descriptions below.
@@ -39,14 +38,19 @@ typedef uint32_t profiler_count_t;
  * build a histogram with PROFILER_NUM_BINS bins, each
  * covering 'bin_width' bytes of address space starting
  * at 'base_address'.  Each bin counts the number of samples
- * inside that address range. 
- * 'bin_width' must be a power of 2, between 2 and 2^24,
- * and 'base_address' must be even; illegal values will
- * return false and have no effect on profiler state.
- * Can be called regardless of profiler state; if the
- * profiler is running, it will be stopped.
+ * inside that address range.
+ * 'bin_width' must be a power of 2, between 2 and 2^30,
+ * and 'base_address' must be a multiple of 'bin_width';
+ * illegal values will return false and have no effect
+ * on the profiler's state.
+ * The counters can be 1-, 2-, or 4-bytes wide, as set
+ * by PROFILER_COUNT_SIZE.  The profiler also counts
+ * samples above and below the bin range - those counters
+ * are 4-bytes wide regardless of PROFILER_COUNT_SIZE.
+ * This function can be called regardless of profiler
+ * state; if the profiler is running, it will be stopped.
  * On successful return, state will be READY, and the
- * histogram and total sample counters will all be zero.
+ * histogram and statistics counters will all be zero.
  */
 bool profiler_setup(uint32_t base_address, uint32_t bin_width);
 
@@ -54,21 +58,26 @@ bool profiler_setup(uint32_t base_address, uint32_t bin_width);
  * Begins sampling the program counter 'sample_frequency'
  * times per second.  The resulting samples are used to build
  * the histogram.  Samples that fall outside of the range
- * covered by the histogram bins are ignored, but the total
- * number of samples is tracked in a 32-bit counter.
+ * covered by the histogram bins are counted as 'above'
+ * or 'below'; those counts are accessible by calling
+ * 'profiler_read_statistics()'.
  * Can only be called when the profiler is READY, returns
  * false if called while in any other state, or if
- * 'sample_frequency' is not supported by the system.
+ * 'sample_frequency' is zero or is not supported by
+ * the system.
  * On successful return, state will be RUNNING.
- * Once running, sampling will stop if any bin counter
- * reaches its limit; this may be checked by calling
- * profiler_is_full().
+ * Once running, sampling can be stopped by profiler_stop()
+ * and will automatically stop when a sample would cause
+ * any bin counter or statistics counter to overflow;
+ * that sample is discarded.  This can be detected by
+ * calling profiler_is_full().
  */
 bool profiler_start(uint32_t sample_frequency);
 
 /**************************************************************
  * Reports if the profiler has stopped sampling due to one
- * or more bins being full.
+ * or more bins or statistics counters being full.  Use
+ * profiler_setup() to reset before starting another run.
  */
 bool profiler_is_full(void);
 
@@ -81,38 +90,50 @@ bool profiler_is_full(void);
 bool profiler_stop(void);
 
 /**************************************************************
- * Prepares sample count histogram for readout.
- * Returns a pointer to an array of PROFILER_NUM_BINS
- * count values.
- * Can be called when profiler is in any state except
- * RESET; returns NULL if called while in reset state.
- * If the profiler is running, it will be stopped.
- * On successful return the state is READOUT.
- * The returned pointer can be used until profiler_setup()
- * is called to prepare for the next acquisition.
- */
-profiler_count_t *profiler_read(void);
-
-/**************************************************************
  * Reads the sample count for a single histogram bin.
  * Returns the specified count, or zero if 'bin_num' is
  * out of range.
- * Can be called when profiler is in any state except
- * RESET; returns zero if called while in reset state.
+ * Can be called when profiler is in any state.
  * Does not stop profiler or change state.
  */
 profiler_count_t profiler_read_bin(uint32_t bin_num);
 
 /**************************************************************
- * Reads the total number of samples captured, including
- * those that fall outside the histogram bins.
- * Can be called when profiler is in any state except
- * RESET; returns zero if called while in reset state.
- * Note that at a 100KHz rate this counter will wrap modulo
- * 2^32 in about 11 hours; this is not detected or handled.
+ * Reads profiler statistics.  For each non-NULL argument,
+ * the value is written to the address given.
+ * Can be called when profiler is in any state.
+ * 'total' is the sum of all bins plus 'above' and 'below',
+ * so it needs to loop over all bins; pass NULL unless it
+ * is really needed.  Note that 'total' is a 64-bit number,
+ * since 'above', 'below', and bins can all contribute
+ * counts.
+ * If called while the profiler is running the values are
+ * not from the same instant; for accurate results stop
+ * the profiler first.
  * Does not stop profiler or change state.
  */
-uint32_t profiler_read_total(void);
+void profiler_read_statistics(uint32_t *above, uint32_t *below,
+                              uint64_t *total);
+
+/**************************************************************
+ * Reads profiler information.  For each non-NULL argument,
+ * the value is written to the address given.
+ * 'base_addr' is the starting address of bin 0, and
+ * will be a multiple of 'bin_width'.
+ * 'bin_width' is the width of each bin, and will be
+ * a power of 2.
+ * 'num_bins' is the number of bins, and is constant.
+ * 'data_addr' is the location of the bin counters.
+ * The data is a static array:
+ *    profiler_count_t data[PROFILER_NUM_BINS]
+ * so data_addr never changes (but the array contents do).
+ * Can be called when profiler is in any state.
+ * The data is modified by the profiler when it is
+ * running and cleared by profiler_setup(); callers
+ * should only access when READY or FULL.
+ */
+void profiler_read_info(uint32_t *base_addr, uint32_t *bin_width,
+                        uint32_t *num_bins, const profiler_count_t **data_addr);
 
 
 /**************************************************************
@@ -132,8 +153,8 @@ void profiler_irq_handler(void);
  * Helper function that must be provided by the platform.
  * Do not call directly.
  * Must result in profiler_irq_handler() being called from
- * a timer interrupt at 'sample_frequency'.  Should clear
- * any pending interrupt before enabling.  Should return
+ * a timer interrupt at 'sample_frequency'.  Must clear
+ * any pending interrupt before enabling.  Must return
  * false if the platform cannot operate at the requested
  * frequency.
  */
