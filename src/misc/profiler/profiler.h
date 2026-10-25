@@ -1,17 +1,51 @@
-/**************************************************************
- * profiler.h - API for sample based profiling
+/**
+ * @file profiler.h
+ * @brief API for sample-based profiling.
  * 
+ * @section profiler_config Configuration
+ *
+ * Configuration is by -D options from the build system.
+ * @ref profiler_config.h validates them and provides defaults.
+ *
+ * @section profiler_threading  Multi-Core and Thread Safety
+ *
+ * The profiler is intended to profile code running on a single core.
+ * The API is not reentrant and is not safe for use from more than one
+ * core.  Call all functions from a single thread of control, not an
+ * interrupt handler.  The only asynchronous activity is the sampling
+ * interrupt, which must be serviced by the same core that calls the
+ * API.
+ *
+ * @section profiler_states Profiler States
+ *
+ * The profiler is always in one of the following states:
+ *
+ * - @c RESET   - before the first successful call to profiler_setup()
+ * - @c READY   - ready to begin or resume sampling
+ * - @c RUNNING - actively sampling
+ * - @c FULL    - stopped because one or more bins or
+ *                statistics counters would have overflowed
  */
+
 #ifndef PROFILER_H
 #define PROFILER_H
 
 #include <stdint.h>
 #include <stdbool.h>
-// configuration is by -D options from the build system
-// profiler_config.h validates and provides defaults
+/* see profiler_config.h for the configuration options */
 #include "profiler_config.h"
 
-
+/**
+ * @brief Type of each in-range histogram bin counter.
+ *
+ * The width is set by @ref PROFILER_COUNT_SIZE: uint8_t for 1 byte,
+ * uint16_t for 2 bytes, or uint32_t for 4 bytes.  A counter holds values
+ * from 0 to the maximum of its type.  If a bin or statistics counter
+ * would overflow, the profiler enters @c FULL (see @ref profiler_states).
+ *
+ * Counters for samples outside the bin range are always 4 bytes wide,
+ * regardless of this type.
+ */
 #if PROFILER_COUNT_SIZE == 1
 typedef uint8_t profiler_count_t;
 #elif PROFILER_COUNT_SIZE == 2
@@ -20,152 +54,238 @@ typedef uint16_t profiler_count_t;
 typedef uint32_t profiler_count_t;
 #endif
 
-/**************************************************************
- * The profiler can be in one of three states, as follows:
+/**
+ * @brief Prepares the profiler to sample the program counter and
+ *        build a histogram.
  *
- * READY   - ready to begin or resume sampling
- * RUNNING - actively sampling
- * FULL    - stopped because one or more bins or
- *           statistics counters would have overflowed
+ * The histogram has @c PROFILER_NUM_BINS bins.  Each bin covers
+ * @p bin_width bytes of address space, starting at @p base_address.
+ * Each bin counts the samples that fall inside its address range.
  *
- * Some of the API functions only work in certain states, as
- * documented in the function descriptions below.
+ * If the profiler is running, it is stopped first.
  *
- */
-
-/**************************************************************
- * Prepares the profiler to sample the program counter and
- * build a histogram with PROFILER_NUM_BINS bins, each
- * covering 'bin_width' bytes of address space starting
- * at 'base_address'.  Each bin counts the number of samples
- * inside that address range.
- * 'bin_width' must be a power of 2, between 2 and 2^30,
- * and 'base_address' must be a multiple of 'bin_width';
- * illegal values will return false and have no effect
- * on the profiler's state.
- * The counters can be 1-, 2-, or 4-bytes wide, as set
- * by PROFILER_COUNT_SIZE.  The profiler also counts
- * samples above and below the bin range - those counters
- * are 4-bytes wide regardless of PROFILER_COUNT_SIZE.
- * This function can be called regardless of profiler
- * state; if the profiler is running, it will be stopped.
- * On successful return, state will be READY, and the
- * histogram and statistics counters will all be zero.
+ * @param[in] base_address  Start of the histogram address range.
+ *                          Must be a multiple of @p bin_width.
+ * @param[in] bin_width     Bytes covered by each bin.  Must be a
+ *                          power of 2, from 2 to 2^30 inclusive.
+ *
+ * @return true on success; false if an argument is illegal.  On false,
+ *         the profiler's state is unchanged.
+ *
+ * @pre  Any profiler state is acceptable (see @ref profiler_states).
+ * @post On success, the profiler is in state @c READY and the
+ *       histogram and all statistics counters are zero.
+ *
+ * @note The bin counters are 1, 2, or 4 bytes wide, as set by
+ *       @c PROFILER_COUNT_SIZE.  Samples above and below the bin
+ *       range are counted in separate 4-byte counters regardless
+ *       of @c PROFILER_COUNT_SIZE.
+ *
+ * @see PROFILER_NUM_BINS
+ * @see PROFILER_COUNT_SIZE
  */
 bool profiler_setup(uint32_t base_address, uint32_t bin_width);
 
-/**************************************************************
- * Begins sampling the program counter 'sample_frequency'
- * times per second.  The resulting samples are used to build
- * the histogram.  Samples that fall outside of the range
- * covered by the histogram bins are counted as 'above'
- * or 'below'; those counts are accessible by calling
- * 'profiler_read_statistics()'.
- * Can only be called when the profiler is READY, returns
- * false if called while in any other state, or if
- * 'sample_frequency' is zero or is not supported by
- * the system.
- * On successful return, state will be RUNNING.
- * Once running, sampling can be stopped by profiler_stop()
- * and will automatically stop when a sample would cause
- * any bin counter or statistics counter to overflow;
- * that sample is discarded.  This can be detected by
- * calling profiler_is_full().
+/**
+ * @brief Starts sampling the program counter.
+ *
+ * Samples the program counter @p sample_frequency times per second.
+ * Each sample inside a histogram bin's address range increments that
+ * bin's counter.  Samples outside the bin range are counted as "above"
+ * or "below"; read these counts with @ref profiler_read_statistics().
+ *
+ * Sampling continues until @ref profiler_stop() is called.  It also stops
+ * automatically if a sample would overflow any bin or statistics counter.
+ * That sample is discarded, and @ref profiler_is_full() reports the
+ * condition.  Once full, sampling cannot be restarted until
+ * @ref profiler_setup() is called to reset the counters.
+ *
+ * @param[in] sample_frequency  Samples per second.  Must be nonzero and
+ *                              supported by the system.
+ *
+ * @return true if sampling started.  false if @p sample_frequency is zero
+ *         or unsupported, or if the profiler is not in state @c READY.
+ *
+ * @pre  Profiler is in state @c READY (see @ref profiler_states).
+ * @post Profiler is in state @c RUNNING.
  */
 bool profiler_start(uint32_t sample_frequency);
 
-/**************************************************************
- * Reports if the profiler has stopped sampling due to one
- * or more bins or statistics counters being full.  Use
- * profiler_setup() to reset before starting another run.
- */
-bool profiler_is_full(void);
-
-/**************************************************************
- * Stops sampling the program counter.
- * Only meaningful when state is RUNNING; returns false
- * and does nothing if called while in any other state.
- * On successful return, state will be READY.
+/**
+ * @brief Stops sampling the program counter.
+ *
+ * Histogram and statistics counters hold their values, so they can
+ * be read.  Counting can be resumed from the present values by
+ * calling @ref profiler_start(), or @ref profiler_setup() can be
+ * called to clear the counters and prepare for a new run.
+ *
+ * @return true if sampling was stopped.  false if the profiler is not
+ *         in state @c RUNNING, in which case nothing changes.
+ *
+ * @pre  Profiler is in state @c RUNNING (see @ref profiler_states).
+ * @post Profiler is in state @c READY.
  */
 bool profiler_stop(void);
 
-/**************************************************************
- * Reads the sample count for a single histogram bin.
- * Returns the specified count, or zero if 'bin_num' is
- * out of range.
- * Can be called when profiler is in any state.
- * Does not stop profiler or change state.
+/**
+ * @brief Reports whether sampling has stopped and the data can be read.
+ *
+ * Returns true in state @c READY or @c FULL.  Returns false in state
+ * @c RESET, where no sampling has been set up, and in state @c RUNNING,
+ * where the counters may change at any moment.
+ *
+ * @return true if the profiler is @c READY or @c FULL.
  */
-profiler_count_t profiler_read_bin(uint32_t bin_num);
+bool profiler_is_stopped(void);
 
-/**************************************************************
- * Reads profiler statistics.  For each non-NULL argument,
- * the value is written to the address given.
- * Can be called when profiler is in any state.
- * 'total' is the sum of all bins plus 'above' and 'below',
- * so it needs to loop over all bins; pass NULL unless it
- * is really needed.  Note that 'total' is a 64-bit number,
- * since 'above', 'below', and bins can all contribute
- * counts.
- * If called while the profiler is running the values are
- * not from the same instant; for accurate results stop
- * the profiler first.
- * Does not stop profiler or change state.
+/**
+ * @brief Reports whether the profiler is sampling.
+ *
+ * @return true if the profiler is in state @c RUNNING.
  */
-void profiler_read_statistics(uint32_t *above, uint32_t *below,
-                              uint64_t *total);
+bool profiler_is_running(void);
 
-/**************************************************************
- * Reads profiler information.  For each non-NULL argument,
- * the value is written to the address given.
- * 'base_addr' is the starting address of bin 0, and
- * will be a multiple of 'bin_width'.
- * 'bin_width' is the width of each bin, and will be
- * a power of 2.
- * 'num_bins' is the number of bins, and is constant.
- * 'data_addr' is the location of the bin counters.
- * The data is a static array:
- *    profiler_count_t data[PROFILER_NUM_BINS]
- * so data_addr never changes (but the array contents do).
- * Can be called when profiler is in any state.
- * The data is modified by the profiler when it is
- * running and cleared by profiler_setup(); callers
- * should only access when READY or FULL.
+/**
+ * @brief Reports whether the profiler has filled up.
+ *
+ * Returns true in state @c FULL, which means sampling stopped
+ * automatically because a bin or statistics counter would have
+ * overflowed.  The sample that would have overflowed was discarded,
+ * so the counters are still valid and can be read.
+ *
+ * A full profiler cannot resume sampling.  Call @ref profiler_setup()
+ * to clear the counters and begin a new run.
+ *
+ * @return true if the profiler is in state @c FULL.
+ */
+bool profiler_is_full(void);
+
+/**
+ * @brief Reads the histogram layout.
+ *
+ * Each non-NULL argument receives its value.  @p base_addr and
+ * @p bin_width are set by @ref profiler_setup().  @p num_bins
+ * and @p data_addr are constant for the build.
+ *
+ * @param[out] base_addr  First address in bin 0.  A multiple of @p bin_width.
+ * @param[out] bin_width  Number of bytes covered by each bin.  A power of 2.
+ * @param[out] num_bins   Number of bins, equal to @ref PROFILER_NUM_BINS.
+ * @param[out] data_addr  Location of the array of bin counters.  The data
+ *                        values at this address change while the profiler
+ *                        is running, and @ref profiler_setup() clears them.
+ *                        Read the counters only in state @c READY or
+ *                        @c FULL (see @ref profiler_is_stopped()).
  */
 void profiler_read_info(uint32_t *base_addr, uint32_t *bin_width,
                         uint32_t *num_bins, const profiler_count_t **data_addr);
 
+/**
+ * @brief Reads the above, below, and total sample counts.
+ *
+ * Each non-NULL argument receives its value.
+ * If the profiler is running, the values are not from the same instant.
+ * Stop the profiler first for a consistent snapshot.
+ *
+ * @param[out] above  32-bit count of samples above the histogram range.
+ * @param[out] below  32-bit count of samples below the histogram range.
+ * @param[out] total  32-bit count of all samples captured; computed by
+ *                    summing all bins plus @p above and @p below.  The
+ *                    actual total can exceed 2^32; this sum saturates at
+ *                    0xFFFFFFFF, at which point @ref profiler_read_total()
+ *                    should be called to get the true total as a 64-bit
+ *                    number.  Computing the total is O(num_bins) since
+ *                    it requires summing every bin; pass NULL unless
+ *                    it is needed.
+ */
+void profiler_read_statistics(uint32_t *above, uint32_t *below,
+                              uint32_t *total);
 
-/**************************************************************
- * The following are used to implement the profiler.
- * The IRQ is provided by the profiler, the two helper
- * functions must be provided by the platform.
+/**
+ * @brief Reads the total sample count as a 64-bit number.
+ *
+ * Long sampling runs (for example, 72 minutes at 1MHz) can acquire more
+ * than 2^32 samples.  This function sums all bins plus @c above and
+ * @c below into a 64-bit number that will not overflow.
+ * Stop the profiler first for an accurate count.
+ *
+ * @return The sum of all bins, @c above, and @c below.
+ */
+uint64_t profiler_read_total(void);
+
+/**
+ * @brief Reads the sample count for one histogram bin.
+ *
+ * @param[in] bin_num  Index of the bin, from 0 to @ref PROFILER_NUM_BINS minus 1.
+ *
+ * @return The count for bin @p bin_num, or 0 if @p bin_num is out of range.
+ *         Check @c num_bins from @ref profiler_read_info() to avoid calling
+ *         this function on an out-of-range bin.
+ */
+profiler_count_t profiler_read_bin(uint32_t bin_num);
+
+/**
+ * @defgroup platform_hooks Platform Interface
+ * @brief Interface between the profiler and the platform.
+ *
+ * The platform must place profiler_irq_handler() in the
+ * interrupt vector table and provide platform-specific
+ * implementations of profiler_irq_enable() and
+ * profiler_irq_disable().
+ * Applications do not call any of these directly.
+ * @{
  */
 
-/**************************************************************
- * The IRQ that handles sampling of the PC.  This function
- * must be placed in the interrupt vector table and should
- * not be called directly.
+/**
+ * @brief Samples the program counter and updates the histogram.
+ *
+ * Provided by the profiler.  Called by a timer interrupt to
+ * sample the program counter.
+ * Records the sampled program counter in the matching bin, or
+ * in the above or below counter if it is outside the histogram
+ * range.  If the sample would overflow any counter, the sample is
+ * discarded, sampling is stopped, and the profiler enters state
+ * @c FULL.
+ *
+ * Must be placed in the interrupt vector table.  Do not call directly.
  */
 void profiler_irq_handler(void);
 
-/**************************************************************
- * Helper function that must be provided by the platform.
+/**
+ * @brief Enables the platform timer interrupt that drives sampling.
+ *
+ * Provided by the platform.  Called by @ref profiler_start().
+ * Arranges for profiler_irq_handler() to be called from a timer
+ * interrupt at @p sample_frequency samples per second.  Any pending
+ * interrupt from this timer must be cleared before the interrupt is
+ * enabled, so that a stale sample is not delivered.
  * Do not call directly.
- * Must result in profiler_irq_handler() being called from
- * a timer interrupt at 'sample_frequency'.  Must clear
- * any pending interrupt before enabling.  Must return
- * false if the platform cannot operate at the requested
- * frequency.
+ *
+ * @param[in] sample_frequency  Samples per second.  Will be nonzero
+ *                              when called by the profiler.
+ *
+ * @return true if sampling is enabled at @p sample_frequency.  false if
+ *         the platform cannot operate at that frequency, in which case
+ *         no interrupts are enabled.
+ *
+ * @post Timer interrupts occur at @p sample_frequency, and each one calls
+ *       profiler_irq_handler().
  */
 extern bool profiler_irq_enable(uint32_t sample_frequency);
 
-/**************************************************************
- * Helper function that must be provided by the platform.
+/**
+ * @brief Disables the platform timer interrupt that drives sampling.
+ *
+ * Provided by the platform.  Called by @ref profiler_stop() and
+ * by @ref profiler_irq_handler() when a counter would overflow.
+ * Must be callable from interrupt context.  Must clear any pending
+ * interrupts.
  * Do not call directly.
- * Must stop calls to profiler_irq_handler().  Must be
- * callable from interrupt context.
+ *
+ * @post @ref profiler_irq_handler() is not called again until
+ *       @ref profiler_irq_enable() is called.
  */
 extern void profiler_irq_disable(void);
+
+/** @} */
 
 #endif // PROFILER_H

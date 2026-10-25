@@ -15,22 +15,11 @@ typedef struct {
     profiler_count_t bins[PROFILER_NUM_BINS];
 } profile_t;
 
-// these defaults give bins that cover the
-// full 0x0 to 0xFFFFFFFF address range
-#define DEFAULT_SHIFT_COUNT  (1u + __builtin_clz(PROFILER_NUM_BINS))
-#define DEFAULT_BIN_WIDTH    (1u << DEFAULT_SHIFT_COUNT)
+_Static_assert(PROFILER_RESET == 0,
+               "profiler_priv.h: PROFILER_RESET must be zero so struct lives in .bss");
 
 // declare the actual structure - there is only one
-profile_t profile = {
-    .base_addr = 0,
-    .state=PROFILER_READY,
-    .shift_count = DEFAULT_SHIFT_COUNT,
-    .packed_vals = (PROFILER_NUM_BINS << 8) | (DEFAULT_SHIFT_COUNT & 0xFF),
-    .magic_number = (uint32_t)(0u - PROFILER_NUM_BINS),
-    .above_count = 0,
-    .below_count = 0
-};
-
+profile_t profile = {.state=PROFILER_RESET};
 
 // and make sure the structure offsets match the actual structure
 _Static_assert(PROFILER_STATE_OFFSET         == offsetof(profile_t, state),
@@ -155,47 +144,32 @@ bool profiler_start(uint32_t sample_frequency)
     return true;
 }
 
-bool profiler_is_full(void)
-{
-    return profile.state == PROFILER_FULL;
-}
-
 bool profiler_stop(void)
 {
     if ( profile.state != PROFILER_RUNNING ) {
         return false;
     }
     profiler_irq_disable();
-    profile.state = PROFILER_READY;
+    if ( profile.state != PROFILER_FULL ) {
+        profile.state = PROFILER_READY;
+    }
     return true;
 }
 
-profiler_count_t profiler_read_bin(uint32_t bin_num)
+bool profiler_is_stopped(void)
 {
-    if ( bin_num >= PROFILER_NUM_BINS ) {
-        return 0;
-    }
-    return profile.bins[bin_num];
+    return ( (profile.state == PROFILER_READY) ||
+             (profile.state == PROFILER_FULL) );
 }
 
-void profiler_read_statistics(uint32_t *above, uint32_t *below,
-                              uint64_t *total)
+bool profiler_is_running(void)
 {
-    if ( above != NULL ) {
-        *above = profile.above_count;
-    }
-    if ( below != NULL ) {
-        *below = profile.below_count;
-    }
-    if ( total != NULL ) {
-        uint64_t tmp = 0;
-        for ( uint32_t n = 0 ; n < PROFILER_NUM_BINS ; n++ ) {
-            tmp += profile.bins[n];
-        }
-        tmp += profile.above_count;
-        tmp += profile.below_count;
-        *total = tmp;
-    }
+    return (profile.state == PROFILER_RUNNING);
+}
+
+bool profiler_is_full(void)
+{
+    return (profile.state == PROFILER_FULL);
 }
 
 void profiler_read_info(uint32_t *base_addr, uint32_t *bin_width,
@@ -214,3 +188,56 @@ void profiler_read_info(uint32_t *base_addr, uint32_t *bin_width,
         *data_addr = profile.bins;
     }
 }
+
+void profiler_read_statistics(uint32_t *above, uint32_t *below,
+                              uint32_t *total)
+{
+    if ( above != NULL ) {
+        *above = profile.above_count;
+    }
+    if ( below != NULL ) {
+        *below = profile.below_count;
+    }
+    if ( total != NULL ) {
+        /* Track remaining capacity below UINT32_MAX. Subtracting only
+         * when the term fits means nothing can wrap; once a term does
+         * not fit, the sum saturates and the rest is skipped. */
+        uint32_t remaining = UINT32_MAX;
+        remaining -= profile.above_count;
+        if ( remaining >= profile.below_count ) {
+            remaining -= profile.below_count;
+        } else {
+            remaining = 0;
+        }
+        for ( uint32_t n = 0 ; n < PROFILER_NUM_BINS ; n++ ) {
+            if ( remaining >= profile.bins[n] ) {
+                remaining -= profile.bins[n];
+            } else {
+                remaining = 0;
+                break;
+            }
+        }
+        *total = UINT32_MAX - remaining;
+    }
+}
+
+uint64_t profiler_read_total(void)
+{
+    uint64_t total = 0;
+
+    total += profile.above_count;
+    total += profile.below_count;
+    for ( uint32_t n = 0 ; n < PROFILER_NUM_BINS ; n++ ) {
+        total += profile.bins[n];
+    }
+    return total;
+}
+
+profiler_count_t profiler_read_bin(uint32_t bin_num)
+{
+    if ( bin_num >= PROFILER_NUM_BINS ) {
+        return 0;
+    }
+    return profile.bins[bin_num];
+}
+
