@@ -6,6 +6,7 @@
 CC      := arm-none-eabi-gcc
 OBJDUMP := arm-none-eabi-objdump
 SIZE    := arm-none-eabi-size
+DOXYGEN := doxygen
 
 CPU   ?= cortex-m4
 BUILD := build/$(CPU)
@@ -13,6 +14,8 @@ TARGET := $(BUILD)/profiler
 
 SRC := profiler.c profiler_stubs.c
 OBJ := $(addprefix $(BUILD)/,$(SRC:.c=.o))
+
+DOCDIR  := build/doc
 
 ARCH   := -mcpu=$(CPU) -mthumb -mfloat-abi=soft
 CFLAGS := $(ARCH) -std=gnu11 -O2 -g -Wall -Wextra \
@@ -40,6 +43,10 @@ $(TARGET).lst: $(TARGET).elf
 
 size: $(TARGET).elf
 	$(SIZE) $<
+
+.PHONY: doc
+doc: Doxyfile profiler.h profiler_config.h
+	$(DOXYGEN) Doxyfile
 
 clean:
 	rm -rf build
