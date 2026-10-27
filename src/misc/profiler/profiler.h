@@ -4,8 +4,17 @@
  * 
  * @section profiler_config Configuration
  *
- * Configuration is by -D options from the build system.
- * @ref profiler_config.h validates them and provides defaults.
+ * Config is set by #define's in profiler_config.h; users should
+ * put a copy of this file somewhere in their project include
+ * path and edit as needed.  There are two configuration items:
+ *
+ * @c PROFILER_NUM_BINS - the number of bins in the histogram.
+ *       From 4 to 16777215 (0xFFFFFF).
+ * @c PROFILER_COUNT_SIZE - the width of each bin counter, in bytes.
+ *       Must be 1, 2, or 4; determines how soon the bins become full.
+ *
+ * RAM used by the histogram is approximately
+ * PROFILER_COUNT_SIZE * PROFILER_NUM_BINS + 24 bytes.
  *
  * @section profiler_threading  Multi-Core and Thread Safety
  *
@@ -32,8 +41,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-/* see profiler_config.h for the configuration options */
-#include "profiler_config.h"
+#include <profiler_config.h>
 
 /**
  * @brief Type of each in-range histogram bin counter.
@@ -52,6 +60,13 @@ typedef uint8_t profiler_count_t;
 typedef uint16_t profiler_count_t;
 #elif PROFILER_COUNT_SIZE == 4
 typedef uint32_t profiler_count_t;
+#else
+#error "PROFILER_COUNT_SIZE must be 1, 2, or 4 bytes; see profiler_config.h"
+#endif
+
+#if ( (PROFILER_NUM_BINS < 4) || \
+      (PROFILER_NUM_BINS > 0xFFFFFF ) )
+#error "PROFILER_NUM_BINS must be >= 4 and <= 0xFFFFFF; see profiler_config.h"
 #endif
 
 /**

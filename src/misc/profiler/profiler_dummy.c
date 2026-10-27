@@ -1,3 +1,4 @@
+// profiler_dummy.c - provides stubs for test build/link
 #include <stdint.h>
 #include <stdbool.h>
 

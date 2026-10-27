@@ -38,17 +38,16 @@ _Static_assert(PROFILER_BINS_OFFSET          == offsetof(profile_t, bins),
                "profiler_priv.h: PROFILER_BINS_OFFSET does not match profile_t");
 
 
-#ifdef PROFILER_SAMPLER_C
-
 #define COUNT_MAX ((profiler_count_t)0xFFFFFFFF)
 
 /*
- * Sampling functions - this is called by an assembly stub
- * which extracts the PC from the stack.  This function does
- * the actual work of updating bins.
+ * C sample binning function
+ * This implementation is used when no target-specific all-assembly
+ * sampler is avaiable.  A short assembly stub grabs the PC and
+ * calls this function which does the actual work of updating bins.
  */
 
-__attribute__((used)) static void profiler_sample(uint32_t pc)
+void profiler_bin_sample(uint32_t pc)
 {
     profile_t *p = &profile;
     uint32_t bin;
@@ -79,22 +78,6 @@ __attribute__((used)) static void profiler_sample(uint32_t pc)
         p->bins[bin]++;
     }
 }
-
-/*
- * Naked vector target. Hardware has already stacked the frame, so the
- * stacked PC is at [sp, #24]. Load it into r0 and tail-branch into the body.
- * The body returns straight to the interrupted code via the EXC_RETURN in lr.
- */
-
- __attribute__((naked, used)) void profiler_irq_handler(void)
-{
-    __asm volatile(
-        "ldr r0, [sp, #24]\n\t"
-        "b   profiler_sample\n\t"
-        );
-}
-
-#endif // PROFILER_SAMPLER_C
 
 bool profiler_setup(uint32_t base_addr, uint32_t bin_width)
 {
