@@ -80,7 +80,8 @@ typedef struct {
  * @p buf for the bin counters.
  *
  * Caller is responsible for allocating the buffer, which can
- * be static or malloc.
+ * be static or malloc.  @p buf_len must be at least 8; a
+ * histogram with only one bin doesn't make much sense.
  *
  * @pre @p buf must be word-aligned.
  * @pre @p buf_len must be a multiple of four.

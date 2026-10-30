@@ -11,6 +11,7 @@ void histogram_set_buffer(histogram_t *h, void *buffer, size_t buf_len)
     assert( buffer != NULL );
     assert( ( (uintptr_t)buffer & 3 ) == 0 );  // 32-bit aligned
     assert( ( buf_len & 3 ) == 0 );  // multiple of 4 bytes long
+    assert( ( buf_len >= 8 ) ); // a 1-bin histogram is pointless
     h->buffer = buffer;
     h->buf_len = buf_len;
     h->state = HISTOGRAM_STATE_INIT;
@@ -83,6 +84,9 @@ bool histogram_set_range_f32(histogram_t *h, float bin_base, float bin_width)
     assert( h->buffer != NULL );
     assert( h->buf_len != 0 );
     assert( h->counter_width != 0 );
+    if ( !isfinite(bin_base) ) {
+        return false;
+    }
     if ( !(bin_width > 0.0f) ) {
         return false;
     }
@@ -308,10 +312,12 @@ uint32_t histogram_get_total_32(const histogram_t *h)
 
 uint64_t histogram_get_total_64(const histogram_t *h)
 {
-    uint64_t total = h->above_count + h->below_count;
+    uint64_t total = 0;
 
     assert(h != NULL);
     assert(h->buffer != NULL);
+    total += h->above_count;
+    total += h->below_count;
     for ( uint32_t n = 0 ; n < h->num_bins ; n++ ) {
         total += get_bin_count(h, n);
     }
