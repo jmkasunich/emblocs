@@ -67,7 +67,6 @@ typedef struct {
     histogram_value_t bin_width;             /**< width of each bin */
     uint32_t num_bins;                       /**< number of bins in buffer */
     float reciprocal_width;                  /**< speedup for f32 */
-    uint32_t total_count;                    /**< total number of values counted */
     uint32_t above_count;                    /**< number of values above bin range */
     uint32_t below_count;                    /**< number of values below bin range */
     void *buffer;                            /**< memory for bin counters */
@@ -127,11 +126,11 @@ bool histogram_set_range_f32(histogram_t *h, float bin_base, float bin_width);
 
 /** @brief Zeros all bins and counters
  *
- * Clears @c total_count, @c above_count, @c below_count, all bin
- * counters and the FULL state.  Does not change configuration.
+ * Clears @c above_count, @c below_count, all bin counters and
+ * the FULL state.  Does not change configuration.
  *
  * @pre @ref histogram_set_buffer has been called successfully at
- *           least once, so there are counters to clear.
+ *      least once, so there are counters to clear.
  */
 void histogram_reset_counts(histogram_t *h);
 
@@ -140,17 +139,15 @@ void histogram_reset_counts(histogram_t *h);
  *
  * These functions determine if @p value falls above, below, or
  * inside the bin range established by @ref histogram_config
- * and increment the relevant counter.  @c total_count is
- * incremented regardless of value.
+ * and increment the relevant counter.
  *
- * If @c total_count, @c above_count, @c below_count, or any bin
- * counter would overflow, state becomes HISTOGRAM_STATE_FULL
- * and subsequent calls return immediately.
+ * Returns immediately if state is not @c HISTOGRAM_CAN_COUNT.
  *
- * Floating point histograms do not count NaN or +/-infinity
- * but still increment @c total_count.  A mismatch between
- * @c total_count and the sum of @c above_count, @c below_count
- * and the sum of all bins can be used to detect "bad" values.
+ * If @c above_count, @c below_count, or any bin counter would
+ * overflow, state becomes @c HISTOGRAM_STATE_FULL, so subsequent
+ * calls return immediately.
+ *
+ * Floating point histograms do not count NaN or +/-infinity.
  * @{
  */
 void histogram_count_value_u32(histogram_t *h, uint32_t value);
@@ -158,5 +155,41 @@ void histogram_count_value_s32(histogram_t *h, int32_t value);
 void histogram_count_value_f32(histogram_t *h, float value);
 /** @} */
 
+
+/** @brief Get the count from a particular bin
+ *
+ * Returns the count in @p bin_num as a uint32_t, regardless
+ * of the actual bin counter width.
+ *
+ * @pre One of the @ref histogram_config functions has been
+ *      successfully at least once, so the number and size
+ *      of bins are known.
+ */
+uint32_t histogram_get_bin_count(const histogram_t *h, uint32_t bin_num);
+
+
+/** @name Total Sample Count
+ *
+ * These functions return the total number of samples accumulated
+ * in the histogram.  The total is computed by summing
+ * @c above_count, @c below_count, and all histogram bins.
+ *
+ * The operation is O(num_bins).
+ *
+ * @{
+ */
+/** @brief Returns the total sample count as a 32-bit value.
+ *
+ * If the true total exceeds @c UINT32_MAX, the returned value
+ * saturates at @c UINT32_MAX.
+ */
+uint32_t histogram_get_total_32(const histogram_t *h);
+
+
+/** @brief Returns the total sample count as a 64-bit value.
+ */
+uint64_t histogram_get_total_64(const histogram_t *h);
+
+/** @} */
 
 #endif // HISTOGRAM_H

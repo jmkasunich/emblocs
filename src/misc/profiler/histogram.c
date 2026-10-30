@@ -14,18 +14,16 @@ void histogram_set_buffer(histogram_t *h, void *buffer, size_t buf_len)
     h->buffer = buffer;
     h->buf_len = buf_len;
     h->state = HISTOGRAM_STATE_INIT;
-    return true;
 }
 
 void histogram_set_counter_width(histogram_t *h, histogram_counter_width_t width)
 {
     assert(h != NULL);
     assert( ( width == HISTOGRAM_COUNT_U8 ) ||
-            ( width != HISTOGRAM_COUNT_U16 )  ||
-            ( width != HISTOGRAM_COUNT_U32 ) );
+            ( width == HISTOGRAM_COUNT_U16 )  ||
+            ( width == HISTOGRAM_COUNT_U32 ) );
     h->counter_width = width;
     h->state = HISTOGRAM_STATE_INIT;
-    return true;
 }
 
 bool histogram_set_range_u32(histogram_t *h, uint32_t bin_base, uint32_t bin_width)
@@ -114,13 +112,29 @@ void histogram_reset_counts(histogram_t *h)
     assert( h->buffer != NULL );
     assert( h->buf_len != 0 );
     memset(h->buffer, 0, h->buf_len);
-    h->total_count = 0;
     h->above_count = 0;
     h->below_count = 0;
     if ( h->state == HISTOGRAM_STATE_FULL ) {
         h->state = HISTOGRAM_STATE_CAN_COUNT;
     }
-    return true;
+}
+
+static void increment_above_counter(histogram_t *h)
+{
+    if ( h->above_count  < UINT32_MAX ) {
+        h->above_count++;
+    } else {
+        h->state = HISTOGRAM_STATE_FULL;
+    }
+}
+
+static void increment_below_counter(histogram_t *h)
+{
+    if ( h->below_count  < UINT32_MAX ) {
+        h->below_count++;
+    } else {
+        h->state = HISTOGRAM_STATE_FULL;
+    }
 }
 
 static void increment_bin_counter(histogram_t *h, uint32_t bin_num)
@@ -146,11 +160,15 @@ static void increment_bin_counter(histogram_t *h, uint32_t bin_num)
         }
         case HISTOGRAM_COUNT_U32: {
             uint32_t *buf = (uint32_t *)(h->buffer);
-            // total_count will hit FULL before any bin counter
-            buf[bin_num]++;
+            if ( buf[bin_num] < UINT32_MAX ) {
+                buf[bin_num]++;
+            } else {
+                h->state = HISTOGRAM_STATE_FULL;
+            }
             break;
         }
         default: {
+            assert(0);
             break;
         }
     }
@@ -165,18 +183,12 @@ void histogram_count_value_u32(histogram_t *h, uint32_t value)
     if ( h->state != HISTOGRAM_STATE_CAN_COUNT ) {
         return;
     }
-    if ( h->total_count  < UINT32_MAX ) {
-        h->total_count++;
-    } else {
-        h->state = HISTOGRAM_STATE_FULL;
-        return;
-    }
     if ( value > h->bin_end.u32 ) {
-        h->above_count++;
+        increment_above_counter(h);
         return;
     }
     if ( value < h->bin_start.u32 ) {
-        h->below_count++;
+        increment_below_counter(h);
         return;
     }
     bin_num = (value - h->bin_start.u32) / h->bin_width.u32;
@@ -192,18 +204,12 @@ void histogram_count_value_s32(histogram_t *h, int32_t value)
     if ( h->state != HISTOGRAM_STATE_CAN_COUNT ) {
         return;
     }
-    if ( h->total_count  < UINT32_MAX ) {
-        h->total_count++;
-    } else {
-        h->state = HISTOGRAM_STATE_FULL;
-        return;
-    }
     if (value > h->bin_end.s32) {
-        h->above_count++;
+        increment_above_counter(h);
         return;
     }
     if (value < h->bin_start.s32) {
-        h->below_count++;
+        increment_below_counter(h);
         return;
     }
     bin_num = (((uint32_t)value) - ((uint32_t)h->bin_start.s32)) /
@@ -220,29 +226,94 @@ void histogram_count_value_f32(histogram_t *h, float value)
     if ( h->state != HISTOGRAM_STATE_CAN_COUNT ) {
         return;
     }
-    if ( h->total_count  < UINT32_MAX ) {
-        h->total_count++;
-    } else {
-        h->state = HISTOGRAM_STATE_FULL;
-        return;
-    }
     if ( !isfinite(value) ) {
         // don't count infinities or NaNs
         return;
     }
     if (value >= h->bin_end.f32) {
-        h->above_count++;
+        increment_above_counter(h);
         return;
     }
     if  (value < h->bin_start.f32) {
-        h->below_count++;
+        increment_below_counter(h);
         return;
     }
     bin_num = (value - h->bin_start.f32) * h->reciprocal_width;
     // catch any rounding errors
     if (bin_num >= h->num_bins) {
-        h->above_count++;
+        increment_above_counter(h);
         return;
     }
     increment_bin_counter(h, bin_num);
+}
+
+
+static uint32_t get_bin_count(const histogram_t *h, uint32_t bin_num)
+{
+    switch (h->counter_width) {
+        case HISTOGRAM_COUNT_U8:
+            return ((uint8_t *)h->buffer)[bin_num];
+        case HISTOGRAM_COUNT_U16:
+            return ((uint16_t *)h->buffer)[bin_num];
+        case HISTOGRAM_COUNT_U32:
+            return ((uint32_t *)h->buffer)[bin_num];
+        default:
+            assert(0);
+            return 0;
+    }
+}
+
+
+uint32_t histogram_get_bin_count(const histogram_t *h, uint32_t bin_num)
+{
+    assert(h != NULL);
+    assert(h->num_bins != 0);
+    assert(h->buffer != NULL);
+    if ( bin_num < h->num_bins ) {
+        return get_bin_count(h, bin_num);
+    } else {
+        return 0;
+    }
+}
+
+
+uint32_t histogram_get_total_32(const histogram_t *h)
+{
+    /* Track remaining capacity below UINT32_MAX. Subtracting only
+        * when the term fits means nothing can wrap; once a term does
+        * not fit, the sum saturates and the rest is skipped. */
+    uint32_t remaining = UINT32_MAX;
+    uint32_t bin_count;
+
+    assert(h != NULL);
+    assert(h->buffer != NULL);
+    remaining -= h->above_count;
+    if ( remaining >= h->below_count ) {
+        remaining -= h->below_count;
+    } else {
+        remaining = 0;
+    }
+    for ( uint32_t n = 0 ; n < h->num_bins ; n++ ) {
+        bin_count = get_bin_count(h, n);
+        if ( remaining >= bin_count ) {
+            remaining -= bin_count;
+        } else {
+            remaining = 0;
+            break;
+        }
+    }
+    return UINT32_MAX - remaining;
+}
+
+
+uint64_t histogram_get_total_64(const histogram_t *h)
+{
+    uint64_t total = h->above_count + h->below_count;
+
+    assert(h != NULL);
+    assert(h->buffer != NULL);
+    for ( uint32_t n = 0 ; n < h->num_bins ; n++ ) {
+        total += get_bin_count(h, n);
+    }
+    return total;
 }
