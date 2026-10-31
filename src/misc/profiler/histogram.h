@@ -59,8 +59,8 @@ typedef struct {
     histogram_value_type_t val_type;         /**< type of values we are counting */
     histogram_counter_width_t counter_width; /**< width of counters: 1, 2, or 4 bytes */
     histogram_state_t state;                 /**< current state */
-    histogram_value_t bin_start;             /**< first bin starts here */
-    histogram_value_t bin_end;               /**< last bin ends here */
+    histogram_value_t range_start;           /**< first value in first bin */
+    histogram_value_t range_end;             /**< last value in last bin */
     histogram_value_t bin_width;             /**< width of each bin */
     uint32_t num_bins;                       /**< number of bins in buffer */
     float reciprocal_width;                  /**< speedup for f32 */
@@ -102,8 +102,8 @@ void histogram_set_counter_width(histogram_t *h, histogram_counter_width_t width
 /** @defgroup histogram_config Histogram Configuration
  *
  * These functions configure the mapping between histogram bins
- * and actual values.  The first bin starts at @p bin_base, the
- * second bin starts at @p bin_base + @p bin_width, and so on.
+ * and actual values.  The first bin starts at @p range_start, the
+ * second bin starts at @p range_start + @p bin_width, and so on.
  *
  * @p bin_width must be positive and non-zero.
  *
@@ -120,9 +120,9 @@ void histogram_set_counter_width(histogram_t *h, histogram_counter_width_t width
  * All return @c true on success, @c false if arguments are invalid.
  * @{
  */
-bool histogram_set_range_u32(histogram_t *h, uint32_t bin_base, uint32_t bin_width);
-bool histogram_set_range_s32(histogram_t *h, int32_t bin_base, int32_t bin_width);
-bool histogram_set_range_f32(histogram_t *h, float bin_base, float bin_width);
+bool histogram_set_range_u32(histogram_t *h, uint32_t range_start, uint32_t bin_width);
+bool histogram_set_range_s32(histogram_t *h, int32_t range_start, int32_t bin_width);
+bool histogram_set_range_f32(histogram_t *h, float range_start, float bin_width);
 /** @} */
 
 

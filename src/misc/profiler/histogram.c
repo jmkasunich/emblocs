@@ -6,7 +6,7 @@
 #include <assert.h>
 
 _Static_assert(HISTOGRAM_STATE_INIT == 0,
-               "HISTOGRAM_STATE_INIT must be zero so a empty struct is in the proper state");
+               "HISTOGRAM_STATE_INIT must be zero so an empty struct is in the proper state");
 
 void histogram_set_buffer(histogram_t *h, void *buffer, size_t buf_len)
 {
@@ -30,7 +30,7 @@ void histogram_set_counter_width(histogram_t *h, histogram_counter_width_t width
     h->state = HISTOGRAM_STATE_INIT;
 }
 
-bool histogram_set_range_u32(histogram_t *h, uint32_t bin_base, uint32_t bin_width)
+bool histogram_set_range_u32(histogram_t *h, uint32_t range_start, uint32_t bin_width)
 {
     assert(h != NULL);
     assert( h->buffer != NULL );
@@ -40,13 +40,13 @@ bool histogram_set_range_u32(histogram_t *h, uint32_t bin_base, uint32_t bin_wid
         return false;
     }
     h->num_bins = h->buf_len / h->counter_width;
-    h->bin_start.u32 = bin_base;
+    h->range_start.u32 = range_start;
     h->bin_width.u32 = bin_width;
-    uint64_t end = (uint64_t)bin_base + (uint64_t)bin_width * h->num_bins - 1;
+    uint64_t end = (uint64_t)range_start + (uint64_t)bin_width * h->num_bins - 1;
     if ( end > UINT32_MAX ) {
-        h->bin_end.u32 = UINT32_MAX;
+        h->range_end.u32 = UINT32_MAX;
     } else {
-        h->bin_end.u32 = (uint32_t)end;
+        h->range_end.u32 = (uint32_t)end;
     }
     h->val_type = HISTOGRAM_VALUE_U32;
     histogram_reset_counts(h);
@@ -54,7 +54,7 @@ bool histogram_set_range_u32(histogram_t *h, uint32_t bin_base, uint32_t bin_wid
     return true;
 }
 
-bool histogram_set_range_s32(histogram_t *h, int32_t bin_base, int32_t bin_width)
+bool histogram_set_range_s32(histogram_t *h, int32_t range_start, int32_t bin_width)
 {
     assert(h != NULL);
     assert( h->buffer != NULL );
@@ -64,13 +64,13 @@ bool histogram_set_range_s32(histogram_t *h, int32_t bin_base, int32_t bin_width
         return false;
     }
     h->num_bins = h->buf_len / h->counter_width;
-    h->bin_start.s32 = bin_base;
+    h->range_start.s32 = range_start;
     h->bin_width.s32 = bin_width;
-    int64_t end = (int64_t)bin_base + (int64_t)bin_width * h->num_bins - 1;
+    int64_t end = (int64_t)range_start + (int64_t)bin_width * h->num_bins - 1;
     if (end > INT32_MAX) {
-        h->bin_end.s32 = INT32_MAX;
+        h->range_end.s32 = INT32_MAX;
     } else {
-        h->bin_end.s32 = (int32_t)end;
+        h->range_end.s32 = (int32_t)end;
     }
     h->val_type = HISTOGRAM_VALUE_S32;
     histogram_reset_counts(h);
@@ -79,13 +79,13 @@ bool histogram_set_range_s32(histogram_t *h, int32_t bin_base, int32_t bin_width
 }
 
 
-bool histogram_set_range_f32(histogram_t *h, float bin_base, float bin_width)
+bool histogram_set_range_f32(histogram_t *h, float range_start, float bin_width)
 {
     assert(h != NULL);
     assert( h->buffer != NULL );
     assert( h->buf_len != 0 );
     assert( h->counter_width != 0 );
-    if ( !(fabsf(bin_base) <= 1.5e38f) ) {
+    if ( !(fabsf(range_start) <= 1.5e38f) ) {
         // reject NaN, infinity, and outside +/- 1.5e38
         return false;
     }
@@ -94,14 +94,14 @@ bool histogram_set_range_f32(histogram_t *h, float bin_base, float bin_width)
         return false;
     }
     uint32_t num_bins = h->buf_len / h->counter_width;
-    float end = bin_base + bin_width * (float)num_bins;
+    float end = range_start + bin_width * (float)num_bins;
     if ( end > 1.5e38f ) {
         return false;
     }
     h->num_bins = num_bins;
-    h->bin_start.f32 = bin_base;
+    h->range_start.f32 = range_start;
     h->bin_width.f32 = bin_width;
-    h->bin_end.f32 = nextafterf(end, -INFINITY);
+    h->range_end.f32 = nextafterf(end, -INFINITY);
     h->reciprocal_width = 1.0f / bin_width;
     h->val_type = HISTOGRAM_VALUE_F32;
     histogram_reset_counts(h);
@@ -186,15 +186,15 @@ void histogram_count_value_u32(histogram_t *h, uint32_t value)
     if ( h->state != HISTOGRAM_STATE_CAN_COUNT ) {
         return;
     }
-    if ( value > h->bin_end.u32 ) {
+    if ( value > h->range_end.u32 ) {
         increment_above_counter(h);
         return;
     }
-    if ( value < h->bin_start.u32 ) {
+    if ( value < h->range_start.u32 ) {
         increment_below_counter(h);
         return;
     }
-    bin_num = (value - h->bin_start.u32) / h->bin_width.u32;
+    bin_num = (value - h->range_start.u32) / h->bin_width.u32;
     increment_bin_counter(h, bin_num);
 }
 
@@ -207,15 +207,15 @@ void histogram_count_value_s32(histogram_t *h, int32_t value)
     if ( h->state != HISTOGRAM_STATE_CAN_COUNT ) {
         return;
     }
-    if (value > h->bin_end.s32) {
+    if (value > h->range_end.s32) {
         increment_above_counter(h);
         return;
     }
-    if (value < h->bin_start.s32) {
+    if (value < h->range_start.s32) {
         increment_below_counter(h);
         return;
     }
-    bin_num = (((uint32_t)value) - ((uint32_t)h->bin_start.s32)) /
+    bin_num = (((uint32_t)value) - ((uint32_t)h->range_start.s32)) /
                 ((uint32_t)h->bin_width.s32);
     increment_bin_counter(h, bin_num);
 }
@@ -233,20 +233,19 @@ void histogram_count_value_f32(histogram_t *h, float value)
         // don't count infinities or NaNs
         return;
     }
-    if (value > h->bin_end.f32) {
+    if (value > h->range_end.f32) {
         increment_above_counter(h);
         return;
     }
-    if  (value < h->bin_start.f32) {
+    if  (value < h->range_start.f32) {
         increment_below_counter(h);
         return;
     }
     // overflow-safe because we limit bin range to +/- 1.5e38
-    bin_num = (value - h->bin_start.f32) * h->reciprocal_width;
-    // catch any rounding errors
+    bin_num = (value - h->range_start.f32) * h->reciprocal_width;
+    // rounding can push the top value to num_bins
     if (bin_num >= h->num_bins) {
-        increment_above_counter(h);
-        return;
+        bin_num = h->num_bins - 1;
     }
     increment_bin_counter(h, bin_num);
 }
