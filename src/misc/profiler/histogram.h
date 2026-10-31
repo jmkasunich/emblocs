@@ -54,9 +54,6 @@ typedef enum __attribute__((__packed__)) {
  *
  * All structure fields should be considered read-only.
  * Use API functions to configure/change the structure.
- *
- * For u32 and s32, @c bin_end is the last value inside the last
- * bin.  For float, it is the first value outside the last bin.
  */
 typedef struct {
     histogram_value_type_t val_type;         /**< type of values we are counting */
@@ -110,13 +107,17 @@ void histogram_set_counter_width(histogram_t *h, histogram_counter_width_t width
  *
  * @p bin_width must be positive and non-zero.
  *
+ * For the floating point version, all bins must fall inside
+ * the range -1.5e38 to +1.5e38.  This restriction avoids some
+ * subtle bugs and is unlikely to impact real applications.
+ *
  * If successful, calls @ref histogram_reset_counts before returning.
  *
  * @pre @ref histogram_set_buffer and @ref histogram_set_counter_width
  *   have been called successfully at least once, so @c num_bins
  *   can be calculated.
  *
- * All return @c true on success, @c false if @p bin_width is invalid.
+ * All return @c true on success, @c false if arguments are invalid.
  * @{
  */
 bool histogram_set_range_u32(histogram_t *h, uint32_t bin_base, uint32_t bin_width);

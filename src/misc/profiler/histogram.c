@@ -81,32 +81,28 @@ bool histogram_set_range_s32(histogram_t *h, int32_t bin_base, int32_t bin_width
 
 bool histogram_set_range_f32(histogram_t *h, float bin_base, float bin_width)
 {
-    float reciprocal_width;
-
     assert(h != NULL);
     assert( h->buffer != NULL );
     assert( h->buf_len != 0 );
     assert( h->counter_width != 0 );
-    if ( !isfinite(bin_base) ) {
+    if ( !(fabsf(bin_base) <= 1.5e38f) ) {
+        // reject NaN, infinity, and outside +/- 1.5e38
         return false;
     }
-    if ( !(bin_width > 0.0f) ) {
+    if ( !( bin_width >= FLT_MIN ) ) {
+        // reject NaN, zero, negative, subnormal
         return false;
     }
-    reciprocal_width = 1.0f / bin_width;
-    if ( !isfinite(reciprocal_width) ) {
+    uint32_t num_bins = h->buf_len / h->counter_width;
+    float end = bin_base + bin_width * (float)num_bins;
+    if ( end > 1.5e38f ) {
         return false;
     }
-    h->num_bins = h->buf_len / h->counter_width;
+    h->num_bins = num_bins;
     h->bin_start.f32 = bin_base;
     h->bin_width.f32 = bin_width;
-    h->reciprocal_width = reciprocal_width;
-    double end = (double)bin_base + (double)bin_width * h->num_bins;
-    if (end > FLT_MAX) {
-        h->bin_end.f32 = FLT_MAX;
-    } else {
-        h->bin_end.f32 = (float)end;
-    }
+    h->bin_end.f32 = nextafterf(end, -INFINITY);
+    h->reciprocal_width = 1.0f / bin_width;
     h->val_type = HISTOGRAM_VALUE_F32;
     histogram_reset_counts(h);
     h->state = HISTOGRAM_STATE_CAN_COUNT;
@@ -237,7 +233,7 @@ void histogram_count_value_f32(histogram_t *h, float value)
         // don't count infinities or NaNs
         return;
     }
-    if (value >= h->bin_end.f32) {
+    if (value > h->bin_end.f32) {
         increment_above_counter(h);
         return;
     }
@@ -245,6 +241,7 @@ void histogram_count_value_f32(histogram_t *h, float value)
         increment_below_counter(h);
         return;
     }
+    // overflow-safe because we limit bin range to +/- 1.5e38
     bin_num = (value - h->bin_start.f32) * h->reciprocal_width;
     // catch any rounding errors
     if (bin_num >= h->num_bins) {
