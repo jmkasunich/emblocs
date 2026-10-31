@@ -5,6 +5,9 @@
 #include <string.h>
 #include <assert.h>
 
+_Static_assert(HISTOGRAM_STATE_INIT == 0,
+               "HISTOGRAM_STATE_INIT must be zero so a empty struct is in the proper state");
+
 void histogram_set_buffer(histogram_t *h, void *buffer, size_t buf_len)
 {
     assert(h != NULL);

@@ -13,10 +13,10 @@
 /* Width in bytes of each in-range bin counter: 1, 2, or 4.
  * Wider counters hold larger counts but use more RAM.
  */
-#define PROFILER_COUNT_SIZE 2
+#define PROFILER_COUNTER_WIDTH 2
 
 /* Number of histogram bins. More bins give finer resolution
- * but use more RAM. Must be at least 4 and at most 0xFFFFFF.
+ * but use more RAM. Must be at least 8 and at most 0xFFFFFF.
  */
 #define PROFILER_NUM_BINS 256
 

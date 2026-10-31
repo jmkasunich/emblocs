@@ -4,19 +4,18 @@
 /* this header is included in both C and assembly files,
    so it contains only preprocessor directives. */
 
-/* state names */
-#define PROFILER_RESET      0
-#define PROFILER_READY      1
-#define PROFILER_RUNNING    2
-#define PROFILER_FULL       3
+/* state name - this must match histogram_state_t enum,
+   and is checked by a static assert in profiler.c */
+#define PROFILER_STATE_FULL       2
 
-/* structure member offsets */
-#define PROFILER_STATE_OFFSET            4
-#define PROFILER_SHIFT_COUNT_OFFSET      5
-#define PROFILER_PACKED_VALS_OFFSET      8
-#define PROFILER_MAGIC_NUMBER_OFFSET     12
-#define PROFILER_ABOVE_COUNT_OFFSET      16
-#define PROFILER_BELOW_COUNT_OFFSET      20
-#define PROFILER_BINS_OFFSET             24
+/* structure member offsets - these must match profile_t
+   and are checked by static asserts in profiler.c */
+#define PROFILER_STATE_OFFSET            2
+#define PROFILER_SHIFT_COUNT_OFFSET      40
+#define PROFILER_PACKED_VALS_OFFSET      44
+#define PROFILER_MAGIC_NUMBER_OFFSET     48
+#define PROFILER_ABOVE_COUNT_OFFSET      24
+#define PROFILER_BELOW_COUNT_OFFSET      28
+#define PROFILER_BINS_OFFSET             52
 
 #endif /* PROFILER_PRIV_H */

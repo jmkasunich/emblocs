@@ -20,7 +20,7 @@
         #include "ports/profiler_stub_rv32.S"
 
     #else
-        #error "unsupported architecture"
+        #error "unsupported architecture, write a sampler or stub and add it to profiler_sampler.S"
 
     #endif  // stub selection
 #endif  // sampler selection
