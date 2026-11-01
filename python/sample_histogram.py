@@ -1,0 +1,188 @@
+import math
+import sys
+from collections import deque
+from histogram import Histogram
+
+class SampleHistogram:
+    def __init__(self, *, range_start=None, bin_width=None,
+                 range_end=None, num_bins=None, window_size=None):
+        self.fifo = deque()
+        self.window_size = None
+        self.set_range(range_start = range_start, bin_width = bin_width,
+                       range_end = range_end, num_bins = num_bins)
+        self.set_window_size(window_size)
+
+    def set_range(self, *, range_start=None, bin_width=None, range_end=None, num_bins=None):
+        """Set the range and clear all counts.  Give exactly three of the four."""
+        given = 0
+        value_type = int
+        # helper for input validation
+        def _check_value(name, value):
+            nonlocal value_type, given
+            if isinstance(value, float):
+                value_type = float
+            elif not isinstance(value, int):
+                raise TypeError(f"{name} must be an int or float")
+            given += 1
+        # validate inputs
+        if range_start is not None:
+            _check_value("range_start", range_start)
+        if range_end is not None:
+            _check_value("range_end", range_end)
+        if bin_width is not None:
+            _check_value("bin_width", bin_width)
+            if bin_width <= 0:
+                raise ValueError("bin_width must be positive")
+        if num_bins is not None:
+            if not isinstance(num_bins, int):
+                raise TypeError("num_bins must be an integer")
+            if num_bins < 1:
+                raise ValueError("num_bins must be at least 1")
+            given += 1
+        if range_start is not None and range_end is not None:
+            if not range_end > range_start:
+                raise ValueError("range_end must be greater than range_start")
+        if given != 3:
+            raise TypeError("Must provide exactly three of 'range_start', "
+                             "'range_end', 'bin_width' and 'num_bins'")
+        # compute the missing input from the other three
+        if range_start is None:
+            if value_type is int:
+                range_start = range_end - bin_width * num_bins + 1
+            else:
+                # range_start must be inside the range
+                range_start = math.nextafter(range_end - bin_width * num_bins, math.inf)
+        elif range_end is None:
+            if value_type is int:
+                range_end = range_start + bin_width * num_bins - 1
+            else:
+                # range_end must be inside the range
+                range_end = math.nextafter(range_start + bin_width * num_bins, -math.inf)
+        elif bin_width is None:
+            if value_type is int:
+                # ceiling division
+                span = range_end - range_start + 1
+                bin_width = -(-span // num_bins)
+                # recompute end since bin_width might be rounded up
+                range_end = range_start + bin_width * num_bins - 1
+            else:
+                span = range_end - range_start
+                # compute bin width so num_bins fit in the desired span
+                bin_width = span / num_bins
+        elif num_bins is None:
+            if value_type is int:
+                # ceiling division
+                span = range_end - range_start + 1
+                num_bins = -(-span // bin_width)
+                # recompute end since num_bins might be rounded up
+                range_end = range_start + bin_width * num_bins - 1
+            else:
+                # ceiling division
+                span = range_end - range_start
+                num_bins = math.ceil(span / bin_width)
+                # check for rounding impact
+                if (num_bins - 1) * bin_width >= span:
+                    num_bins -= 1
+                # recompute bin width so num_bins fit in the desired span
+                bin_width = span / num_bins
+        # all four are now known
+        if num_bins < 2:
+            raise ValueError("histogram must have at least 2 bins")
+        if value_type is float:
+            range_start = float(range_start)
+            range_end   = float(range_end)
+            if bin_width < sys.float_info.min:
+                raise ValueError(f"bin_width too small: {bin_width}")
+            bin_width   = float(bin_width)
+        self.value_type = value_type
+        self.range_start = range_start
+        self.bin_width = bin_width
+        self.range_end = range_end
+        self.num_bins = num_bins
+        self.reset_counts()
+
+    def reset_counts(self):
+        self.counts = [0] * self.num_bins
+        self.fifo.clear()
+        self.above_count = 0
+        self.below_count = 0
+
+    def _remove_oldest(self, n=1):
+        """Remove the n oldest windowed samples from the fifo and their counters."""
+        for _ in range(n):
+            old = self.fifo.popleft()
+            if old == "below":
+                self.below_count -= 1
+            elif old == "above":
+                self.above_count -= 1
+            else:
+                self.counts[old] -= 1
+
+    def count_sample(self, value):
+        if not isinstance(value, self.value_type):
+            raise TypeError("bad sample type")
+        if self.value_type is float and not math.isfinite(value):
+            # ignore NaN, infinity
+            return
+        # classify the symbol and update the histogram
+        if value < self.range_start:
+            self.below_count+= 1
+            bin_num = "below"
+        elif value > self.range_end:
+            self.above_count+= 1
+            bin_num = "above"
+        else:
+            if self.value_type is int:
+                bin_num = (value - self.range_start) // self.bin_width
+            else:
+                bin_num = int((value - self.range_start) / self.bin_width)
+                if bin_num >= self.num_bins:
+                    bin_num = self.num_bins -1
+            self.counts[bin_num] += 1
+        # manage windowed histogram data
+        if self.window_size is not None:
+            self.fifo.append(bin_num)
+            if len(self.fifo) > self.window_size:
+                self._remove_oldest()
+
+    def set_window_size(self, window_size):
+        if window_size is None:
+            # switching from windowed mode, discard old samples
+            self.window_size = None
+            self.fifo.clear()
+            return
+        if not isinstance(window_size, int):
+            raise TypeError("window size must be an integer")
+        if window_size < 10:
+            raise ValueError("window size must be at least 10")
+        if self.window_size is None:
+            # switching to windowed mode, must clear old histogram
+            self.reset_counts()
+        excess = len(self.fifo) - window_size
+        if excess > 0:
+            # shrinking the window
+            self._remove_oldest(excess)
+        self.window_size = window_size
+
+    def get_snapshot(self):
+        """Return an immutable Histogram copy of the current counts and range.
+        The snapshot is a copy taken at the time of the call.  Later samples
+        do not change it.
+        """
+        return Histogram(
+            value_type=self.value_type,
+            range_start=self.range_start,
+            bin_width=self.bin_width,
+            range_end=self.range_end,
+            counts=tuple(self.counts),
+            above_count=self.above_count,
+            below_count=self.below_count,
+        )
+
+    def get_bin_count(self, bin_num):
+        if bin_num < 0 or bin_num >= self.num_bins:
+            return 0
+        return self.counts[bin_num]
+
+    def get_total(self):
+        return self.above_count + self.below_count + sum(self.counts)
