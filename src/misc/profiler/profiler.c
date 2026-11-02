@@ -58,22 +58,22 @@ _Static_assert(PROFILER_BINS_OFFSET          == offsetof(profile_t, bins),
 #define COUNT_MAX ((profiler_count_t)0xFFFFFFFF)
 
 
-void profiler_bin_sample(uint32_t pc); // silence -Wmissing-prototypes
+void profiler_count_sample(uint32_t pc); // silence -Wmissing-prototypes
 
 /*
- * C sample binning function.  Used when no target-specific assembly
+ * C sample counting function.  Used when no target-specific assembly
  * language sampler is available.  A short assembly stub grabs the PC
  * and calls this function which does the actual work of updating bins.
  *
  * Global instead of static because the stub calls it by name, but not
  * part of the public API defined in profiler.h.
  */
-void profiler_bin_sample(uint32_t pc)
+void profiler_count_sample(uint32_t pc)
 {
     profile_t *p = &profile;
     uint32_t bin;
 
-    if ( pc < p->histo.bin_start.u32 ) {
+    if ( pc < p->histo.range_min.u32 ) {
         if ( p->histo.below_count == UINT32_MAX ) {
             profiler_irq_disable();
             p->histo.state = HISTOGRAM_STATE_FULL;
@@ -82,7 +82,7 @@ void profiler_bin_sample(uint32_t pc)
         }
         return;
     }
-    bin = (pc - p->histo.bin_start.u32) >> p->shift_count;
+    bin = (pc - p->histo.range_min.u32) >> p->shift_count;
     if ( bin >= PROFILER_NUM_BINS ) {
         if ( p->histo.above_count == UINT32_MAX ) {
             profiler_irq_disable();
@@ -100,15 +100,15 @@ void profiler_bin_sample(uint32_t pc)
     }
 }
 
-bool profiler_init(uint32_t base_addr, uint32_t bin_width)
+bool profiler_init(uint32_t range_min, uint32_t bin_width)
 {
     // test for between 2 and 2^30 and a power of 2
     if ( ( bin_width < 2 ) || ( bin_width > (1UL<<30)) ||
          ( ( bin_width & ( bin_width - 1 ) ) != 0 ) ) {
         return false;
     }
-    // test for base_addr a multiple of bin_width
-    if ( (base_addr % bin_width) != 0 ) {
+    // test for range_min a multiple of bin_width
+    if ( (range_min % bin_width) != 0 ) {
         return false;
     }
     // stop interrupt; this is idempotent, so do it regardless of state
@@ -118,7 +118,7 @@ bool profiler_init(uint32_t base_addr, uint32_t bin_width)
                          sizeof(profile.bins) );
     histogram_set_counter_width(&(profile.histo), PROFILER_COUNTER_WIDTH);
     // validated above, will not fail
-    histogram_set_range_u32(&(profile.histo), base_addr, bin_width);
+    histogram_set_range_u32(&(profile.histo), range_min, bin_width);
     // set up profiler specific stuff
     uint8_t shift_count = 0;
     while ( bin_width > 1 ) {
@@ -128,7 +128,7 @@ bool profiler_init(uint32_t base_addr, uint32_t bin_width)
     profile.shift_count = shift_count;
     // these are for optimized access by assembly language sampler ISR
     profile.packed_vals = (PROFILER_NUM_BINS << 8) | shift_count;
-    profile.magic_number = (0u - ((base_addr >> shift_count) + PROFILER_NUM_BINS));
+    profile.magic_number = (0u - ((range_min >> shift_count) + PROFILER_NUM_BINS));
     return true;
 }
 

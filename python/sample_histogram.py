@@ -4,15 +4,16 @@ from collections import deque
 from histogram import Histogram
 
 class SampleHistogram:
-    def __init__(self, *, range_start=None, bin_width=None,
-                 range_end=None, num_bins=None, window_size=None):
+    def __init__(self, *, range_min=None, range_max=None,
+                          bin_width=None, num_bins=None, window_size=None):
         self.fifo = deque()
         self.window_size = None
-        self.set_range(range_start = range_start, bin_width = bin_width,
-                       range_end = range_end, num_bins = num_bins)
+        self.set_range(range_min = range_min, range_max = range_max,
+                       bin_width = bin_width, num_bins = num_bins)
         self.set_window_size(window_size)
 
-    def set_range(self, *, range_start=None, bin_width=None, range_end=None, num_bins=None):
+    def set_range(self, *, range_min=None, range_max=None,
+                           bin_width=None, num_bins=None):
         """Set the range and clear all counts.  Give exactly three of the four."""
         given = 0
         value_type = int
@@ -25,10 +26,10 @@ class SampleHistogram:
                 raise TypeError(f"{name} must be an int or float")
             given += 1
         # validate inputs
-        if range_start is not None:
-            _check_value("range_start", range_start)
-        if range_end is not None:
-            _check_value("range_end", range_end)
+        if range_min is not None:
+            _check_value("range_min", range_min)
+        if range_max is not None:
+            _check_value("range_max", range_max)
         if bin_width is not None:
             _check_value("bin_width", bin_width)
             if not bin_width > 0:
@@ -39,46 +40,46 @@ class SampleHistogram:
             if num_bins < 1:
                 raise ValueError("num_bins must be at least 1")
             given += 1
-        if range_start is not None and range_end is not None:
-            if not range_end > range_start:
-                raise ValueError("range_end must be greater than range_start")
+        if range_min is not None and range_max is not None:
+            if not range_max > range_min:
+                raise ValueError("range_max must be greater than range_min")
         if given != 3:
-            raise TypeError("Must provide exactly three of 'range_start', "
-                             "'range_end', 'bin_width' and 'num_bins'")
+            raise TypeError("Must provide exactly three of 'range_min', "
+                             "'range_max', 'bin_width' and 'num_bins'")
         # compute the missing input from the other three
-        if range_start is None:
+        if range_min is None:
             if value_type is int:
-                range_start = range_end - bin_width * num_bins + 1
+                range_min = range_max - bin_width * num_bins + 1
             else:
-                # range_start must be inside the range
-                range_start = math.nextafter(range_end - bin_width * num_bins, math.inf)
-        elif range_end is None:
+                # range_min must be inside the range
+                range_min = math.nextafter(range_max - bin_width * num_bins, math.inf)
+        elif range_max is None:
             if value_type is int:
-                range_end = range_start + bin_width * num_bins - 1
+                range_max = range_min + bin_width * num_bins - 1
             else:
-                # range_end must be inside the range
-                range_end = math.nextafter(range_start + bin_width * num_bins, -math.inf)
+                # range_max must be inside the range
+                range_max = math.nextafter(range_min + bin_width * num_bins, -math.inf)
         elif bin_width is None:
             if value_type is int:
                 # ceiling division
-                span = range_end - range_start + 1
+                span = range_max - range_min + 1
                 bin_width = -(-span // num_bins)
                 # recompute end since bin_width might be rounded up
-                range_end = range_start + bin_width * num_bins - 1
+                range_max = range_min + bin_width * num_bins - 1
             else:
-                span = range_end - range_start
+                span = range_max - range_min
                 # compute bin width so num_bins fit in the desired span
                 bin_width = span / num_bins
         elif num_bins is None:
             if value_type is int:
                 # ceiling division
-                span = range_end - range_start + 1
+                span = range_max - range_min + 1
                 num_bins = -(-span // bin_width)
                 # recompute end since num_bins might be rounded up
-                range_end = range_start + bin_width * num_bins - 1
+                range_max = range_min + bin_width * num_bins - 1
             else:
                 # ceiling division
-                span = range_end - range_start
+                span = range_max - range_min
                 num_bins = math.ceil(span / bin_width)
                 # check for rounding impact
                 if (num_bins - 1) * bin_width >= span:
@@ -89,15 +90,15 @@ class SampleHistogram:
         if num_bins < 1:
             raise ValueError("histogram must have at least 1 bin")
         if value_type is float:
-            range_start = float(range_start)
-            range_end   = float(range_end)
+            range_min = float(range_min)
+            range_max = float(range_max)
             if bin_width < sys.float_info.min:
                 raise ValueError(f"bin_width too small: {bin_width}")
-            bin_width   = float(bin_width)
+            bin_width = float(bin_width)
         self.value_type = value_type
-        self.range_start = range_start
+        self.range_min = range_min
+        self.range_max = range_max
         self.bin_width = bin_width
-        self.range_end = range_end
         self.num_bins = num_bins
         self.reset_counts()
 
@@ -125,17 +126,17 @@ class SampleHistogram:
             # ignore NaN, infinity
             return
         # classify the symbol and update the histogram
-        if value < self.range_start:
+        if value < self.range_min:
             self.below_count+= 1
             bin_num = "below"
-        elif value > self.range_end:
+        elif value > self.range_max:
             self.above_count+= 1
             bin_num = "above"
         else:
             if self.value_type is int:
-                bin_num = (value - self.range_start) // self.bin_width
+                bin_num = (value - self.range_min) // self.bin_width
             else:
-                bin_num = int((value - self.range_start) / self.bin_width)
+                bin_num = int((value - self.range_min) / self.bin_width)
                 if bin_num >= self.num_bins:
                     bin_num = self.num_bins -1
             self.counts[bin_num] += 1
@@ -171,9 +172,9 @@ class SampleHistogram:
         """
         return Histogram(
             value_type=self.value_type,
-            bin_start=self.range_start,
+            range_min=self.range_min,
+            range_max=self.range_max,
             bin_width=self.bin_width,
-            bin_end=self.range_end,
             counts=self.counts,
             above_count=self.above_count,
             below_count=self.below_count,

@@ -82,21 +82,21 @@
  *        build a histogram.
  *
  * The histogram has @c PROFILER_NUM_BINS bins.  Each bin covers
- * @p bin_width bytes of address space, starting at @p base_address.
+ * @p bin_width bytes of address space, starting at @p range_min.
  * Each bin counts the samples that fall inside its address range.
  *
- * @param[in] base_address  Start of the histogram address range.
- *                          Must be a multiple of @p bin_width.
- * @param[in] bin_width     Bytes covered by each bin.  Must be a
- *                          power of 2, from 2 to 2^30 inclusive.
+ * @param[in] range_min  Start of the histogram address range.
+ *                       Must be a multiple of @p bin_width.
+ * @param[in] bin_width  Bytes covered by each bin.  Must be a
+ *                       power of 2, from 2 to 2^30 inclusive.
  *
- * @p base_address and @p bin_width are validated first; invalid
+ * @p range_min and @p bin_width are validated first; invalid
  * values return false and change nothing.  Otherwise, if the
  * profiler is sampling, it is stopped.  Then it is reconfigured
  * with the new parameters, all counters are cleared, and it
  * returns true.
  */
-bool profiler_init(uint32_t base_address, uint32_t bin_width);
+bool profiler_init(uint32_t range_min, uint32_t bin_width);
 
 /**
  * @brief Resets the profiler counters without changing bin width

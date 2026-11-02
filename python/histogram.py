@@ -15,10 +15,9 @@ class Histogram:
     changes to the source never affect a Histogram.
     """
     value_type: type   # int or float
-    bin_start: HistogramValue
+    range_min: HistogramValue
+    range_max: HistogramValue
     bin_width: HistogramValue
-    bin_end: HistogramValue        # last value inside the last bin (u32/s32),
-                                   # first value outside it (f32)
     counts: Sequence[int]          # one int per bin
     above_count: int = 0
     below_count: int = 0
@@ -27,7 +26,7 @@ class Histogram:
     def __post_init__(self):
         if self.value_type not in ( int, float ):
             raise TypeError(f"value_type must be int or float, not {self.value_type!r}")
-        for name in ("bin_start", "bin_width", "bin_end"):
+        for name in ("range_min", "range_max", "bin_width"):
             if not isinstance(getattr(self, name), self.value_type):
                 raise TypeError(f"{name} must be {self.value_type.__name__}")
         if not isinstance(self.counts, tuple):
@@ -66,11 +65,11 @@ class Histogram:
 
     def get_bin_edges(self) -> list:
         """num_bins + 1 edges: start of each bin, then the end of the last bin."""
-        edges = [self.bin_start + i * self.bin_width for i in range(self.num_bins)]
-        edges.append(self.bin_end)
+        edges = [self.range_min + i * self.bin_width for i in range(self.num_bins)]
+        edges.append(self.range_max)
         return edges
 
     def get_bin_centers(self) -> list:
         """Center of each bin.  Centers are never needed by the C API."""
         half = self.bin_width / 2
-        return [self.bin_start + half + i * self.bin_width for i in range(self.num_bins)]
+        return [self.range_min + half + i * self.bin_width for i in range(self.num_bins)]
