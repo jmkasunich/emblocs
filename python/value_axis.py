@@ -65,17 +65,20 @@ class ValueAxis:
         self.major_spacing = None
         self.value_span = None
         self.pixel_span = None
-        self.conv_stale = False
-        self.divs_stale = False
+        self._conv_stale = False
+        self._div_steps_stale = False
+        self._div_values_stale = False
         # derived and cached fields set by _calculate_xxx():
-        #  p2v_mul, p2v_add, v2p_mul, v2p_add, major_divs, minor_divs
+        #  p2v_mul, p2v_add, v2p_mul, v2p_add,
+        #  major_step, minor_step, _major_values, _minor_values
         # validate and save data
         self._set_range(value_min, value_max)
         self._set_location(pixel_min, pixel_max)
         self._set_major_spacing(major_spacing)
         # compute cached data
         self._calculate_conversion()
-        self._calculate_divisions(self.major_spacing)
+        self._calculate_div_steps(self.major_spacing)
+        self._calculate_div_values()
 
     def p2v(self, pixel) -> float:
         """ Takes a pixel, returns the corresponding value on the axis
@@ -94,6 +97,43 @@ class ValueAxis:
         """
         return value * self.v2p_mul + self.v2p_add
 
+    def get_major_values(self) -> list:
+        """ Returns a list of values for major ticks and/or labels
+        Computed on demand, then cached
+        """
+        if self._div_values_stale:
+            self._calculate_div_values()
+        return self._major_values
+
+    def get_minor_values(self) -> list:
+        """ Returns a list of values for minor ticks
+        Computed on demand, then cached
+        """
+        if self._div_values_stale:
+            self._calculate_div_values()
+        return self._minor_values
+
+    def _dirty_conv(self):
+        if not self._conv_stale:
+            self._conv_stale = True
+
+    def _dirty_divs(self):
+        if not self._div_steps_stale:
+            self._div_steps_stale = True
+        if not self._div_values_stale:
+            self._div_values_stale = True
+
+    def _refresh(self):
+        """
+        Calculates conversion and/or div steps if dirty.
+        Does not calculate div values; they are done on demand
+        """
+        # refresh cached data
+        if self._conv_stale:
+            self._calculate_conversion()
+        if self._div_steps_stale:
+            self._calculate_div_steps(self.major_spacing)
+
     def _set_range(self, value_min, value_max):
         """ helper for set_range()
         Validates and saves data, but does not drive updates.
@@ -106,10 +146,10 @@ class ValueAxis:
         if not value_span > 0:
             raise ValueError("value_max must be greater than value_min")
         # inputs are valid, check for changes
-        value_stale = ( value_min != self.value_min ) or \
-                      ( value_max != self.value_max )
-        self.divs_stale = self.divs_stale or value_stale
-        self.conv_stale = self.conv_stale or value_stale
+        if ( value_min != self.value_min ) or \
+           ( value_max != self.value_max ):
+            self._dirty_conv()
+            self._dirty_divs()
         # save new data
         self.value_min = value_min
         self.value_max = value_max
@@ -121,11 +161,7 @@ class ValueAxis:
         """
         # validate and store data
         self._set_range(value_min, value_max)
-        # refresh cached data
-        if self.conv_stale:
-            self._calculate_conversion()
-        if self.divs_stale:
-            self._calculate_divisions(self.major_spacing)
+        self._refresh()
 
     def _set_location(self, pixel_min: int, pixel_max: int):
         """ helper for set_location()
@@ -139,11 +175,11 @@ class ValueAxis:
         if pixel_span == 0:
             raise ValueError("pixel_min and pixel_max must be different")
         # inputs are valid, check for changes
-        span_stale = pixel_span != self.pixel_span
-        pixels_stale = ( pixel_min != self.pixel_min ) or \
-                       ( pixel_max != self.pixel_max )
-        self.divs_stale = self.divs_stale or span_stale
-        self.conv_stale = self.conv_stale or pixels_stale
+        if pixel_span != self.pixel_span:
+            self._dirty_divs()
+        if ( pixel_min != self.pixel_min ) or \
+           ( pixel_max != self.pixel_max ):
+            self._dirty_conv()
         # save new data
         self.pixel_min = pixel_min
         self.pixel_max = pixel_max
@@ -155,11 +191,7 @@ class ValueAxis:
         """
         # validate and store data
         self._set_location(pixel_min, pixel_max)
-        # refresh cached data
-        if self.conv_stale:
-            self._calculate_conversion()
-        if self.divs_stale:
-            self._calculate_divisions(self.major_spacing)
+        self._refresh()
 
     def _set_major_spacing(self, major_spacing):
         """ helper for set_major_spacing()
@@ -171,8 +203,8 @@ class ValueAxis:
         if major_spacing < 1:
             raise ValueError("major_spacing must be at least 1")
         # inputs are valid, check for changes
-        divs_stale = major_spacing != self.major_spacing
-        self.divs_stale = self.divs_stale or divs_stale
+        if major_spacing != self.major_spacing:
+            self._dirty_divs()
         # save new data
         self.major_spacing = major_spacing
 
@@ -181,9 +213,7 @@ class ValueAxis:
         """
         # validate and store data
         self._set_major_spacing(major_spacing)
-        # refresh cached data
-        if self.divs_stale:
-            self._calculate_divisions(self.major_spacing)
+        self._refresh()
 
     def _calculate_conversion(self):
         """ Calculate coefficients used to convert from value to pixel
@@ -193,57 +223,68 @@ class ValueAxis:
         self.p2v_add = self.value_min - (self.pixel_min * self.p2v_mul)
         self.v2p_mul = self.pixel_span / self.value_span
         self.v2p_add = self.pixel_min - (self.value_min * self.v2p_mul)
-        self.conv_stale = False
+        self._conv_stale = False
 
-    def _calculate_divisions(self, major_spacing: int):
-        """Choose tick positions for an axis.
+    def _calculate_div_steps(self, major_spacing: int):
+        """Choose "nice" tick spacings for an axis.
         'major_spacing' is the minimum distance in pixels between major ticks.
     
-        Sets self.major and self.minor.  'major' is a list of major tick
-        values, 'minor' is a list of of minor tick values; either may be
-        empty.  Tick values are of type self.value_type
+        Sets self.major_step and self.minor_step, which are used by
+        _calculate_div_values() to determine where ticks and/or labels
+        should go for a "nice" display.  self.minor_step may be None for
+        zoomed-in integer axes.
         """
-        major_list = []
-        minor_list = []
         max_labels = max(abs(self.pixel_span) // major_spacing, 1)
         if self.value_type is int:
             min_major_step = -(-self.value_span // max_labels)
-            major_step, minor_step = step_125(min_major_step)
-            major_index = -(-self.value_min // major_step)
-            major = major_index * major_step
+            self.major_step, self.minor_step = step_125(min_major_step)
+        else:
+            min_major_step = self.value_span / max_labels
+            self.major_step, self.minor_step = step_125(min_major_step)
+        self._div_values_stale = True
+        self._div_steps_stale = False
+
+    def _calculate_div_values(self):
+        """Compute tick/label positions for an axis.
+        Generates self._major_values and self._minor_values.
+        '_major_values' is a list of major tick/label values,
+        '_minor_values' is a list of minor tick values; either
+        list may be empty.  Tick values are of type self.value_type
+        """
+        major_list = []
+        minor_list = []
+        if self.value_type is int:
+            major_index = -(-self.value_min // self.major_step)
+            major = major_index * self.major_step
             while major <= self.value_max:
                 major_list.append(major)
                 major_index += 1
-                major = major_index * major_step
-            if minor_step is not None:
-                major_minor_ratio = major_step // minor_step
-                minor_index = -(-self.value_min // minor_step)
-                minor = minor_index * minor_step
+                major = major_index * self.major_step
+            if self.minor_step is not None:
+                major_minor_ratio = self.major_step // self.minor_step
+                minor_index = -(-self.value_min // self.minor_step)
+                minor = minor_index * self.minor_step
                 while minor <= self.value_max:
                     if minor_index % major_minor_ratio != 0:
                         minor_list.append(minor)
                     minor_index += 1
-                    minor = minor_index * minor_step
+                    minor = minor_index * self.minor_step
         else:
-            min_major_step = self.value_span / max_labels
-            major_step, minor_step = step_125(min_major_step)
-            major_index = math.ceil(self.value_min / major_step)
-            major = major_index * major_step
+            major_index = math.ceil(self.value_min / self.major_step)
+            major = major_index * self.major_step
             while major <= self.value_max:
                 major_list.append(major)
                 major_index += 1
-                major = major_index * major_step
-            major_minor_ratio = round(major_step / minor_step)
-            minor_index = math.ceil(self.value_min / minor_step)
-            minor = minor_index * minor_step
+                major = major_index * self.major_step
+            major_minor_ratio = round(self.major_step / self.minor_step)
+            minor_index = math.ceil(self.value_min / self.minor_step)
+            minor = minor_index * self.minor_step
             while minor <= self.value_max:
                 if minor_index % major_minor_ratio != 0:
                     minor_list.append(minor)
                 minor_index += 1
-                minor = minor_index * minor_step
-        self.major_step = major_step
-        self.minor_step = minor_step
-        self.major_divs = major_list
-        self.minor_divs = minor_list
-        self.divs_stale = False
+                minor = minor_index * self.minor_step
+        self._major_values = major_list
+        self._minor_values = minor_list
+        self._div_values_stale = False
 

@@ -96,11 +96,11 @@ class HistogramDisplay(tk.Frame):
         # draw axis
         self.canvas.create_line(right, top, right, bottom, fill="black")
         # draw minor ticks
-        for value in axis.minor_divs:
+        for value in axis.get_minor_values():
             y = axis.v2p(value)
             self.canvas.create_line(right-MINOR_TICK_LEN, y, right, y, fill="black")
         # draw major ticks
-        for value in axis.major_divs:
+        for value in axis.get_major_values():
             y = axis.v2p(value)
             self.canvas.create_line(right-MAJOR_TICK_LEN, y, right, y, fill="black")
             self.canvas.create_line(right, y, plot_right, y, fill="gray85")
@@ -118,11 +118,11 @@ class HistogramDisplay(tk.Frame):
         # draw axis
         self.canvas.create_line(left, top, right, top, fill="black")
         # draw minor ticks
-        for value in axis.minor_divs:
+        for value in axis.get_minor_values():
             x = axis.v2p(value)
             self.canvas.create_line(x, top, x, top+MINOR_TICK_LEN, fill="black")
         # draw major ticks
-        for value in axis.major_divs:
+        for value in axis.get_major_values():
             x = axis.v2p(value)
             self.canvas.create_line(x, top, x, top+MAJOR_TICK_LEN, fill="black")
             self.canvas.create_text(x+TICK_LABEL_SPACE, top+MAJOR_TICK_LEN+TICK_LABEL_SPACE,
