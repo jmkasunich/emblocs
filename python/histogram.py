@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Iterator, Optional, Sequence, Union
 
-
 HistogramValue = Union[int, float]
 
 @dataclass(frozen=True)
@@ -20,13 +19,13 @@ class Histogram:
     bin_width: HistogramValue
     bin_end: HistogramValue        # last value inside the last bin (u32/s32),
                                    # first value outside it (f32)
-    counts: tuple                  # one int per bin
+    counts: Sequence[int]          # one int per bin
     above_count: int = 0
     below_count: int = 0
     counter_width: Optional[int] = None   # None for host-built histograms
 
     def __post_init__(self):
-        if not self.value_type in ( int, float ):
+        if self.value_type not in ( int, float ):
             raise TypeError(f"value_type must be int or float, not {self.value_type!r}")
         for name in ("bin_start", "bin_width", "bin_end"):
             if not isinstance(getattr(self, name), self.value_type):
@@ -36,7 +35,7 @@ class Histogram:
             object.__setattr__(self, "counts", tuple(self.counts))
         if len(self.counts) == 0:
             raise ValueError("histogram must have at least one bin")
-        if self.bin_width <= 0:
+        if not self.bin_width > 0:
             raise ValueError("bin width must be positive")
         if self.counter_width is not None and self.counter_width not in (1, 2, 4):
             raise ValueError("counter width must be 1, 2, or 4 bytes")

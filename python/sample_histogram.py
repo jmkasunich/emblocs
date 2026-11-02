@@ -31,7 +31,7 @@ class SampleHistogram:
             _check_value("range_end", range_end)
         if bin_width is not None:
             _check_value("bin_width", bin_width)
-            if bin_width <= 0:
+            if not bin_width > 0:
                 raise ValueError("bin_width must be positive")
         if num_bins is not None:
             if not isinstance(num_bins, int):
@@ -86,8 +86,8 @@ class SampleHistogram:
                 # recompute bin width so num_bins fit in the desired span
                 bin_width = span / num_bins
         # all four are now known
-        if num_bins < 2:
-            raise ValueError("histogram must have at least 2 bins")
+        if num_bins < 1:
+            raise ValueError("histogram must have at least 1 bin")
         if value_type is float:
             range_start = float(range_start)
             range_end   = float(range_end)
@@ -165,16 +165,16 @@ class SampleHistogram:
         self.window_size = window_size
 
     def get_snapshot(self):
-        """Return an immutable Histogram copy of the current counts and range.
+        """Creates a Histogram object reflecting the current counts and range.
         The snapshot is a copy taken at the time of the call.  Later samples
         do not change it.
         """
         return Histogram(
             value_type=self.value_type,
-            range_start=self.range_start,
+            bin_start=self.range_start,
             bin_width=self.bin_width,
-            range_end=self.range_end,
-            counts=tuple(self.counts),
+            bin_end=self.range_end,
+            counts=self.counts,
             above_count=self.above_count,
             below_count=self.below_count,
         )
