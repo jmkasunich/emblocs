@@ -43,10 +43,15 @@ class HistogramDisplay(tk.Frame):
         self.y_axis_box = None    # upper left: Y labels and ticks
         self.x_axis_box = None    # lower right: X labels and ticks
         self.dirty = False
-        self.y_axis = ValueAxis(value_min = 0, value_max = 10,
+        self.max_counts = 150
+        self.min_y_span = 5
+        self.range_min = -20.0
+        self.range_max =  40.0
+        self.min_x_span = 4.0
+        self.y_axis = ValueAxis(value_min = 0, value_max = self.max_counts,
                                 pixel_min =1, pixel_max = 0,
                                 major_spacing = self.axis_text_height*2)
-        self.x_axis = ValueAxis(value_min = -23.0, value_max = 17.5,
+        self.x_axis = ValueAxis(value_min = self.range_min, value_max = self.range_max,
                                 pixel_min =1, pixel_max = 0,
                                 major_spacing = self.axis_text_height*2)
         self.canvas = tk.Canvas(self, background="white", highlightthickness=0)
@@ -54,6 +59,61 @@ class HistogramDisplay(tk.Frame):
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
         self.canvas.bind("<Configure>", self._on_resize)
+
+    def _reset_view(self):
+        self.y_axis.set_range(0, self.max_counts)
+        self.x_axis.set_range(self.range_min, self.range_max)
+        self._mark_dirty()
+
+    def _y_zoom(self, factor):
+        """ Zoom the Y axis by 'factor'.  Less than 1.0 zooms in, more
+        zooms out.  Overall range is clamped by self.counts_max and
+        self.min_y_span.
+        """
+        factor = float(factor)
+        if not factor > 0.0:
+            raise ValueError("zoom factor must be positive")
+        new_max = self.y_axis.value_max * factor
+        new_max = round(max(min(new_max, self.max_counts), self.min_y_span))
+        self.y_axis.set_range(0, new_max)
+        self._mark_dirty()
+
+    def _x_zoom(self, factor, around):
+        """ Zoom the X axis by 'factor', centered on 'around', which is
+        in value units.  If 'factor' is < 1.0, zooms in, > 1.0 zooms out.
+        Overall range is clamped by self.range_min, self.range_max, and
+        self.min_x_span.
+        """
+        factor = float(factor)
+        around = float(around)
+        if not factor > 0.0:
+            raise ValueError("zoom factor must be positive")
+        old_span = self.x_axis.value_max - self.x_axis.value_min;
+        max_span = self.range_max - self.range_min
+        new_span = max(min((old_span * factor), max_span), self.min_x_span)
+        factor = new_span / old_span;
+        around = max(min(around, self.range_max), self.range_min)
+        new_min = around + factor * (self.x_axis.value_min - around)
+        new_max = around + factor * (self.x_axis.value_max - around)
+        new_min = max(min(new_min, self.range_max), self.range_min)
+        new_max = max(min(new_max, self.range_max), self.range_min)
+        self.x_axis.set_range(new_min, new_max)
+        self._mark_dirty()
+
+    def _x_pan(self, amount):
+        """ Pan the X axis by 'amount', which is in value units.
+        If 'amount' is positive, pan right, negative left.
+        Overall range is clamped by self.range_min and self.range_max.
+        """
+        if amount > 0:
+            amount = min(amount, self.range_max - self.x_axis.value_max)
+        elif amount < 0:
+            amount = max(amount, self.range_min - self.x_axis.value_min)
+        new_min = self.x_axis.value_min + amount
+        new_max = self.x_axis.value_max + amount
+        self.x_axis.set_range(new_min, new_max)
+        self._mark_dirty()
+
 
     def _on_resize(self, event):
         self._layout()
@@ -104,7 +164,7 @@ class HistogramDisplay(tk.Frame):
             y = axis.v2p(value)
             self.canvas.create_line(right-MAJOR_TICK_LEN, y, right, y, fill="black")
             self.canvas.create_line(right, y, plot_right, y, fill="gray85")
-            self.canvas.create_text(right-MAJOR_TICK_LEN+TICK_LABEL_SPACE, y,
+            self.canvas.create_text(right-(MAJOR_TICK_LEN+TICK_LABEL_SPACE), y,
                                     anchor="e", angle=0, font=self.axis_font,
                                     fill="black", text=str(value))
 
@@ -132,9 +192,9 @@ class HistogramDisplay(tk.Frame):
         self.dirty = False
         self.canvas.delete("all")
         if 0:
-            self.canvas.create_rectangle(self.plot_box.as_rect, outline="red", tags="layout")
-            self.canvas.create_rectangle(self.y_axis_box.as_rect, outline="green", tags="layout")
-            self.canvas.create_rectangle(self.x_axis_box.as_rect, outline="blue", tags="layout")
+            self.canvas.create_rectangle(*self.plot_box.as_rect, outline="red", tags="layout")
+            self.canvas.create_rectangle(*self.y_axis_box.as_rect, outline="green", tags="layout")
+            self.canvas.create_rectangle(*self.x_axis_box.as_rect, outline="blue", tags="layout")
         self.draw_y_axis()
         self.draw_x_axis()
 
