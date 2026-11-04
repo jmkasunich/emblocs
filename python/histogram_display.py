@@ -15,6 +15,124 @@ MINOR_TICK_LEN = 3
 MAJOR_TICK_LEN = 6  
 TICK_LABEL_SPACE = 3  # space between end of major tick and label text
 
+class CanvasEvents:
+    """ Class to manage user input for a Canvas
+    Binds to TkInter events from the canvas and emits a smaller
+    set of application-oriented callback events, as follows:
+
+       on_pointer_move(x, y)  - pointer position changed to 'x, y';
+                                if the pointer leaves the canvas,
+                                x & y are both None
+       on_pointer_hover(x, y) - pointer remained at 'x, y' for 'hover_time_ms'
+       on_single_click(x, y)  - single-clicked at 'x, y'
+       on_double_click(x, y)  - double-clicked at 'x, y'
+       on_wheel(x, y, delta)  - mouse wheel or touchpad gesture at 'x, y'
+       on_drag(x, y, dx, dy)  - incremental drag of 'dx, dy' ending at 'x, y'
+
+    All callback coordinates are in pixels.  Single and double-click
+    are mutually exclusive; a double click does not generate spurious
+    single-click events; however, this is gained at the expense of not
+    using the OS defined double-click interval and delaying single
+    clicks by 'double_click_time_ms'.
+    """
+    def __init__(self, canvas,
+                 hover_time_ms=500,
+                 double_click_time_ms=300,
+                 drag_threshold_px=5):
+        self.canvas = canvas
+        # callbacks
+        self.on_pointer_move = None
+        self.on_hover = None
+        self.on_click = None
+        self.on_double_click = None
+        self.on_wheel = None
+        self.on_drag = None
+        # internal state
+        # self.mouse_x = None
+        # self.mouse_y = None
+        # self.button1_down = False
+        # self.press_x = None
+        # self.press_y = None
+        # self.release_x = None
+        # self.release_y = None
+        # self.dragging = False
+        # self.drag_start_x = None
+        # self.drag_start_y = None
+        # self.drag_current_x = None
+        # self.drag_current_y = None
+        # self.drag_mode = None
+        # self.last_wheel_x = None
+        # self.last_wheel_y = None
+        # self.last_wheel_delta = None
+        # bind UI events
+        canvas.bind("<Enter>", self._on_enter)
+        canvas.bind("<Leave>", self._on_leave)
+        canvas.bind("<Motion>", self._on_motion)
+        canvas.bind("<ButtonPress-1>", self._on_button1_press)
+        canvas.bind("<B1-Motion>", self._on_button1_motion)
+        canvas.bind("<ButtonRelease-1>", self._on_button1_release)
+        #canvas.bind("<Double-Button-1>", self._on_double_click)
+        canvas.bind("<MouseWheel>", self._on_mouse_wheel)
+
+    # event handlers
+
+    def _on_enter(self, event):
+        """Mouse entered the canvas."""
+        self._emit_pointer_move(event.x, event.y)
+
+    def _on_leave(self, event):
+        """Mouse left the canvas."""
+        self._emit_pointer_move(None, None)
+
+    def _on_motion(self, event):
+        """Pointer moved within the canvas with no buttons pressed."""
+        pass
+
+    def _on_button1_press(self, event):
+        """Beginning of a click or drag."""
+        pass
+
+    def _on_button1_motion(self, event):
+        """Mouse movement while button 1 is held."""
+        pass
+
+    def _on_button1_release(self, event):
+        """End of a click or drag."""
+        pass
+
+    def _on_mouse_wheel(self, event):
+        """Mouse wheel or touchpad scroll gesture."""
+        self._emit_wheel(event.x, event.y, event.delta)
+
+    # def _on_double_click(self, event):
+    #     """Button 1 double-click detected."""
+    #     pass
+
+    def _emit_pointer_move(self, x, y):
+        if self.on_pointer_move is not None:
+            self.on_pointer_move(x, y)
+
+    def _emit_pointer_hover(self, x, y):
+        if self.on_pointer_hover is not None:
+            self.on_pointer_hover(x, y)
+
+    def _emit_single_click(self, x, y):
+        if self.on_single_click is not None:
+            self.on_single_click(x, y)
+
+    def _emit_double_click(self, x, y):
+        if self.on_double_click is not None:
+            self.on_double_click(x, y)
+
+    def _emit_wheel(self, x, y, delta):
+        if self.on_wheel is not None:
+            self.on_wheel(x, y, delta)
+
+    def _emit_drag(self, x, y, dx, dy):
+        if self.on_drag is not None:
+            self.on_drag(x, y, dx, dy)
+
+
 
 
 @dataclass(frozen=True)
@@ -59,6 +177,19 @@ class HistogramDisplay(tk.Frame):
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
         self.canvas.bind("<Configure>", self._on_resize)
+
+    def _region_at(self, x, y):
+        """Return 'plot', 'x_axis', 'y_axis', or None."""
+        if self.plot_box.left <= x <= self.plot_box.right and \
+           self.plot_box.top <= y <= self.plot_box.bottom:
+            return "plot"
+        if self.x_axis_box.left <= x <= self.x_axis_box.right and \
+           self.x_axis_box.top <= y <= self.x_axis_box.bottom:
+            return "x_axis"
+        if self.y_axis_box.left <= x <= self.y_axis_box.right and \
+           self.y_axis_box.top <= y <= self.y_axis_box.bottom:
+            return "y_axis"
+        return None
 
     def _reset_view(self):
         self.y_axis.set_range(0, self.max_counts)
