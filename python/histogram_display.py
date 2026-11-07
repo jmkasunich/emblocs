@@ -286,10 +286,18 @@ class HistogramDisplay(tk.Frame):
         print("long_press", x, y)
 
     def _on_wheel(self, x, y, delta):
-        print("wheel", x, y, delta)
+        where = self._region_at(x, y)
+        factor = math.exp(delta/1000)
+        if where == "x_axis" or where == "plot":
+            self._x_zoom(factor, self.x_axis.p2v(x))
+        elif where == "y_axis":
+            self._y_zoom(factor)
 
     def _on_drag(self, x, y, dx, dy):
-        print("drag", x, y, dx, dy)
+        if abs(dx) > abs(dy):
+            # horizontal drag
+            value_dx = -self.x_axis.dp2dv(dx)
+            self._x_pan(value_dx)
 
     def _region_at(self, x, y):
         """Return 'plot', 'x_axis', 'y_axis', or None."""
