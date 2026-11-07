@@ -85,6 +85,11 @@ class ValueAxis:
         """
         return pixel * self.p2v_mul + self.p2v_add
 
+    def dp2dv(self, pixels) -> float:
+        """ Takes a delta in pixels, returns the corresponding delta value
+        """
+        return pixels * self.p2v_mul
+
     def v2p(self, value) -> int:
         """ Takes a value, returns the nearest integer pixel on the axis
         Use for drawing, mouse hit testing, etc.
