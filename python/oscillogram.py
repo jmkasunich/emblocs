@@ -13,34 +13,31 @@ class Oscillogram:
 
     Instances are immutable.  Sample values are copied on construction,
     so later changes to the source never affect an Oscillogram.  Sample
-    values can be int or float.  Times are always passed and stored as
-    floats.
+    values can be int or float.  Time (including sample interval) is
+    always passed and stored as float.
     """
-    value_type: type   # int or float
-    time_min: float
+    sample_type: type   # int or float
     sample_interval: float
-    samples: Sequence[OscillogramValue]       # one int or float per sample
+    samples: Sequence[OscillogramValue]    # one int or float per sample
+    samples_since_trigger: Optional[int] = None
 
     def __post_init__(self):
-        if self.value_type not in ( int, float ):
-            raise TypeError(f"value_type must be int or float, not {self.value_type!r}")
-        for name in ("time_min", "sample_interval"):
-            if not isinstance(getattr(self, name), float):
-                raise TypeError(f"{name} must be float")
+        if self.sample_type not in ( int, float ):
+            raise TypeError(f"sample_type must be int or float, not {self.sample_type!r}")
+        if not isinstance(self.sample_interval, float):
+            raise TypeError("sample_interval must be float")
+        if not self.sample_interval > 0:
+            raise ValueError("sample interval must be positive")
         if not isinstance(self.samples, tuple):
             # frozen dataclass: use object.__setattr__ to normalize
             object.__setattr__(self, "samples", tuple(self.samples))
         if len(self.samples) == 0:
             raise ValueError("oscillogram must have at least one sample")
-        if not isinstance(self.samples[0], self.value_type ):
-            raise TypeError(f"samples must be {self.value_type.__name__}")
-        if not self.sample_interval > 0:
-            raise ValueError("sample interval must be positive")
-
-    @property
-    def time_max(self) -> float:
-        """ Time of last sample """
-        return self.time_min + self.sample_interval * (self.num_samples-1)
+        if not isinstance(self.samples[0], self.sample_type ):
+            raise TypeError(f"samples must be {self.sample_type.__name__}")
+        if self.samples_since_trigger is not None and \
+           not isinstance(self.samples_since_trigger, int):
+            raise TypeError("samples_since_trigger must be int")
 
     @property
     def num_samples(self) -> int:
@@ -48,10 +45,14 @@ class Oscillogram:
 
     def get_sample(self, sample_num: int) -> \
                    tuple[Optional[float], Optional[OscillogramValue]]:
-        """Time and Value of a sample, None if sample_num is out of range"""
+        """Time and Value of a sample, None if sample_num is out of range.
+        Time zero is the trigger sample, or the newest sample if untriggered.
+        """
         if 0 <= sample_num < len(self.samples):
-            return (self.time_min + self.sample_interval * sample_num,
-                    self.samples[sample_num])
+            num = sample_num - ( self.num_samples - 1 )
+            if self.samples_since_trigger is not None:
+                num += self.samples_since_trigger
+            return (self.sample_interval * num, self.samples[sample_num])
         return (None, None)
 
     def get_sample_value(self, sample_num: int) -> Optional[OscillogramValue]:
