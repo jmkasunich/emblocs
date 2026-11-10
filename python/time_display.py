@@ -17,48 +17,47 @@ class TimeDisplayMode(Enum):
     WALL = "wall"
 
 class TimeDisplay(ttk.LabelFrame):
-    def __init__(self, parent, initial_mode=TimeDisplayMode.ELAPSED):
-        super().__init__(parent, text="Time")
-        fixed_font = tkfont.nametofont("TkFixedFont").copy()
-        fixed_font.configure(weight="bold", size=11)
+    def __init__(self, parent, font: tkfont = None,
+                  initial_mode=TimeDisplayMode.ELAPSED):
+        super().__init__(parent, text="Time", padding=(2,0,0,3))
+        if font is None:
+            self._font = tkfont.nametofont("TkDefaultFont").copy()
+            self._font.configure(size=10)
+        else:
+            self._font = font
         # widgets
-        self.mode = tk.StringVar()
-        top_row = ttk.Frame(self)
-        self.elapsed_radio = ttk.Radiobutton(
-            top_row, text="Elapsed", variable=self.mode,
-            value="elapsed", command=self._mode_changed
-            )
-        self.wall_radio = ttk.Radiobutton(
-            self, text="Wall Clock", variable=self.mode,
-            value="wall", command=self._mode_changed
-            )
-        self.reset_button = tk.Button(
-            top_row, text="Reset", command=self.reset_elapsed
-            )
-        readout = tk.Frame(self, relief="sunken", borderwidth=2, background="white")
-        self.line1_label = ttk.Label(
-            readout, text="Elapsed", width=12,
-            background="white", font=fixed_font
-            )
-        self.line2_label = ttk.Label(
-            readout, text="00:00:00.000", width=12,
-            background="white", font=fixed_font
-            )
+        self._mode = tk.StringVar()
+        row1 = ttk.Frame(self)
+        row2 = ttk.Frame(self)
+        self._elapsed_radio = ttk.Radiobutton(row1, text="Elapsed",
+                                        variable=self._mode,
+                                        value=TimeDisplayMode.ELAPSED.value,
+                                        command=self._mode_changed)
+        self._reset_button = ttk.Button(row1, text="Reset", width=-1,
+                                        command=self.reset_elapsed)
+        self._wall_radio = ttk.Radiobutton(row2, text="Wall Clock",
+                                        variable=self._mode,
+                                        value=TimeDisplayMode.WALL.value,
+                                        command=self._mode_changed)
+        readout = ttk.Frame(self)
+        self._line1_label = tk.Label(readout, text="Elapsed", width=12,
+                                background="black", foreground="white",
+                                anchor="w", font=self._font)
+        self._line2_label = tk.Label(readout, text="00:00:00.000", width=12,
+                                background="black", foreground="white",
+                                anchor="w", font=self._font)
         self._set_anchor()
         self.reset_elapsed()
         self.set_mode(initial_mode)
         # geometry
-        self.elapsed_radio.grid(row=0, column=0, sticky="w", padx=2, pady=2)
-        self.reset_button.grid(row=0, column=1, sticky="ew", padx=(4,0), pady=2)
-        top_row.grid_columnconfigure(1, weight=1)
-        self.line1_label.grid(row=0, column=0, columnspan=2, sticky="w",
-                              padx=2, pady=(2,0))
-        self.line2_label.grid(row=1, column=0, columnspan=2, sticky="w",
-                              padx=2, pady=(0,2))
-        top_row.grid(row=0, column=0, sticky="ew")
-        self.wall_radio.grid(row=1, column=0, columnspan=2, sticky="w",
-                             padx=2, pady=2)
-        readout.grid(row=2, column=0, sticky="ew")
+        self._elapsed_radio.pack(side="left", anchor="w", padx=2, pady=2)
+        self._reset_button.pack(side="right", anchor="e", padx=2, pady=0)
+        row1.pack(side="top", anchor="nw", padx=0, pady=0)
+        self._wall_radio.pack(side="left", anchor="w", padx=2, pady=2)
+        row2.pack(side="top", anchor="nw", padx=0, pady=0)
+        self._line1_label.pack(side="top", anchor="nw", fill="x", padx=2, pady=0)
+        self._line2_label.pack(side="top", anchor="nw", fill="x", padx=2, pady=0)
+        readout.pack(side="top", anchor="n", fill="x", padx=0, pady=0)
 
     def _set_anchor(self):
         """ Stores two representations of the "same instant", used for
@@ -66,8 +65,8 @@ class TimeDisplay(ttk.LabelFrame):
         actually a small (probably sub-microsecond) difference between
         the two times, based on the execution time of the first call.
         """
-        self.anchor_mono = time.monotonic()
-        self.anchor_wall = datetime.now()
+        self._anchor_mono = time.monotonic()
+        self._anchor_wall = datetime.now()
 
     def reset_elapsed(self):
         """ Resets the elapsed time.  While the GUI button is disabled
@@ -75,7 +74,7 @@ class TimeDisplay(ttk.LabelFrame):
         an application if it wants to measure elapsed from some specific
         event rather than leaving it to the user.
         """
-        self.elapsed_start = time.monotonic()
+        self._elapsed_start = time.monotonic()
 
     def set_mode(self, mode: TimeDisplayMode):
         """ Changes display mode from the application.
@@ -83,17 +82,17 @@ class TimeDisplay(ttk.LabelFrame):
         """
         if not isinstance(mode, TimeDisplayMode):
             raise TypeError(f"mode must be a TimeDisplayMode, not {mode!r}")
-        self.mode.set(mode.value)
+        self._mode.set(mode.value)
         self._mode_changed()
 
     def _mode_changed(self):
-        if self.mode.get() == "elapsed":
-            self.reset_button.configure(state="normal")
+        if self._mode.get() == TimeDisplayMode.ELAPSED.value:
+            self._reset_button.configure(state="normal")
         else:
             # re-sync the monotonic-to-wall offset in case something
             # like a daylight savings time change occurred.
             self._set_anchor()
-            self.reset_button.configure(state="disabled")
+            self._reset_button.configure(state="disabled")
 
     def update_time(self, timestamp=None):
         """ Updates the displayed time.  Typically called from an
@@ -101,24 +100,24 @@ class TimeDisplay(ttk.LabelFrame):
         at which it was called; the application can override that
         by passing a monotonic time value.
         """
-        if self.mode.get() == "elapsed":
+        if self._mode.get() == TimeDisplayMode.ELAPSED.value:
             if timestamp is None:
                 timestamp = time.monotonic()
-            elapsed = timestamp - self.elapsed_start
+            elapsed = timestamp - self._elapsed_start
             hours = int(elapsed // 3600)
             minutes = int((elapsed % 3600) // 60)
             seconds = elapsed % 60
-            self.line1_label.configure(text="Elapsed")
-            self.line2_label.configure(
+            self._line1_label.configure(text="Elapsed")
+            self._line2_label.configure(
                 text=f"{hours:02}:{minutes:02}:{seconds:06.3f}")
         else:
             if timestamp is None:
                 now = datetime.now()
             else:
-                since_anchor = timedelta(seconds=timestamp-self.anchor_mono)
-                now = self.anchor_wall + since_anchor
-            self.line1_label.configure(text=now.strftime("%Y-%m-%d"))
-            self.line2_label.configure(
+                since_anchor = timedelta(seconds=timestamp-self._anchor_mono)
+                now = self._anchor_wall + since_anchor
+            self._line1_label.configure(text=now.strftime("%Y-%m-%d"))
+            self._line2_label.configure(
                 text=now.strftime("%H:%M:%S.%f")[:-3])
 
 

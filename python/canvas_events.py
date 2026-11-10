@@ -46,7 +46,7 @@ class CanvasEvents:
     are mutually exclusive; a double click does not generate spurious
     single-click events; however, this is gained at the expense of not
     using the OS defined double-click interval and delaying single
-    clicks by 'double_click_time_ms'.
+    clicks until 'double_click_time_ms' after button release.
     """
     def __init__(self, canvas,
                  hover_time_ms=1500,
