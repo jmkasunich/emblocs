@@ -2,8 +2,8 @@
 # histogram.py - immutable histogram data
 
 from dataclasses import dataclass
-from enum import Enum
-from typing import Iterator, Optional, Sequence, Union
+from typing import Optional, Sequence, Union
+import math
 
 HistogramValue = Union[int, float]
 
@@ -41,35 +41,68 @@ class Histogram:
         if self.above_count < 0 or self.below_count < 0:
             raise ValueError("statistics counts must not be negative")
 
-    # ---- counts ----------------------------------------------------------
-
     @property
     def num_bins(self) -> int:
         return len(self.counts)
 
-    def get_bin_count(self, bin_num: int) -> int:
-        """Count in one bin, or 0 if bin_num is out of range (matches C)."""
-        if 0 <= bin_num < len(self.counts):
-            return self.counts[bin_num]
-        return 0
-
-    def get_bins(self) -> tuple:
-        """All bin counts.  Python-only convenience; the C API has no equivalent."""
-        return self.counts
-
     def get_total(self) -> int:
-        """Exact sum of all bins plus above and below.  Python ints don't wrap."""
+        """ Exact sum of all bins plus above and below. """
         return sum(self.counts) + self.above_count + self.below_count
 
-    # ---- geometry --------------------------------------------------------
+    def find_bin(self, value) -> Optional[int]:
+        """ Return the number of the bin that contains 'value', or
+        None if value is outside of the histogram's range. """
+        if self.range_min <= value <= self.range_max:
+            bin_num = math.floor((value - self.range_min) / self.bin_width)
+            return min(bin_num, len(self.counts)-1)
+        return None
 
-    def get_bin_edges(self) -> list:
-        """num_bins + 1 edges: start of each bin, then the end of the last bin."""
-        edges = [self.range_min + i * self.bin_width for i in range(self.num_bins)]
-        edges.append(self.range_max)
-        return edges
+    def get_bin_count(self, bin_num: int) -> int:
+        """ Return the count in the specified bin. """
+        if not 0 <= bin_num < len(self.counts):
+            raise IndexError(f"Invalid bin number {bin_num}")
+        return self.counts[bin_num]
 
-    def get_bin_centers(self) -> list:
-        """Center of each bin.  Centers are never needed by the C API."""
-        half = self.bin_width / 2
-        return [self.range_min + half + i * self.bin_width for i in range(self.num_bins)]
+    def get_bin_edges(self, bin_num: int) -> tuple[HistogramValue, HistogramValue]:
+        """ Return a tuple containing the edges of the specified bin. """
+        if not 0 <= bin_num < len(self.counts):
+            raise IndexError(f"Invalid bin number {bin_num}")
+        lower = self.range_min + bin_num * self.bin_width
+        if self.value_type is int:
+            upper = lower + self.bin_width - 1
+        else:
+            upper = math.nextafter(lower + self.bin_width, -math.inf)
+        return (lower, upper)
+
+    def get_bin(self, bin_num: int) -> tuple[HistogramValue, HistogramValue, int]:
+        """ Return a 3-tuple containing the edges of the specified bin
+        followed by the count for that bin. """
+        return (*self.get_bin_edges(bin_num), self.counts[bin_num])
+
+    def get_bin_center(self, bin_num: int) -> HistogramValue:
+        """ Return the center of the specified bin """
+        if not 0 <= bin_num < len(self.counts):
+            raise IndexError(f"Invalid bin number {bin_num}")
+        if self.value_type is int:
+            half = self.bin_width // 2
+        else:
+            half = self.bin_width / 2.0
+        return self.range_min + self.bin_width * bin_num + half
+
+    # not sure if these will ever be needed
+
+    # def get_all_counts(self) -> tuple:
+    #     """ Return all bin counts """
+    #     return self.counts
+
+    # def get_all_edges(self) -> list:
+    #     """ Return num_bins + 1 edges: start of each bin, then the
+    #     end of the last bin. """
+    #     edges = [self.range_min + i * self.bin_width for i in range(self.num_bins)]
+    #     edges.append(self.range_max)
+    #     return edges
+
+    # def get_all_centers(self) -> list:
+    #     """ Return centers of all bins """
+    #     half = self.bin_width / 2
+    #     return [self.range_min + half + i * self.bin_width for i in range(self.num_bins)]

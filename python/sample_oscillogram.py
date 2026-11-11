@@ -7,7 +7,8 @@ class SampleOscillogram:
         self._fifo = None
         self.sample_interval = None
         self.max_samples = None
-        self.samples_since_trigger = None
+        self.samples_since_trigger = 0
+        self.triggered = False
 
     def start_acquisition(self, max_samples: int, sample_interval: float):
         if not isinstance(max_samples, int):
@@ -21,7 +22,8 @@ class SampleOscillogram:
         self.sample_type = None # will be set on first sample
         self.sample_interval = sample_interval
         self.max_samples = max_samples
-        self.samples_since_trigger = None
+        self.samples_since_trigger = 0
+        self.triggered = False
         self._fifo = deque(maxlen = self.max_samples)
 
     def add_sample(self, value):
@@ -35,11 +37,12 @@ class SampleOscillogram:
         if not isinstance(value, self.sample_type):
             raise TypeError("bad sample type")
         self._fifo.append(value)
-        if self.samples_since_trigger is not None:
+        if self.triggered:
             self.samples_since_trigger += 1
 
     def record_triggered(self):
-        if self.samples_since_trigger is None:
+        if not self.triggered:
+            self.triggered = True
             self.samples_since_trigger = 0
 
     def get_snapshot(self):
@@ -53,6 +56,7 @@ class SampleOscillogram:
             sample_type=self.sample_type,
             sample_interval=self.sample_interval,
             samples_since_trigger=self.samples_since_trigger,
+            triggered=self.triggered,
             samples=tuple(self._fifo)
         )
 
