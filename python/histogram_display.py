@@ -4,10 +4,11 @@
 import tkinter as tk
 from tkinter import ttk
 import tkinter.font as tkfont
-from value_axis import ValueAxis
 from dataclasses import dataclass
 import math
 from enum import Enum
+from value_axis import ValueAxis
+from histogram import Histogram
 from canvas_events import CanvasBox, CanvasEvents
 
 
@@ -185,8 +186,7 @@ class HistogramDisplay(tk.Frame):
             self.dirty = True
             self.after_idle(self.redraw)
 
-    def draw_y_axis(self):
-        axis = self.y_axis
+    def draw_y_axis(self, axis):
         box = self.y_axis_box
         left = box.left
         right = box.right
@@ -208,8 +208,7 @@ class HistogramDisplay(tk.Frame):
                                     anchor="e", angle=0, font=self.axis_font,
                                     fill="black", text=str(value))
 
-    def draw_x_axis(self):
-        axis = self.x_axis
+    def draw_x_axis(self, axis):
         box = self.x_axis_box
         left = box.left
         right = box.right
@@ -229,6 +228,21 @@ class HistogramDisplay(tk.Frame):
                                     anchor="e", angle=55, font=self.axis_font,
                                     fill="black", text=str(value))
 
+    def draw_histogram(self, histo: Histogram, x_axis: ValueAxis, y_axis: ValueAxis):
+        if (x_axis.value_max < histo.range_min or
+            x_axis.value_min > histo.range_max):
+            return  # histogram is entirely off-screen
+        if x_axis.value_min <= histo.range_min:
+            first_visible_bin = 0
+        else:
+            first_visible_bin = histo.find_bin(x_axis.value_min)
+        if x_axis.value_max >= histo.range_max:
+            last_visible_bin = histo.num_bins
+        else:
+            last_visible_bin = histo.find_bin(x_axis.value_max) + 1
+
+
+
     def redraw(self):
         self.dirty = False
         self.canvas.delete("all")
@@ -236,8 +250,8 @@ class HistogramDisplay(tk.Frame):
             self.canvas.create_rectangle(*self.plot_box.as_rect, outline="red", tags="layout")
             self.canvas.create_rectangle(*self.y_axis_box.as_rect, outline="green", tags="layout")
             self.canvas.create_rectangle(*self.x_axis_box.as_rect, outline="blue", tags="layout")
-        self.draw_y_axis()
-        self.draw_x_axis()
+        self.draw_y_axis(self.y_axis)
+        self.draw_x_axis(self.x_axis)
 
 #############################################################
 
