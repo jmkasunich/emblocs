@@ -19,6 +19,12 @@ class CanvasBox:
         """Coordinates for canvas.create_rectangle, in its (x1, y1, x2, y2) order."""
         return (self.left, self.top, self.right, self.bottom)
 
+    def width(self):
+        return self.right - self.left
+
+    def height(self):
+        return self.bottom - self.top
+
 
 class CanvasEventState(Enum):
     IDLE = 1
