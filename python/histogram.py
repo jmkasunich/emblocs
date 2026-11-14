@@ -1,13 +1,13 @@
 #! /usr/bin/env python3
 # histogram.py - immutable histogram data
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, Sequence, Union
 import math
 
 HistogramValue = Union[int, float]
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Histogram:
     """A snapshot of a histogram: configuration plus bin counts.
 
@@ -16,30 +16,57 @@ class Histogram:
     """
     value_type: type   # int or float
     range_min: HistogramValue
-    range_max: HistogramValue
     bin_width: HistogramValue
+    range_max: HistogramValue = field(init=False)
     counts: Sequence[int]          # one int per bin
     above_count: int = 0
     below_count: int = 0
     counter_width: Optional[int] = None   # None for host-built histograms
 
     def __post_init__(self):
-        if self.value_type not in ( int, float ):
-            raise TypeError(f"value_type must be int or float, not {self.value_type!r}")
-        for name in ("range_min", "range_max", "bin_width"):
-            if not isinstance(getattr(self, name), self.value_type):
-                raise TypeError(f"{name} must be {self.value_type.__name__}")
         if not isinstance(self.counts, tuple):
             # frozen dataclass: use object.__setattr__ to normalize
             object.__setattr__(self, "counts", tuple(self.counts))
         if len(self.counts) == 0:
             raise ValueError("histogram must have at least one bin")
-        if not self.bin_width > 0:
-            raise ValueError("bin width must be positive")
+        # only typecheck first count to keep things O(1)
+        if not isinstance(self.counts[0], int ):
+            raise TypeError("counts must be integers")
+        range_max = Histogram.range_max_for(value_type= self.value_type,
+                                            range_min= self.range_min,
+                                            bin_width= self.bin_width,
+                                            num_bins= len(self.counts))
+        object.__setattr__(self, "range_max", range_max)
         if self.counter_width is not None and self.counter_width not in (1, 2, 4):
             raise ValueError("counter width must be 1, 2, or 4 bytes")
         if self.above_count < 0 or self.below_count < 0:
             raise ValueError("statistics counts must not be negative")
+
+    @staticmethod
+    def range_max_for(*, value_type, range_min, bin_width, num_bins):
+        """ range_max is derived; this method provides a consistent way
+        of calculating it """
+        if value_type not in (int, float):
+            raise TypeError(f"value_type must be int or float, not {value_type!r}")
+        if not isinstance(range_min, value_type):
+            raise TypeError(f"range_min must be {value_type.__name__}")
+        if not isinstance(bin_width, value_type):
+            raise TypeError(f"bin_width must be {value_type.__name__}")
+        if not isinstance(num_bins, int) or num_bins <= 0:
+            raise ValueError("num_bins must be a positive integer")
+        if value_type is float:
+            if not math.isfinite(range_min):
+                raise ValueError("range_min must be finite")
+            if not (math.isfinite(bin_width) and bin_width > 0):
+                raise ValueError("bin_width must be finite and positive")
+            range_max = range_min + num_bins * bin_width
+            if not math.isfinite(range_max):
+                raise ValueError("range overflows")
+            return math.nextafter(range_max, -math.inf)
+        else:
+            if not bin_width > 0:
+                raise ValueError("bin_width must be positive")
+            return range_min + num_bins * bin_width - 1
 
     @property
     def num_bins(self) -> int:
@@ -53,7 +80,10 @@ class Histogram:
         """ Return the number of the bin that contains 'value', or
         None if value is outside of the histogram's range. """
         if self.range_min <= value <= self.range_max:
-            bin_num = math.floor((value - self.range_min) / self.bin_width)
+            if self.value_type is int:
+                bin_num = (value - self.range_min) // self.bin_width
+            else:
+                bin_num = math.floor((value - self.range_min) / self.bin_width)
             return min(bin_num, len(self.counts)-1)
         return None
 

@@ -1,5 +1,5 @@
 #! /usr/bin/env python3
-# oscillgram.py - immutable oscillogram data
+# oscillogram.py - immutable oscillogram data
 
 from dataclasses import dataclass
 from typing import Optional, Sequence, Union
@@ -28,25 +28,22 @@ class Oscillogram:
             raise TypeError(f"sample_type must be int or float, not {self.sample_type!r}")
         if not isinstance(self.sample_interval, float):
             raise TypeError("sample_interval must be float")
-        if not self.sample_interval > 0:
+        if not (math.isfinite(self.sample_interval) and self.sample_interval > 0):
             raise ValueError("sample interval must be positive")
         if not isinstance(self.samples, tuple):
             # frozen dataclass: use object.__setattr__ to normalize
             object.__setattr__(self, "samples", tuple(self.samples))
         if len(self.samples) == 0:
             raise ValueError("oscillogram must have at least one sample")
+        # only typecheck first sample to keep things O(1)
         if not isinstance(self.samples[0], self.sample_type ):
             raise TypeError(f"samples must be {self.sample_type.__name__}")
         if not isinstance(self.samples_since_trigger, int):
             raise TypeError("samples_since_trigger must be int")
         if self.samples_since_trigger < 0:
             raise ValueError("samples_since_trigger must not be negative")
-        if self.triggered:
-            if self.samples_since_trigger >= len(self.samples):
-                raise ValueError("samples_since_trigger must be less than sample count")
-        else:
-            if self.samples_since_trigger > 0:
-                raise ValueError("samples_since_trigger must be zero when not triggered")
+        if not self.triggered and self.samples_since_trigger > 0:
+            raise ValueError("samples_since_trigger must be zero when not triggered")
 
     @property
     def num_samples(self) -> int:
@@ -74,7 +71,8 @@ class Oscillogram:
 
     def get_sample_time(self, sample_num: int) -> float:
         """ Return the time of the specified sample, in seconds
-        since trigger """
+        since trigger.  When untriggered, time is relative to the
+        most recent sample. """
         max_sample_num = len(self.samples) - 1
         if not 0 <= sample_num <= max_sample_num:
             raise IndexError(f"Invalid sample number {sample_num}")

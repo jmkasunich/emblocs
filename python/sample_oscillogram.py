@@ -1,4 +1,5 @@
 from collections import deque
+import math
 from oscillogram import Oscillogram
 
 class SampleOscillogram:
@@ -17,8 +18,8 @@ class SampleOscillogram:
             raise TypeError("sample_interval must be float")
         if max_samples < 1:
             raise ValueError("max_samples must be positive")
-        if not sample_interval > 0.0:
-            raise ValueError("sample_interval must be postive")
+        if not (math.isfinite(sample_interval) and sample_interval > 0.0):
+            raise ValueError("sample_interval must be finite and positive")
         self.sample_type = None # will be set on first sample
         self.sample_interval = sample_interval
         self.max_samples = max_samples
