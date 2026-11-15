@@ -10,7 +10,9 @@ from enum import Enum
 from value_axis import ValueAxis
 from histogram import Histogram
 from canvas_events import CanvasBox, CanvasEvents
-
+from channel_controls import Channel, ChannelList, ChannelControls
+from time_display import TimeDisplay
+from typing import Optional
 
 # screen geometry configuration constants
 
@@ -18,6 +20,10 @@ BORDER = 2            # gap between canvas edge and drawn content
 MINOR_TICK_LEN = 3
 MAJOR_TICK_LEN = 6  
 TICK_LABEL_SPACE = 3  # space between end of major tick and label text
+
+OUTLIER_BAR_WIDTH = 20
+DIVIDER_MIN_WIDTH = 15
+
 
 class Axis(Enum):
     X = "X"
@@ -38,15 +44,22 @@ def axis_tag(axis: Axis, part: AxisPart) -> str:
     """Tag for an axis item, e.g. 'Y_ticks'."""
     return f"{axis.value}_{part.value}"
 
-def channel_tag(channel: int, part: ChannelPart) -> str:
+def channel_tag(channel: Channel, part: ChannelPart) -> str:
     """Tag for a channel item, e.g. 'Chan02_fill'."""
-    if channel < 0:
-        raise ValueError("channel number must not be negative")
-    return f"Chan{channel:02d}_{part.value}"
+    if channel is None:
+        raise ValueError("channel does not exist")
+    return f"{channel.channel_name}_{part.value}"
+
+
+@dataclass
+class TestSource:
+    name: str
+    histogram: Histogram
 
 
 class HistogramDisplay(tk.Frame):
-    def __init__(self, parent):
+    def __init__(self, parent, num_channels: int,
+                 palette: Optional[tuple[tuple[str, str], ...]] = None):
         super().__init__(parent)
         # widths and heights of the axis label zones; set by set_label_sizes()
         self.axis_font = tkfont.nametofont("TkFixedFont").copy()
@@ -61,19 +74,27 @@ class HistogramDisplay(tk.Frame):
         self.dirty = False
         self.max_counts = 150
         self.min_y_span = 5
-        self.range_min = -20.0
-        self.range_max =  40.0
+        self.range_min = -40.0
+        self.range_max =  80.0
         self.min_x_span = 4.0
+        self.controls_frame = tk.Frame(self)
+        self.controls_frame.grid(row=0, column=0, sticky="nsew")
+        self.channel_list = ChannelList(num_channels, palette)
+        self.channel_controls = ChannelControls(self.controls_frame,
+                                                self.channel_list)
+        self.channel_controls.pack(side="top", fill="x")
+        self.time_display = TimeDisplay(self.controls_frame)
+        self.time_display.pack(side="top", fill="x")
         self.y_axis = ValueAxis(value_min = 0, value_max = self.max_counts,
                                 pixel_min =1, pixel_max = 0,
                                 major_spacing = self.axis_text_height*2)
         self.x_axis = ValueAxis(value_min = self.range_min, value_max = self.range_max,
                                 pixel_min =1, pixel_max = 0,
                                 major_spacing = self.axis_text_height*2)
-        self.canvas = tk.Canvas(self, background="white", highlightthickness=0)
-        self.canvas.grid(row=0, column=0, sticky="nsew")
+        self.canvas = tk.Canvas(self, background="black", highlightthickness=0)
+        self.canvas.grid(row=0, column=1, sticky="nsew")
         self.grid_rowconfigure(0, weight=1)
-        self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure(1, weight=1)
         self.canvas.bind("<Configure>", self._on_resize)
         # application-level events built from raw Tk events
         self.events = CanvasEvents(self.canvas)
@@ -86,7 +107,8 @@ class HistogramDisplay(tk.Frame):
         self.events.on_drag = self._on_drag
 
     def _on_pointer_move(self, x, y):
-        print("pointer_move", x, y)
+        #print("pointer_move", x, y)
+        pass
 
     def _on_pointer_hover(self, x, y):
         print("pointer_hover", x, y)
@@ -231,24 +253,26 @@ class HistogramDisplay(tk.Frame):
         self.canvas.delete(base_tag)
         self.canvas.delete(body_tag)
         self.canvas.delete(grid_tag)
+        fg = "white"
+        grid = "gray15"
         # draw axis
         self.canvas.create_line(right, top, right, bottom,
-                                tags=base_tag, fill="black")
+                                tags=base_tag, fill=fg)
         # draw minor ticks
         for value in axis.get_minor_values():
             y = axis.v2p(value)
             self.canvas.create_line(right-MINOR_TICK_LEN, y, right, y,
-                                    tags=body_tag, fill="black")
+                                    tags=body_tag, fill=fg)
         # draw major ticks
         for value in axis.get_major_values():
             y = axis.v2p(value)
             self.canvas.create_line(right-MAJOR_TICK_LEN, y, right, y,
-                                    tags=body_tag, fill="black")
+                                    tags=body_tag, fill=fg)
             self.canvas.create_line(right, y, plot_right, y,
-                                    tags=grid_tag, fill="gray85")
+                                    tags=grid_tag, fill=grid)
             self.canvas.create_text(right-(MAJOR_TICK_LEN+TICK_LABEL_SPACE), y,
                                     anchor="e", angle=0, font=self.axis_font,
-                                    tags=body_tag, fill="black", text=str(value))
+                                    tags=body_tag, fill=fg, text=str(value))
 
     def draw_x_axis(self, axis):
         box = self.x_axis_box
@@ -260,25 +284,49 @@ class HistogramDisplay(tk.Frame):
         body_tag = axis_tag(Axis.X, AxisPart.CONTENT)
         self.canvas.delete(base_tag)
         self.canvas.delete(body_tag)
+        fg = "white"
         # draw axis
         self.canvas.create_line(left, top, right, top,
-                                tags=base_tag, fill="black")
+                                tags=base_tag, fill=fg)
         # draw minor ticks
         for value in axis.get_minor_values():
             x = axis.v2p(value)
             self.canvas.create_line(x, top, x, top+MINOR_TICK_LEN,
-                                    tags=body_tag, fill="black")
+                                    tags=body_tag, fill=fg)
         # draw major ticks
         for value in axis.get_major_values():
             x = axis.v2p(value)
             self.canvas.create_line(x, top, x, top+MAJOR_TICK_LEN,
-                                    tags=body_tag, fill="black")
+                                    tags=body_tag, fill=fg)
             self.canvas.create_text(x+TICK_LABEL_SPACE,
                                     top+MAJOR_TICK_LEN+TICK_LABEL_SPACE,
                                     anchor="e", angle=55, font=self.axis_font,
-                                    tags=body_tag, fill="black", text=str(value))
+                                    tags=body_tag, fill=fg, text=str(value))
 
-    def draw_histogram(self, histo: Histogram, x_axis: ValueAxis, y_axis: ValueAxis):
+    def draw_histogram(self, chan: Channel,
+                       x_axis: ValueAxis, y_axis: ValueAxis):
+        show_outliers = True
+        filled = False
+        px_min = x_axis.pixel_min
+        px_max = x_axis.pixel_max
+        py_min = y_axis.pixel_min
+        py_max = y_axis.pixel_max
+        line_tag = channel_tag(chan, ChannelPart.LINE)
+        fill_tag = channel_tag(chan, ChannelPart.FILL)
+        divider_tag = channel_tag(chan, ChannelPart.DIVIDERS)
+        label_tag = channel_tag(chan, ChannelPart.LABELS)
+        self.canvas.delete(line_tag)
+        self.canvas.delete(fill_tag)
+        self.canvas.delete(divider_tag)
+        self.canvas.delete(label_tag)
+        if not chan.visible or chan.source is None:
+            return
+        histo = chan.source.histogram
+        if chan == self.channel_list.selected:
+            color = chan.selected_color
+        else:
+            color = chan.normal_color
+        coords = []
         if (x_axis.value_max < histo.range_min or
             x_axis.value_min > histo.range_max):
             return  # histogram is entirely off-screen
@@ -292,37 +340,85 @@ class HistogramDisplay(tk.Frame):
             last_visible_bin = histo.find_bin(x_axis.value_max)
         pixels_per_bin = histo.bin_width / x_axis.dp2dv(1)
         if pixels_per_bin >= 1:
+            if pixels_per_bin > DIVIDER_MIN_WIDTH:
+                dividers = True
+                divider_coords = []
+            else:
+                dividers = False
             # integer bins have dividers half-way between
             if histo.value_type is int:
                 val_base = histo.range_min - 0.5
             else:
                 val_base = histo.range_min
-            left_edge_val = val_base + first_visible_bin * histo.bin_width
-            left_edge_pix = x_axis.v2p(left_edge_val)
-            prev_val = histo.counts[first_visible_bin]
+            x_val = val_base + first_visible_bin * histo.bin_width
+            x_pix = max(x_axis.v2p(x_val), px_min)
+            if show_outliers and x_pix > px_min:
+                left_x = max(x_pix - OUTLIER_BAR_WIDTH, px_min)
+                y_val = min(histo.below_count, y_axis.value_max)
+                y_pix = y_axis.v2p(y_val)
+                coords += (left_x, py_min)
+                coords += (left_x, y_pix)
+            else:
+                x_pix = max(x_pix, px_min)
+                y_val = y_axis.value_min
+                y_pix = y_axis.pixel_min
+            coords += (x_pix, y_pix)
             # loop over bins
             for bin_num in range(first_visible_bin, last_visible_bin+1):
-                curr_val = histo.counts[bin_num]
-                if curr_val != prev_val:
-                    right_edge_val = val_base + (bin_num + 1) * histo.bin_width
-                    right_edge_pix = x_axis.v2p(right_edge_val)
-                    # do work here
-                    left_edge_val = right_edge_val
-                    left_edge_pix = right_edge_pix
+                new_val = min(histo.counts[bin_num], y_axis.value_max)
+                if new_val != y_val:
+                    # horizontal segment across previous bin(s)
+                    x_val = val_base + bin_num * histo.bin_width
+                    x_pix = max(x_axis.v2p(x_val), px_min)
+                    coords += (x_pix, y_pix)
+                    # vertical segment to start current bin
+                    y_val = new_val
+                    y_pix = y_axis.v2p(y_val)
+                    coords += (x_pix, y_pix)
+                else:
+                    x_val = None
+                if dividers and y_pix != py_min:
+                    if x_val is None:
+                        x_val = val_base + bin_num * histo.bin_width
+                        x_pix = max(x_axis.v2p(x_val), px_min)
+                    divider_coords += (x_pix, py_min)
+                    divider_coords += (x_pix, y_pix)
+                    divider_coords += (x_pix, py_min)
+            # horizontal segment across the last (and perhaps previous) bin(s)
+            x_val = val_base + (bin_num + 1) * histo.bin_width
+            x_pix = min(x_axis.v2p(x_val), px_max)
+            coords += (x_pix, y_pix)
+            if show_outliers and x_pix < px_max:
+                if dividers and y_pix != py_min:
+                    divider_coords += (x_pix, py_min)
+                    divider_coords += (x_pix, y_pix)
+                y_val = min(histo.above_count, y_axis.value_max)
+                y_pix = y_axis.v2p(y_val)
+                coords += (x_pix, y_pix)
+                x_pix = min(x_pix + OUTLIER_BAR_WIDTH, px_max)
+                coords += (x_pix, y_pix)
+            coords += (x_pix, py_min)
         else:
             # loop over pixels
             pass
-
-
+        if dividers:
+            print(f"{len(divider_coords)=}", end="")
+        print(f"{len(coords)=}")
+        self.canvas.create_polygon(*coords, tags=fill_tag, fill=color, outline="")
+        self.canvas.create_line(*coords, tags=line_tag, fill="white")
+        if dividers:
+            self.canvas.create_line(*divider_coords, tags=divider_tag, fill="green")
 
     def redraw(self):
         self.dirty = False
         self.draw_y_axis(self.y_axis)
         self.draw_x_axis(self.x_axis)
+        self.time_display.update_time()
         self.canvas.tag_raise(axis_tag(Axis.Y, AxisPart.GRIDLINES))
         self.canvas.tag_raise(axis_tag(Axis.X, AxisPart.CONTENT))
         self.canvas.tag_raise(axis_tag(Axis.Y, AxisPart.CONTENT))
-        # channels go here
+        for channel in self.channel_list.channels_back_to_front():
+            self.draw_histogram(channel, self.x_axis, self.y_axis)
         self.canvas.tag_raise(axis_tag(Axis.X, AxisPart.BASELINE))
         self.canvas.tag_raise(axis_tag(Axis.Y, AxisPart.BASELINE))
 
@@ -332,7 +428,13 @@ class HistogramDisplay(tk.Frame):
 if __name__ == "__main__":
     root = tk.Tk()
     root.title("HistogramDisplay test")
-    display = HistogramDisplay(root)
+    display = HistogramDisplay(root, num_channels=2)
+
+    histo = Histogram(value_type=int, range_min=0, bin_width=3,
+                    counts=(5, 0, 2, 2, 9), above_count=3, below_count=12)
+    display.channel_list.set_source(display.channel_list.selected,
+                                    TestSource("test", histo))
+
     display.pack(fill="both", expand=True)
     root.geometry("600x400")
     root.mainloop()
