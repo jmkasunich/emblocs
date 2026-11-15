@@ -1,23 +1,38 @@
 #! /usr/bin/env python3
 # channel_controls.py
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import tkinter as tk
 from tkinter import ttk
 import tkinter.font as tkfont
-from typing import Optional
+from typing import Optional, Any
 
 @dataclass(eq=False)
 class Channel:
     channel_name: str
     normal_color: str
     selected_color: str
-    source: Optional[str] = None  # none means unconnected
+    _source : Any = field(init=False, default=None)  # none means unconnected
     visible: bool = True
+
+    def set_source(self, source):
+        if source is None:
+            # disconnect
+            self._source = None
+            return
+        if not hasattr(source, "name"):
+            raise TypeError("'source' must have a 'name' attribute")
+        if not isinstance(source.name, str):
+            raise TypeError("'source.name' must be a string")
+        self._source = source
 
     @property
     def source_name(self):
-        return "----" if self.source is None else self.source
+        return "----" if self._source is None else self.source.name
+
+    @property
+    def source(self):
+        return self._source
 
 
 class ChannelList:
@@ -47,6 +62,12 @@ class ChannelList:
         self._selected = self._draw_order[-1]  # the selected Channel
         self._observers = []   # callbacks to be invoked on any change
 
+    def set_source(self, channel: Channel, source: Any):
+        if channel not in self._channels:
+            raise ValueError("channel is not in this list")
+        channel.set_source(source)
+        self._on_change()
+
     def select(self, channel: Channel):
         if self._selected is channel:
             return  # already selected
@@ -75,6 +96,12 @@ class ChannelList:
         """1 is the front (drawn last); len(self) is the back."""
         return len(self._draw_order) - self._draw_order.index(channel)
 
+    def channels_back_to_front(self) -> list[Channel]:
+        """ Returns a list of Channels in drawing order.
+        The back is drawn first, front is drawn last.
+        Returns a copy."""
+        return list(self._draw_order)
+
     @property
     def selected(self):
         return self._selected
@@ -99,7 +126,6 @@ class ChannelControls(ttk.LabelFrame):
             self.font = font
         self.font_height = self.font.metrics("linespace")
         self.channel_widgets = {}     # Channel -> dict of child widgets
-        self.grid_columnconfigure(2, weight=1)
         channel_list.add_observer(self._on_change)
         self._on_change()
 
