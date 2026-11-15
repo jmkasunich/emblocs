@@ -78,13 +78,17 @@ class Histogram:
 
     def find_bin(self, value) -> Optional[int]:
         """ Return the number of the bin that contains 'value', or
-        None if value is outside of the histogram's range. """
+        None if 'value' is outside of the histogram's range. """
+        if self.value_type is int and isinstance(value, float):
+            value = round(value)
         if self.range_min <= value <= self.range_max:
             if self.value_type is int:
                 bin_num = (value - self.range_min) // self.bin_width
             else:
                 bin_num = math.floor((value - self.range_min) / self.bin_width)
-            return min(bin_num, len(self.counts)-1)
+                if bin_num >= self.num_bins:
+                    bin_num = self.num_bins - 1
+            return bin_num
         return None
 
     def get_bin_count(self, bin_num: int) -> int:

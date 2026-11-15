@@ -134,9 +134,9 @@ class SampleHistogram:
             if self.value_type is int:
                 bin_num = (value - self.range_min) // self.bin_width
             else:
-                bin_num = int((value - self.range_min) / self.bin_width)
+                bin_num = math.floor((value - self.range_min) / self.bin_width)
                 if bin_num >= self.num_bins:
-                    bin_num = self.num_bins -1
+                    bin_num = self.num_bins - 1
             self.counts[bin_num] += 1
         # manage windowed histogram data
         if self.window_size is not None:
