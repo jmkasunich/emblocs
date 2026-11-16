@@ -74,8 +74,8 @@ class HistogramDisplay(tk.Frame):
         self.dirty = False
         self.max_counts = 150
         self.min_y_span = 5
-        self.range_min = -40.0
-        self.range_max =  80.0
+        self.range_min = -2000.0
+        self.range_max =  2000.0
         self.min_x_span = 4.0
         self.controls_frame = tk.Frame(self)
         self.controls_frame.grid(row=0, column=0, sticky="nsew")
@@ -108,10 +108,13 @@ class HistogramDisplay(tk.Frame):
 
     def _on_pointer_move(self, x, y):
         #print("pointer_move", x, y)
+        if x is not None:
+            print(f"{x:3}, {y:3}    \r", end="")
         pass
 
     def _on_pointer_hover(self, x, y):
-        print("pointer_hover", x, y)
+        #print("pointer_hover", x, y)
+        pass
 
     def _on_single_click(self, x, y):
         print("single_click", x, y)
@@ -305,109 +308,124 @@ class HistogramDisplay(tk.Frame):
 
     def draw_histogram(self, chan: Channel,
                        x_axis: ValueAxis, y_axis: ValueAxis):
-        show_outliers = True
-        filled = False
-        px_min = x_axis.pixel_min
-        px_max = x_axis.pixel_max
-        py_min = y_axis.pixel_min
-        py_max = y_axis.pixel_max
         line_tag = channel_tag(chan, ChannelPart.LINE)
         fill_tag = channel_tag(chan, ChannelPart.FILL)
         divider_tag = channel_tag(chan, ChannelPart.DIVIDERS)
-        label_tag = channel_tag(chan, ChannelPart.LABELS)
         self.canvas.delete(line_tag)
         self.canvas.delete(fill_tag)
         self.canvas.delete(divider_tag)
-        self.canvas.delete(label_tag)
         if not chan.visible or chan.source is None:
             return
         histo = chan.source.histogram
+        filled = True
+        dividers = False
+        px_min = x_axis.pixel_min
+        px_max = x_axis.pixel_max
+        py_min = y_axis.pixel_min
         if chan == self.channel_list.selected:
             color = chan.selected_color
         else:
             color = chan.normal_color
         coords = []
-        if (x_axis.value_max < histo.range_min or
-            x_axis.value_min > histo.range_max):
+        if histo.value_type is int:
+            range_min = histo.range_min - 0.5
+            range_max = histo.range_max + 0.5
+        else:
+            range_min = histo.range_min
+            range_max = histo.range_max
+        if (x_axis.value_max <= range_min or
+            x_axis.value_min >= range_max):
             return  # histogram is entirely off-screen
-        if x_axis.value_min <= histo.range_min:
-            first_visible_bin = 0
-        else:
-            first_visible_bin = histo.find_bin(x_axis.value_min)
-        if x_axis.value_max >= histo.range_max:
-            last_visible_bin = histo.num_bins - 1
-        else:
-            last_visible_bin = histo.find_bin(x_axis.value_max)
         pixels_per_bin = histo.bin_width / x_axis.dp2dv(1)
+        py = py_min
+        vy_old = 0
+        py_old = py
         if pixels_per_bin >= 1:
+            # loop over bins
+            if x_axis.value_min <= range_min:
+                first_visible_bin = 0
+            else:
+                first_visible_bin = histo.find_bin(x_axis.value_min)
+            if x_axis.value_max >= range_max:
+                last_visible_bin = histo.num_bins - 1
+            else:
+                last_visible_bin = histo.find_bin(x_axis.value_max)
             if pixels_per_bin > DIVIDER_MIN_WIDTH:
                 dividers = True
                 divider_coords = []
-            else:
-                dividers = False
-            # integer bins have dividers half-way between
-            if histo.value_type is int:
-                val_base = histo.range_min - 0.5
-            else:
-                val_base = histo.range_min
-            x_val = val_base + first_visible_bin * histo.bin_width
-            x_pix = max(x_axis.v2p(x_val), px_min)
-            if show_outliers and x_pix > px_min:
-                left_x = max(x_pix - OUTLIER_BAR_WIDTH, px_min)
-                y_val = min(histo.below_count, y_axis.value_max)
-                y_pix = y_axis.v2p(y_val)
-                coords += (left_x, py_min)
-                coords += (left_x, y_pix)
-            else:
-                x_pix = max(x_pix, px_min)
-                y_val = y_axis.value_min
-                y_pix = y_axis.pixel_min
-            coords += (x_pix, y_pix)
-            # loop over bins
             for bin_num in range(first_visible_bin, last_visible_bin+1):
-                new_val = min(histo.counts[bin_num], y_axis.value_max)
-                if new_val != y_val:
+                vy = min(histo.counts[bin_num], y_axis.value_max)
+                if vy != vy_old:
                     # horizontal segment across previous bin(s)
-                    x_val = val_base + bin_num * histo.bin_width
-                    x_pix = max(x_axis.v2p(x_val), px_min)
-                    coords += (x_pix, y_pix)
-                    # vertical segment to start current bin
-                    y_val = new_val
-                    y_pix = y_axis.v2p(y_val)
-                    coords += (x_pix, y_pix)
-                else:
-                    x_val = None
-                if dividers and y_pix != py_min:
-                    if x_val is None:
-                        x_val = val_base + bin_num * histo.bin_width
-                        x_pix = max(x_axis.v2p(x_val), px_min)
-                    divider_coords += (x_pix, py_min)
-                    divider_coords += (x_pix, y_pix)
-                    divider_coords += (x_pix, py_min)
-            # horizontal segment across the last (and perhaps previous) bin(s)
-            x_val = val_base + (bin_num + 1) * histo.bin_width
-            x_pix = min(x_axis.v2p(x_val), px_max)
-            coords += (x_pix, y_pix)
-            if show_outliers and x_pix < px_max:
-                if dividers and y_pix != py_min:
-                    divider_coords += (x_pix, py_min)
-                    divider_coords += (x_pix, y_pix)
-                y_val = min(histo.above_count, y_axis.value_max)
-                y_pix = y_axis.v2p(y_val)
-                coords += (x_pix, y_pix)
-                x_pix = min(x_pix + OUTLIER_BAR_WIDTH, px_max)
-                coords += (x_pix, y_pix)
-            coords += (x_pix, py_min)
+                    vx = range_min + bin_num * histo.bin_width
+                    px = max(x_axis.v2p(vx), px_min)
+                    # top right corner of previous bar
+                    coords += (px, py_old)
+                    py = y_axis.v2p(vy)
+                    # top left corner of current bar
+                    coords += (px, py)
+                    if dividers and py_old != py_min and py != py_min:
+                        divider_coords += (px, py_min)
+                        divider_coords += (px, max(py, py_old))
+                        divider_coords += (px, py_min)
+                    vy_old = vy
+                    py_old = py
+                elif dividers and py != py_min:
+                    vx = range_min + bin_num * histo.bin_width
+                    px = max(x_axis.v2p(vx), px_min)
+                    divider_coords += (px, py_min)
+                    divider_coords += (px, py)
+                    divider_coords += (px, py_min)
+            vx = range_min + (last_visible_bin + 1) * histo.bin_width
+            px = min(x_axis.v2p(vx), px_max)
+            # top right corner of last bar
+            coords += (px, py_old)
+            if py_old != py_min:
+                # last point on baseline
+                coords += (px, py_min)
         else:
             # loop over pixels
-            pass
-        if dividers:
-            print(f"{len(divider_coords)=}", end="")
-        print(f"{len(coords)=}")
-        self.canvas.create_polygon(*coords, tags=fill_tag, fill=color, outline="")
-        self.canvas.create_line(*coords, tags=line_tag, fill="white")
-        if dividers:
-            self.canvas.create_line(*divider_coords, tags=divider_tag, fill="green")
+            if x_axis.value_min <= range_min:
+                px_first = x_axis.v2p(range_min)
+            else:
+                px_first = x_axis.pixel_min
+            if x_axis.value_max >= range_max:
+                px_last = x_axis.v2p(range_max)
+            else:
+                px_last = x_axis.pixel_max
+            first_bin = histo.find_bin(x_axis.p2v(px_first - 0.5))
+            for px in range(px_first, px_last+1):
+                last_bin = histo.find_bin(x_axis.p2v(px + 0.5))
+                # slice to get all bins in this pixel, use highest count
+                bins = histo.counts[first_bin:last_bin]
+                vy = max(bins) if len(bins) > 0 else 0
+                vy = min(vy, y_axis.value_max)
+                if vy != vy_old:
+                    py = y_axis.v2p(vy)
+                    coords += (px, py_old)
+                    coords += (px, py)
+                    vy_old = vy
+                    py_old = py
+                first_bin = last_bin
+            px = px_last
+            coords += (px, py_old)
+            if py_old != py_min:
+                # last point on baseline
+                coords += (px, py_min)
+        # we now have coordinates, do the drawing
+        if filled and len(coords) >= 6:
+            self.canvas.create_polygon(*coords, tags=fill_tag, fill=color, outline="")
+            if dividers and len(divider_coords) >= 4:
+                self.canvas.create_line(*divider_coords, tags=divider_tag, fill="white")
+            if dividers:
+                self.canvas.create_line(*coords, tags=line_tag, fill="white")
+            else:
+                self.canvas.create_line(*coords, tags=line_tag, fill=color)
+        elif len(coords) >= 4:
+            if dividers and len(divider_coords) >= 4:
+                self.canvas.create_line(*divider_coords, tags=divider_tag, fill=color)
+            self.canvas.create_line(*coords, tags=line_tag, fill=color)
+
 
     def redraw(self):
         self.dirty = False
@@ -431,7 +449,7 @@ if __name__ == "__main__":
     display = HistogramDisplay(root, num_channels=2)
 
     histo = Histogram(value_type=int, range_min=0, bin_width=3,
-                    counts=(5, 0, 2, 2, 9), above_count=3, below_count=12)
+                    counts=(5, 0, 2, 2, 9), above_count=6, below_count=7)
     display.channel_list.set_source(display.channel_list.selected,
                                     TestSource("test", histo))
 
