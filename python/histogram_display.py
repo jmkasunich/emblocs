@@ -11,8 +11,11 @@ from value_axis import ValueAxis
 from histogram import Histogram
 from canvas_events import CanvasBox, CanvasEvents
 from channel_controls import Channel, ChannelList, ChannelControls
+from display_controls import DisplayControls
 from time_display import TimeDisplay
 from typing import Optional
+
+import traceback
 
 # screen geometry configuration constants
 
@@ -77,24 +80,31 @@ class HistogramDisplay(tk.Frame):
         self.range_min = -2000.0
         self.range_max =  2000.0
         self.min_x_span = 4.0
+        # data model
+        self.channel_list = ChannelList(num_channels, palette)
+        self.channel_list.add_observer(self._mark_dirty)
+        self.y_axis = ValueAxis(value_min = 0, value_max = self.max_counts,
+                                major_spacing = self.axis_text_height*2)
+        self.y_axis.add_observer(self._mark_dirty)
+        self.x_axis = ValueAxis(value_min = self.range_min, value_max = self.range_max,
+                                major_spacing = self.axis_text_height*2)
+        self.x_axis.add_observer(self._mark_dirty)
+        # view/control of model
         self.controls_frame = tk.Frame(self)
         self.controls_frame.grid(row=0, column=0, sticky="nsew")
-        self.channel_list = ChannelList(num_channels, palette)
-        self.channel_controls = ChannelControls(self.controls_frame,
-                                                self.channel_list)
-        self.channel_controls.pack(side="top", fill="x")
-        self.time_display = TimeDisplay(self.controls_frame)
-        self.time_display.pack(side="top", fill="x")
-        self.y_axis = ValueAxis(value_min = 0, value_max = self.max_counts,
-                                pixel_min =1, pixel_max = 0,
-                                major_spacing = self.axis_text_height*2)
-        self.x_axis = ValueAxis(value_min = self.range_min, value_max = self.range_max,
-                                pixel_min =1, pixel_max = 0,
-                                major_spacing = self.axis_text_height*2)
         self.canvas = tk.Canvas(self, background="black", highlightthickness=0)
         self.canvas.grid(row=0, column=1, sticky="nsew")
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
+        # sub-panels inside controls_frame
+        self.channel_controls = ChannelControls(self.controls_frame,
+                                                self.channel_list)
+        self.channel_controls.pack(side="top", fill="x")
+        self.display_controls = DisplayControls(self.controls_frame,
+                                                command=self._mark_dirty)
+        self.display_controls.pack(side="top", fill="x")
+        self.time_display = TimeDisplay(self.controls_frame)
+        self.time_display.pack(side="top", fill="x")
         self.canvas.bind("<Configure>", self._on_resize)
         # application-level events built from raw Tk events
         self.events = CanvasEvents(self.canvas)
@@ -105,6 +115,7 @@ class HistogramDisplay(tk.Frame):
         self.events.on_long_press = self._on_long_press
         self.events.on_wheel = self._on_wheel
         self.events.on_drag = self._on_drag
+        print("init complete")
 
     def _on_pointer_move(self, x, y):
         #print("pointer_move", x, y)
@@ -155,9 +166,9 @@ class HistogramDisplay(tk.Frame):
         return None
 
     def _reset_view(self):
+        print("reset view")
         self.y_axis.set_range(0, self.max_counts)
         self.x_axis.set_range(self.range_min, self.range_max)
-        self._mark_dirty()
 
     def _y_zoom(self, factor):
         """ Zoom the Y axis by 'factor'.  Less than 1.0 zooms in, more
@@ -173,7 +184,6 @@ class HistogramDisplay(tk.Frame):
             new_max = math.floor(self.y_axis.value_max * factor)
         new_max = max(min(new_max, self.max_counts), self.min_y_span)
         self.y_axis.set_range(0, new_max)
-        self._mark_dirty()
 
     def _x_zoom(self, factor, around):
         """ Zoom the X axis by 'factor', centered on 'around', which is
@@ -195,7 +205,6 @@ class HistogramDisplay(tk.Frame):
         new_min = max(min(new_min, self.range_max), self.range_min)
         new_max = max(min(new_max, self.range_max), self.range_min)
         self.x_axis.set_range(new_min, new_max)
-        self._mark_dirty()
 
     def _x_pan(self, amount):
         """ Pan the X axis by 'amount', which is in value units.
@@ -209,13 +218,14 @@ class HistogramDisplay(tk.Frame):
         new_min = self.x_axis.value_min + amount
         new_max = self.x_axis.value_max + amount
         self.x_axis.set_range(new_min, new_max)
-        self._mark_dirty()
 
 
     def _on_resize(self, event):
+        print("on resize")
         self._layout()
 
     def _layout(self):
+        print("layout")
         width = self.canvas.winfo_width()
         height = self.canvas.winfo_height()
         # space for the Y (left) and X (bottom) axes
@@ -236,10 +246,12 @@ class HistogramDisplay(tk.Frame):
             return
         self.y_axis.set_location(self.y_axis_box.bottom, self.y_axis_box.top)
         self.x_axis.set_location(self.x_axis_box.left, self.x_axis_box.right)
-        self._mark_dirty()
 
     def _mark_dirty(self):
+        print("mark dirty")
         if not self.dirty:
+            if self.plot_box is None:
+                return
             self.dirty = True
             self.after_idle(self.redraw)
 
@@ -317,7 +329,7 @@ class HistogramDisplay(tk.Frame):
         if not chan.visible or chan.source is None:
             return
         histo = chan.source.histogram
-        filled = True
+        filled = self.display_controls.filled
         dividers = False
         px_min = x_axis.pixel_min
         px_max = x_axis.pixel_max
@@ -428,10 +440,11 @@ class HistogramDisplay(tk.Frame):
 
 
     def redraw(self):
+        print("redraw")
         self.dirty = False
         self.draw_y_axis(self.y_axis)
         self.draw_x_axis(self.x_axis)
-        self.time_display.update_time()
+        self.time_display.update_timestamp()
         self.canvas.tag_raise(axis_tag(Axis.Y, AxisPart.GRIDLINES))
         self.canvas.tag_raise(axis_tag(Axis.X, AxisPart.CONTENT))
         self.canvas.tag_raise(axis_tag(Axis.Y, AxisPart.CONTENT))
