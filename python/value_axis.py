@@ -51,13 +51,15 @@ def step_125(value):
 
 
 class ValueAxis:
-    def __init__(self, value_min, value_max, pixel_min, pixel_max, major_spacing=20):
+    def __init__(self, *, value_min, value_max,
+                 pixel_min=0, pixel_max=1, major_spacing=20):
         if isinstance(value_min, int) and isinstance(value_max, int):
             self.value_type = int
         elif isinstance(value_min, float) and isinstance(value_max, float):
             self.value_type = float
         else:
             raise TypeError("value_min and value_max must both be int or float")
+        self._observers = []
         self.value_min = None
         self.value_max = None
         self.pixel_min = None
@@ -128,16 +130,24 @@ class ValueAxis:
         if not self._div_values_stale:
             self._div_values_stale = True
 
+    def add_observer(self, callback):
+        self._observers.append(callback)
+
     def _refresh(self):
         """
         Calculates conversion and/or div steps if dirty.
-        Does not calculate div values; they are done on demand
+        Does not calculate div values; they are done on demand.
+        Calls observers, if any, after stale data is updated.
         """
+        stale = ( self._conv_stale or self._div_steps_stale )
         # refresh cached data
         if self._conv_stale:
             self._calculate_conversion()
         if self._div_steps_stale:
             self._calculate_div_steps(self.major_spacing)
+        if stale:
+            for observer in self._observers:
+                observer()
 
     def _set_range(self, value_min, value_max):
         """ helper for set_range()
