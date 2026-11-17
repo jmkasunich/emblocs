@@ -75,6 +75,7 @@ class TimeDisplay(ttk.LabelFrame):
         event rather than leaving it to the user.
         """
         self._elapsed_start = time.monotonic()
+        self.update_time()
 
     def set_mode(self, mode: TimeDisplayMode):
         """ Changes display mode from the application.
@@ -93,6 +94,7 @@ class TimeDisplay(ttk.LabelFrame):
             # like a daylight savings time change occurred.
             self._set_anchor()
             self._reset_button.configure(state="disabled")
+        self.update_time()
 
     def update_time(self, timestamp=None):
         """ Updates the displayed time.  Typically called from an
