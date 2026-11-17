@@ -1,3 +1,6 @@
+#! /usr/bin/env python3
+# sample_histogram.py - build Histogram from a sequence of samples
+
 import math
 import sys
 from collections import deque
