@@ -7,7 +7,7 @@ import tkinter.font as tkfont
 from dataclasses import dataclass
 import math
 from enum import Enum
-from value_axis import ValueAxis
+from linear_axis import LinearAxis
 from histogram import Histogram
 from canvas_events import CanvasBox, CanvasEvents
 from channel_controls import Channel, ChannelList, ChannelControls
@@ -83,13 +83,13 @@ class HistogramDisplay(tk.Frame):
         # data model
         self.channel_list = ChannelList(num_channels, palette)
         self.channel_list.add_observer(self._mark_dirty)
-        self.y_axis = ValueAxis(value_min = 0.0,
-                                value_max = float(self.max_counts),
-                                major_spacing = self.axis_text_height*2)
+        self.y_axis = LinearAxis(value_min = 0.0,
+                                 value_max = float(self.max_counts),
+                                 major_spacing = self.axis_text_height*2)
         self.y_axis.add_observer(self._mark_dirty)
-        self.x_axis = ValueAxis(value_min = float(self.range_min),
-                                value_max = float(self.range_max),
-                                major_spacing = self.axis_text_height*2)
+        self.x_axis = LinearAxis(value_min = float(self.range_min),
+                                 value_max = float(self.range_max),
+                                 major_spacing = self.axis_text_height*2)
         self.x_axis.add_observer(self._mark_dirty)
         # view/control of model
         self.controls_frame = tk.Frame(self)
@@ -272,7 +272,7 @@ class HistogramDisplay(tk.Frame):
                                     tags=body_tag, fill=fg, text=str(value))
 
     def draw_histogram(self, chan: Channel,
-                       x_axis: ValueAxis, y_axis: ValueAxis):
+                       x_axis: LinearAxis, y_axis: LinearAxis):
         line_tag = channel_tag(chan, ChannelPart.LINE)
         fill_tag = channel_tag(chan, ChannelPart.FILL)
         divider_tag = channel_tag(chan, ChannelPart.DIVIDERS)

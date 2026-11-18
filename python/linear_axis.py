@@ -1,7 +1,7 @@
 #! /usr/bin/env python3
-# value_axis.py
+# linear_axis.py
 """
-ValueAxis is a class for mapping values to pixels on a 
+LinearAxis is a class for mapping values to pixels on a
 display.  It includes value-to-pixel and pixel-to-value
 mapping methods, and calculates the values for major
 and minor divisions or tick-marks using a 1-2-5-10
@@ -29,7 +29,7 @@ def step_125(value: float) -> tuple[float, float]:
     raise AssertionError(f"should never get here, input was {value}")
 
 
-class ValueAxis:
+class LinearAxis:
     def __init__(self, *, value_min: float, value_max: float,
                  pixel_min: int = 0, pixel_max: int = 1,
                  major_spacing: int = 20):
