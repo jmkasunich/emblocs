@@ -34,59 +34,84 @@ class LinearAxis:
                  pixel_min: int = 0, pixel_max: int = 1,
                  major_spacing: int = 20):
         self._observers = []
-        self.value_min = None
-        self.value_max = None
-        self.pixel_min = 0
-        self.pixel_max = 0
-        self.major_spacing = None
+        self._value_min = None
+        self._value_max = None
+        self._pixel_min = 0
+        self._pixel_max = 0
+        self._major_spacing = None
         self._conv_stale = False
         self._div_steps_stale = False
         self._div_values_stale = False
         # derived and cached fields set by _calculate_xxx():
-        #  p2v_mul, p2v_add, v2p_mul, v2p_add,
-        #  major_step, minor_step, _major_values, _minor_values
+        #  _p2v_mul, _p2v_add, _v2p_mul, _v2p_add,
+        #  _major_step, _minor_step, _major_values, _minor_values
         # validate and save data
         self._set_range(value_min, value_max)
         self._set_location(pixel_min, pixel_max)
         self._set_major_spacing(major_spacing)
         # compute cached data
         self._calculate_conversion()
-        self._calculate_div_steps(self.major_spacing)
+        self._calculate_div_steps(self._major_spacing)
         self._calculate_div_values()
 
     @property
+    def pixel_min(self):
+        return self._pixel_min
+
+    @property
+    def pixel_max(self):
+        return self._pixel_max
+
+    @property
     def pixel_span(self):
-        return self.pixel_max - self.pixel_min
+        return self._pixel_max - self._pixel_min
+
+    @property
+    def value_min(self):
+        return self._value_min
+
+    @property
+    def value_max(self):
+        return self._value_max
 
     @property
     def value_span(self):
-        return self.value_max - self.value_min
+        return self._value_max - self._value_min
 
     @property
     def center(self) -> float:
-        return self.value_min + self.value_span / 2
+        return self._value_min + self.value_span / 2
+
+    @property
+    def major_step(self):
+        return self._major_step
+
+    @property
+    def minor_step(self):
+        return self._minor_step
+
 
     def p2v(self, pixel: int) -> float:
         """ Takes a pixel, returns the corresponding value on the axis
         """
-        return pixel * self.p2v_mul + self.p2v_add
+        return pixel * self._p2v_mul + self._p2v_add
 
     def dp2dv(self, pixels: int) -> float:
         """ Takes a delta in pixels, returns the corresponding delta value
         """
-        return pixels * self.p2v_mul
+        return pixels * self._p2v_mul
 
     def v2p(self, value: float) -> int:
         """ Takes a value, returns the nearest integer pixel on the axis
         Use for drawing, mouse hit testing, etc.
         """
-        return round(value * self.v2p_mul + self.v2p_add)
+        return round(value * self._v2p_mul + self._v2p_add)
 
     def v2p_f(self, value: float) -> float:
         """ Takes a value, returns the corresponding pixel as a float
         Use where exact round-trip conversions are needed.
         """
-        return value * self.v2p_mul + self.v2p_add
+        return value * self._v2p_mul + self._v2p_add
 
     def get_major_values(self) -> list[float]:
         """ Returns a list of values for major ticks and/or labels
@@ -128,7 +153,7 @@ class LinearAxis:
         if self._conv_stale:
             self._calculate_conversion()
         if self._div_steps_stale:
-            self._calculate_div_steps(self.major_spacing)
+            self._calculate_div_steps(self._major_spacing)
         if stale:
             for observer in self._observers:
                 observer()
@@ -152,17 +177,17 @@ class LinearAxis:
         if not value_span > min_span:
             raise ValueError("span too small for reliable arithmetic")
         # inputs are valid, check for changes
-        if ( value_min != self.value_min ) or \
-           ( value_max != self.value_max ):
+        if ( value_min != self._value_min ) or \
+           ( value_max != self._value_max ):
             self._dirty_conv()
             self._dirty_divs()
         # save new data
-        self.value_min = value_min
-        self.value_max = value_max
+        self._value_min = value_min
+        self._value_max = value_max
 
     def set_range(self, value_min: float, value_max: float):
         """ Determines the range of values that are mapped to an axis.
-        value_min must be less than value_max; both must be int or float
+        value_min must be less than value_max; both must be float
         """
         # validate and store data
         self._set_range(value_min, value_max)
@@ -182,12 +207,12 @@ class LinearAxis:
         # inputs are valid, check for changes
         if pixel_span != self.pixel_span:
             self._dirty_divs()
-        if ( pixel_min != self.pixel_min ) or \
-           ( pixel_max != self.pixel_max ):
+        if ( pixel_min != self._pixel_min ) or \
+           ( pixel_max != self._pixel_max ):
             self._dirty_conv()
         # save new data
-        self.pixel_min = pixel_min
-        self.pixel_max = pixel_max
+        self._pixel_min = pixel_min
+        self._pixel_max = pixel_max
 
     def set_location(self, pixel_min: int, pixel_max: int):
         """ Determines on-screen location of an axis.
@@ -207,10 +232,10 @@ class LinearAxis:
         if major_spacing < 1:
             raise ValueError("major_spacing must be at least 1")
         # inputs are valid, check for changes
-        if major_spacing != self.major_spacing:
+        if major_spacing != self._major_spacing:
             self._dirty_divs()
         # save new data
-        self.major_spacing = major_spacing
+        self._major_spacing = major_spacing
 
     def set_major_spacing(self, major_spacing: int):
         """ Sets minimum spacing between major ticks in pixels
@@ -223,23 +248,23 @@ class LinearAxis:
         """ Calculate coefficients used to convert from value to pixel
         space and back.
         """
-        self.p2v_mul = self.value_span / self.pixel_span
-        self.p2v_add = self.value_min - (self.pixel_min * self.p2v_mul)
-        self.v2p_mul = self.pixel_span / self.value_span
-        self.v2p_add = self.pixel_min - (self.value_min * self.v2p_mul)
+        self._p2v_mul = self.value_span / self.pixel_span
+        self._p2v_add = self._value_min - (self._pixel_min * self._p2v_mul)
+        self._v2p_mul = self.pixel_span / self.value_span
+        self._v2p_add = self._pixel_min - (self._value_min * self._v2p_mul)
         self._conv_stale = False
 
     def _calculate_div_steps(self, major_spacing: int):
         """Choose "nice" tick spacings for an axis.
         'major_spacing' is the minimum distance in pixels between major ticks.
     
-        Sets self.major_step and self.minor_step, which are used by
+        Sets self._major_step and self._minor_step, which are used by
         _calculate_div_values() to determine where ticks and/or labels
         should go for a "nice" display.
         """
         max_labels = max(abs(self.pixel_span) // major_spacing, 1)
         min_major_step = self.value_span / max_labels
-        self.major_step, self.minor_step = step_125(min_major_step)
+        self._major_step, self._minor_step = step_125(min_major_step)
         self._div_values_stale = True
         self._div_steps_stale = False
 
@@ -252,20 +277,20 @@ class LinearAxis:
         """
         major_list = []
         minor_list = []
-        major_index = math.ceil(self.value_min / self.major_step)
-        major = major_index * self.major_step
-        while major <= self.value_max:
+        major_index = math.ceil(self._value_min / self._major_step)
+        major = major_index * self._major_step
+        while major <= self._value_max:
             major_list.append(major)
             major_index += 1
-            major = major_index * self.major_step
-        major_minor_ratio = round(self.major_step / self.minor_step)
-        minor_index = math.ceil(self.value_min / self.minor_step)
-        minor = minor_index * self.minor_step
-        while minor <= self.value_max:
+            major = major_index * self._major_step
+        major_minor_ratio = round(self._major_step / self._minor_step)
+        minor_index = math.ceil(self._value_min / self._minor_step)
+        minor = minor_index * self._minor_step
+        while minor <= self._value_max:
             if minor_index % major_minor_ratio != 0:
                 minor_list.append(minor)
             minor_index += 1
-            minor = minor_index * self.minor_step
+            minor = minor_index * self._minor_step
         self._major_values = major_list
         self._minor_values = minor_list
         self._div_values_stale = False
@@ -288,8 +313,8 @@ class LinearAxis:
         if max_span is not None:
             new_span = min(new_span, max_span)
         factor = new_span / self.value_span
-        new_min = around + factor * (self.value_min - around)
-        new_max = around + factor * (self.value_max - around)
+        new_min = around + factor * (self._value_min - around)
+        new_max = around + factor * (self._value_max - around)
         try:
             self.set_range(new_min, new_max)
         except ValueError:
@@ -304,11 +329,11 @@ class LinearAxis:
         if not math.isfinite(amount):
             raise ValueError("amount must be finite")
         if amount > 0 and max_value is not None:
-            amount = min(amount, max_value - self.value_max)
+            amount = min(amount, max_value - self._value_max)
         elif amount < 0 and min_value is not None:
-            amount = max(amount, min_value - self.value_min)
-        new_min = self.value_min + amount
-        new_max = self.value_max + amount
+            amount = max(amount, min_value - self._value_min)
+        new_min = self._value_min + amount
+        new_max = self._value_max + amount
         try:
             self.set_range(new_min, new_max)
         except ValueError:
