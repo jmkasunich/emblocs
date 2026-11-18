@@ -8,8 +8,12 @@ and minor divisions or tick-marks using a 1-2-5-10
 sequence as is common for oscilloscopes and other
 instruments.
 """
-
+import tkinter as tk
+from tkinter import ttk
+import tkinter.font as tkfont
+from typing import Optional, Any
 import math
+from tooltip import Tooltip
 
 def step_125(value: float) -> tuple[float, float]:
     """Returns a tuple of the smallest 1-2-5 major step that is greater
@@ -79,7 +83,7 @@ class LinearAxis:
         return self._value_max - self._value_min
 
     @property
-    def center(self) -> float:
+    def value_center(self) -> float:
         return self._value_min + self.value_span / 2
 
     @property
@@ -336,3 +340,102 @@ class LinearAxis:
         except ValueError:
             # tried to pan too far?
             pass
+
+
+class LinearAxisControls(ttk.LabelFrame):
+    def __init__(self, parent, axis: LinearAxis, name: str = "Axis",
+                 font: Optional[tkfont.Font] = None,
+                 pan_buttons=True, zoom_buttons=True,
+                 min_display=None, max_display=None,
+                 span_display=None, center_display=None,
+                 vertical=True):
+        super().__init__(parent, text=name, padding=(2,0,0,3))
+        self._axis = axis
+        if font is None:
+            self._font = tkfont.nametofont("TkDefaultFont").copy()
+            self._font.configure(size=10)
+        else:
+            self._font = font
+        self._name = name
+        self._font_height = self._font.metrics("linespace")
+        self._widgets = {}
+        self._vars = {}
+        self._rows = 0
+        if vertical:
+            arrow1 = "\u2191"  # up arrow
+            arrow2 = "\u2193"  # down arrow
+        else:
+            arrow1 = "\u2190"  # left arrow
+            arrow2 = "\u2192"  # right arrow
+        if pan_buttons:
+            self._add_button_row("Pan", arrow1, self._on_pan_1,
+                                        arrow2, self._on_pan_2)
+        if zoom_buttons:
+            self._add_button_row("Zoom", "+", self._on_zoom_in,
+                                         "-", self._on_zoom_out)
+        self._add_value_row("Min", min_display, "lower end of axis")
+        self._add_value_row("Max", max_display, "upper end of axis")
+        self._add_value_row("Span", span_display, "Total span of axis")
+        self._add_value_row("Ctr", center_display, "Center point of axis")
+
+        axis.add_observer(self._on_change)
+        self._on_change()
+
+    def _on_change(self):
+        print(f"{self._name}._on_change")
+        self._vars["Min_var"].set(str(self._axis.value_min))
+        self._vars["Max_var"].set(str(self._axis.value_max))
+        self._vars["Span_var"].set(str(self._axis.value_span))
+        self._vars["Ctr_var"].set(str(self._axis.value_center))
+
+    def _add_button_row(self, label, b1_str, b1_cmd, b2_str, b2_cmd):
+        l = ttk.Label(self, text=label, width=5, anchor="w",
+                      font=self._font)
+        l.grid(row=self._rows, column=0, sticky="w")
+        b1 = ttk.Button(self, text=b1_str, width=-1, command=b1_cmd)
+        b1.grid(row=self._rows, column=1, sticky="ew")
+        b2 = ttk.Button(self, text=b2_str, width=-1, command=b2_cmd)
+        b2.grid(row=self._rows, column=2, sticky="ew")
+        self._widgets[f"{label}_label"] = l
+        self._widgets[f"{label}_b1"] = b1
+        self._widgets[f"{label}_b2"] = b2
+        self._rows += 1
+
+    def _add_value_row(self, label, kind, tooltip_text=None):
+        var = tk.StringVar(self)
+        self._vars[f"{label}_var"] = var
+        if kind is None:
+            return
+        l = ttk.Label(self, text=label, anchor="w",
+                            font=self._font, width=5)
+        if kind == "entry":
+            w = ttk.Entry(self, textvariable=var,
+                                font=self._font, width=10)
+            w.bind("<Return>", lambda e: self._commit(label))
+            w.bind("<FocusOut>", lambda e: self._on_change())
+        else:
+            w = ttk.Label(self, textvariable=var, anchor="w",
+                                font=self._font, width=10)
+        l.grid(row=self._rows, column=0, sticky="w")
+        w.grid(row=self._rows, column=1, columnspan=2, sticky="ew")
+        if tooltip_text is not None:
+            Tooltip(l, tooltip_text)
+            Tooltip(w, tooltip_text)
+        self._widgets[f"{label}_label"] = l
+        self._widgets[f"{label}_value"] = w
+        self._rows += 1
+
+    def _commit(self, object:str):
+        print(f"{self._name}._commit({object})")
+
+    def _on_pan_1(self):
+        print(f"{self._name}._on_pan_1")
+
+    def _on_pan_2(self):
+        print(f"{self._name}._on_pan_2")
+
+    def _on_zoom_in(self):
+        print(f"{self._name}._on_zoom_in")
+
+    def _on_zoom_out(self):
+        print(f"{self._name}._on_zoom_out")
