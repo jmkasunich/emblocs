@@ -277,20 +277,17 @@ class LinearAxis:
         """
         major_list = []
         minor_list = []
-        major_index = math.ceil(self._value_min / self._major_step)
-        major = major_index * self._major_step
-        while major <= self._value_max:
-            major_list.append(major)
-            major_index += 1
-            major = major_index * self._major_step
         major_minor_ratio = round(self._major_step / self._minor_step)
-        minor_index = math.ceil(self._value_min / self._minor_step)
-        minor = minor_index * self._minor_step
-        while minor <= self._value_max:
-            if minor_index % major_minor_ratio != 0:
-                minor_list.append(minor)
-            minor_index += 1
-            minor = minor_index * self._minor_step
+        # add 0.001 * minor tick spacing to make sure that ticks on the
+        # edge of the range aren't dropped due to floating point rounding
+        start_index = math.ceil((self._value_min / self._minor_step)-0.001)
+        end_index  = math.floor((self._value_max / self._minor_step)+0.001)
+        for index in range(start_index, end_index+1):
+            value = index * self._minor_step
+            if index % major_minor_ratio == 0:
+                major_list.append(value)
+            else:
+                minor_list.append(value)
         self._major_values = major_list
         self._minor_values = minor_list
         self._div_values_stale = False
