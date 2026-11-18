@@ -7,7 +7,7 @@ import tkinter.font as tkfont
 from dataclasses import dataclass
 import math
 from enum import Enum
-from linear_axis import LinearAxis
+from linear_axis import LinearAxis, LinearAxisControls
 from histogram import Histogram
 from canvas_events import CanvasBox, CanvasEvents
 from channel_controls import Channel, ChannelList, ChannelControls
@@ -105,6 +105,20 @@ class HistogramDisplay(tk.Frame):
         self.display_controls = DisplayControls(self.controls_frame,
                                                 command=self._mark_dirty)
         self.display_controls.pack(side="top", fill="x")
+        self.x_axis_controls = LinearAxisControls(self.controls_frame,
+                                                  self.x_axis, "X Axis",
+                                                  min_display="label",
+                                                  max_display="label",
+                                                  span_display="entry",
+                                                  center_display="entry")
+        self.x_axis_controls.pack(side="top", fill="x")
+        self.y_axis_controls = LinearAxisControls(self.controls_frame,
+                                                  self.y_axis, "Y Axis",
+                                                  pan_buttons=False,
+                                                  min_display="entry",
+                                                  max_display="entry",
+                                                  span_display="label")
+        self.y_axis_controls.pack(side="top", fill="x")
         self.time_display = TimeDisplay(self.controls_frame)
         self.time_display.pack(side="top", fill="x")
         self.canvas.bind("<Configure>", self._on_resize)
