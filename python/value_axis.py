@@ -31,15 +31,14 @@ def step_125(value: float) -> tuple[float, float]:
 
 class ValueAxis:
     def __init__(self, *, value_min: float, value_max: float,
-                 pixel_min=0, pixel_max=1, major_spacing=20):
+                 pixel_min: int = 0, pixel_max: int = 1,
+                 major_spacing: int = 20):
         self._observers = []
         self.value_min = None
         self.value_max = None
-        self.pixel_min = None
-        self.pixel_max = None
+        self.pixel_min = 0
+        self.pixel_max = 0
         self.major_spacing = None
-        self.value_span = None
-        self.pixel_span = None
         self._conv_stale = False
         self._div_steps_stale = False
         self._div_values_stale = False
@@ -56,8 +55,12 @@ class ValueAxis:
         self._calculate_div_values()
 
     @property
-    def span(self):
-        return self.value_span
+    def pixel_span(self):
+        return self.pixel_max - self.pixel_min
+
+    @property
+    def value_span(self):
+        return self.value_max - self.value_min
 
     @property
     def center(self) -> float:
@@ -130,19 +133,16 @@ class ValueAxis:
             for observer in self._observers:
                 observer()
 
-    def _set_range(self, value_min, value_max):
+    def _set_range(self, value_min: float, value_max: float):
         """ helper for set_range()
         Validates and saves data, but does not drive updates.
         Can be called from __init__() when object is not fully ready.
         """
-        for name, value in (
-                ("value_min", value_min),
-                ("value_max", value_max)):
-            if not isinstance(value, (int, float)):
-                raise TypeError(f"'{name}' must be int or float")
-        value_min = float(value_min)
-        value_max = float(value_max)
-        if not ( math.isfinite(value_min) and math.isfinite(value_max) ):
+        if not ( isinstance(value_min, float) and
+                 isinstance(value_max, float) ):
+            raise TypeError("'value_min' and 'value_max' must be float")
+        if not ( math.isfinite(value_min) and
+                 math.isfinite(value_max) ):
             raise ValueError("'value_min' and 'value_max' must be finite")
         value_span = value_max - value_min
         if not value_span > 0:
@@ -159,9 +159,8 @@ class ValueAxis:
         # save new data
         self.value_min = value_min
         self.value_max = value_max
-        self.value_span = value_span
 
-    def set_range(self, value_min, value_max):
+    def set_range(self, value_min: float, value_max: float):
         """ Determines the range of values that are mapped to an axis.
         value_min must be less than value_max; both must be int or float
         """
@@ -189,7 +188,6 @@ class ValueAxis:
         # save new data
         self.pixel_min = pixel_min
         self.pixel_max = pixel_max
-        self.pixel_span = pixel_span
 
     def set_location(self, pixel_min: int, pixel_max: int):
         """ Determines on-screen location of an axis.

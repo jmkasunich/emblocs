@@ -83,10 +83,12 @@ class HistogramDisplay(tk.Frame):
         # data model
         self.channel_list = ChannelList(num_channels, palette)
         self.channel_list.add_observer(self._mark_dirty)
-        self.y_axis = ValueAxis(value_min = 0, value_max = self.max_counts,
+        self.y_axis = ValueAxis(value_min = 0.0,
+                                value_max = float(self.max_counts),
                                 major_spacing = self.axis_text_height*2)
         self.y_axis.add_observer(self._mark_dirty)
-        self.x_axis = ValueAxis(value_min = self.range_min, value_max = self.range_max,
+        self.x_axis = ValueAxis(value_min = float(self.range_min),
+                                value_max = float(self.range_max),
                                 major_spacing = self.axis_text_height*2)
         self.x_axis.add_observer(self._mark_dirty)
         # view/control of model
@@ -138,17 +140,18 @@ class HistogramDisplay(tk.Frame):
 
     def _on_wheel(self, x, y, delta):
         where = self._region_at(x, y)
-        factor = math.exp(delta/1000)
+        factor = math.exp(-delta/1000)
         if where == "x_axis" or where == "plot":
-            self._x_zoom(factor, self.x_axis.p2v(x))
+            self.x_axis.zoom(factor, self.x_axis.p2v(x),
+                             min_span=1, max_span=1000)
         elif where == "y_axis":
-            self._y_zoom(factor)
+            self.y_axis.zoom(factor, 0, min_span=1, max_span=1000)
 
     def _on_drag(self, x, y, dx, dy):
         if abs(dx) > abs(dy):
             # horizontal drag
             value_dx = -self.x_axis.dp2dv(dx)
-            self._x_pan(value_dx)
+            self.x_axis.pan(value_dx, min_value=-1000, max_value=1000)
 
     def _region_at(self, x, y):
         """Return 'plot', 'x_axis', 'y_axis', or None."""
@@ -167,58 +170,8 @@ class HistogramDisplay(tk.Frame):
 
     def _reset_view(self):
         print("reset view")
-        self.y_axis.set_range(0, self.max_counts)
-        self.x_axis.set_range(self.range_min, self.range_max)
-
-    def _y_zoom(self, factor):
-        """ Zoom the Y axis by 'factor'.  Less than 1.0 zooms in, more
-        zooms out.  Overall range is clamped by self.max_counts and
-        self.min_y_span.
-        """
-        factor = float(factor)
-        if not factor > 0.0:
-            raise ValueError("zoom factor must be positive")
-        if factor > 1.0:
-            new_max = math.ceil(self.y_axis.value_max * factor)
-        else:
-            new_max = math.floor(self.y_axis.value_max * factor)
-        new_max = max(min(new_max, self.max_counts), self.min_y_span)
-        self.y_axis.set_range(0, new_max)
-
-    def _x_zoom(self, factor, around):
-        """ Zoom the X axis by 'factor', centered on 'around', which is
-        in value units.  If 'factor' is < 1.0, zooms in, > 1.0 zooms out.
-        Overall range is clamped by self.range_min, self.range_max, and
-        self.min_x_span.
-        """
-        factor = float(factor)
-        around = float(around)
-        if not factor > 0.0:
-            raise ValueError("zoom factor must be positive")
-        old_span = self.x_axis.value_max - self.x_axis.value_min
-        max_span = self.range_max - self.range_min
-        new_span = max(min((old_span * factor), max_span), self.min_x_span)
-        factor = new_span / old_span
-        around = max(min(around, self.range_max), self.range_min)
-        new_min = around + factor * (self.x_axis.value_min - around)
-        new_max = around + factor * (self.x_axis.value_max - around)
-        new_min = max(min(new_min, self.range_max), self.range_min)
-        new_max = max(min(new_max, self.range_max), self.range_min)
-        self.x_axis.set_range(new_min, new_max)
-
-    def _x_pan(self, amount):
-        """ Pan the X axis by 'amount', which is in value units.
-        If 'amount' is positive, pan right, negative left.
-        Overall range is clamped by self.range_min and self.range_max.
-        """
-        if amount > 0:
-            amount = min(amount, self.range_max - self.x_axis.value_max)
-        elif amount < 0:
-            amount = max(amount, self.range_min - self.x_axis.value_min)
-        new_min = self.x_axis.value_min + amount
-        new_max = self.x_axis.value_max + amount
-        self.x_axis.set_range(new_min, new_max)
-
+        self.y_axis.set_range(0.0, float(self.max_counts))
+        self.x_axis.set_range(float(self.range_min), float(self.range_max))
 
     def _on_resize(self, event):
         print("on resize")
